@@ -437,19 +437,19 @@ window.CRM = window.CRM || {};
   });
 
   // ---------- Підпис під розкладом на Головній ----------
-  /** Client ID прийшов синхронізацією, але на цьому пристрої вхід у Google ще не робили. */
-  function neverHere() { return !rawToken() && !cache(); }
+  /** Client ID є (напр., прийшов синхронізацією), але на цьому пристрої вхід у Google не зроблено. */
+  function neverHere() { return !!cfg().clientId && !rawToken() && !cache(); }
 
   function statusNote() {
     const s = status();
     const c = cache();
     const link = (text, onClick) => h('button', { type: 'button', class: 'link-like', onClick }, text);
     if (s === 'file') return h('span', null, 'Google Календар працює лише на GitHub Pages або локальному сервері, не з файлу.');
+    if ((s === 'expired' || s === 'disconnected') && neverHere()) {
+      return h('span', null, 'Google Календар не підключено на цьому пристрої · ', link('Підключити', () => connect()));
+    }
     if (s === 'no-client' || s === 'disconnected') {
       return h('span', null, 'Google Календар не підключено · ', link('Підключити', () => CRM.router.go('profile', { focus: 'gcal' })));
-    }
-    if (s === 'expired' && neverHere()) {
-      return h('span', null, 'Google Календар ще не підключено на цьому пристрої · ', link('Підключити', () => connect()));
     }
     if (s === 'expired') {
       return h('span', null,
@@ -524,8 +524,8 @@ window.CRM = window.CRM || {};
       if (s === 'no-client' || s === 'disconnected' || s === 'file') {
         actions.push(ui.button({ label: 'Підключити', icon: 'link', variant: 'primary', size: 'sm', disabled: s !== 'disconnected', title: s === 'no-client' ? 'Спершу вкажи Client ID' : null, onClick: () => connect() }));
       }
-      const fresh = s === 'expired' && neverHere();
-      if (fresh) actions.push(ui.button({ label: 'Підключити', icon: 'link', variant: 'primary', size: 'sm', onClick: () => connect() }));
+      const fresh = (s === 'expired' || s === 'disconnected') && neverHere();
+      if (fresh && s === 'expired') actions.push(ui.button({ label: 'Підключити', icon: 'link', variant: 'primary', size: 'sm', onClick: () => connect() }));
       else if (s === 'expired') actions.push(ui.button({ label: 'Оновити підключення', icon: 'refresh', variant: 'primary', size: 'sm', onClick: () => connect({ refresh: true }) }));
       if (s === 'connected') actions.push(ui.button({ label: refreshing ? 'Оновлюю…' : 'Оновити події', icon: 'refresh', size: 'sm', disabled: !!refreshing, onClick: () => refresh({ manual: true }) }));
       if (s === 'connected' || (s === 'expired' && !fresh)) actions.push(ui.button({ label: 'Відключити', size: 'sm', onClick: () => disconnect() }));
@@ -574,7 +574,7 @@ window.CRM = window.CRM || {};
         if (ch) info.push(`Події оновлено о ${hhmm(ch.at)} (далі — кожні 10 хв, поки сайт відкритий).`);
       }
       if (s === 'expired' && ch) info.push(`Показано події станом на ${hhmm(ch.at)}.`);
-      if (fresh) info.push('Client ID отримано з іншого твого пристрою. Натисни «Підключити», щоб увійти в Google і на цьому пристрої.');
+      if (fresh) info.push('Client ID уже є. Натисни «Підключити», щоб увійти в Google на цьому пристрої.');
       if (s !== 'file') {
         parts.push(h('div', { class: 'gcal-info' },
           info.length ? h('div', null, info.join(' ')) : null,

@@ -269,6 +269,25 @@ window.CRM = window.CRM || {};
     if (k === 'driveBackup') return !!v.enabled;
     return true;
   }
+  /**
+   * Частина налаштувань стосується лише цього пристрою. У gcal синхронізуються Client ID і вибір
+   * календарів, а «підключено тут» (wanted) — ні: вхід у Google на кожному пристрої свій, і
+   * «Відключити» чи новий Client ID на телефоні не мають вимикати календар на компʼютері.
+   */
+  function outSetting(k, v) {
+    if (k === 'gcal' && v && typeof v === 'object') return { clientId: v.clientId || '', calendars: Array.isArray(v.calendars) ? v.calendars : null };
+    return v;
+  }
+  function inSetting(k, v) {
+    if (k === 'gcal' && v && typeof v === 'object') {
+      const local = CRM.store.getSetting('gcal', null) || {};
+      const same = (local.clientId || '') === (v.clientId || '');
+      const calendars = Array.isArray(v.calendars) ? v.calendars : (same && Array.isArray(local.calendars) ? local.calendars : null);
+      return Object.assign({}, local, { clientId: v.clientId || '', calendars, wanted: !!local.wanted });
+    }
+    return v;
+  }
+
   function upgradeSettings(uid) {
     const meta = getMeta(uid);
     const known = Array.isArray(meta.settings) ? meta.settings : SETTINGS_V1;
@@ -335,7 +354,7 @@ window.CRM = window.CRM || {};
       const kv = {};
       live.forEach((x) => {
         const val = JSON.parse(x.j);
-        if (x.s === 'settings') kv[x.id] = val; else byStore[x.s].push(val);
+        if (x.s === 'settings') kv[x.id] = inSetting(x.id, val); else byStore[x.s].push(val);
       });
       await CRM.store.replaceSynced(STORES, byStore, SETTINGS, kv);
       setDirty(uid, {});
@@ -349,7 +368,7 @@ window.CRM = window.CRM || {};
         seen.add(k);
         if (x.s === 'settings') {
           if (!SETTINGS.includes(x.id) || x.del) return;
-          if (CRM.store.getSetting(x.id, undefined) === undefined) items.push({ setting: x.id, value: JSON.parse(x.j) });
+          if (CRM.store.getSetting(x.id, undefined) === undefined) items.push({ setting: x.id, value: inSetting(x.id, JSON.parse(x.j)) });
           else dirty.push(k);
           return;
         }
@@ -383,7 +402,7 @@ window.CRM = window.CRM || {};
   function remoteItem(x) {
     if (x.s === 'settings') {
       if (!SETTINGS.includes(x.id)) return null;
-      const val = x.del ? undefined : JSON.parse(x.j);
+      const val = x.del ? undefined : inSetting(x.id, JSON.parse(x.j));
       if (JSON.stringify(CRM.store.getSetting(x.id, undefined)) === JSON.stringify(val)) return null;
       if (user && getDirty(user.uid)[keyOf('settings', x.id)]) return null; // локальна зміна ще не надіслана
       return { setting: x.id, value: val };
@@ -433,7 +452,7 @@ window.CRM = window.CRM || {};
     const [s, id] = splitKey(k);
     if (s === 'settings') {
       const v = CRM.store.getSetting(id, undefined);
-      return v === undefined ? { s, id, del: true, u: now, _ts: ts } : { s, id, j: JSON.stringify(v), u: now, del: false, _ts: ts };
+      return v === undefined ? { s, id, del: true, u: now, _ts: ts } : { s, id, j: JSON.stringify(outSetting(id, v)), u: now, del: false, _ts: ts };
     }
     const rec = CRM.store.get(s, id);
     return rec ? { s, id, j: JSON.stringify(rec), u: rec.updatedAt || now, del: false, _ts: ts } : { s, id, del: true, u: now, _ts: ts };
