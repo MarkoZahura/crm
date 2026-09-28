@@ -135,12 +135,12 @@ window.CRM = window.CRM || {};
     }
     renderNotif();
 
-    const syncBlock = CRM.sync.settingsBlock();
-    const gcalBlock = CRM.gcal.settingsBlock();
+    const syncBlock = moduleBlock('sync');
+    const gcalBlock = moduleBlock('gcal');
 
     const card = h('section', { class: 'card' }, notifRow, syncBlock, gcalBlock);
     card._refresh = renderNotif;
-    card._destroy = () => { syncBlock._destroy(); gcalBlock._destroy(); };
+    card._destroy = () => { [syncBlock, gcalBlock].forEach((b) => { if (b && b._destroy) b._destroy(); }); };
     return card;
   }
 
@@ -286,11 +286,16 @@ window.CRM = window.CRM || {};
         h('div', { class: 'setting-actions' }, ui.button({ label: 'Очистити всі дані', variant: 'danger', size: 'sm', onClick: doClear }))));
   }
 
+  /** Блок службового модуля (синхронізація, календар, копії); якщо модуль не завантажено — без нього. */
+  function moduleBlock(name) {
+    try { return CRM[name] && CRM[name].settingsBlock ? CRM[name].settingsBlock() : null; } catch (e) { console.error(e); return null; }
+  }
+
   // ---------- Сторінка ----------
   function render(container, route) {
     const appearance = appearanceCard();
     const services = servicesCard();
-    const backupBlock = CRM.backup.settingsBlock();
+    const backupBlock = moduleBlock('backup');
     ui.mount(container,
       ui.pageHead({ title: 'Мій кабінет', sub: 'Профіль, вигляд і службові налаштування.' }),
       h('div', { class: 'profile-grid' },
@@ -317,7 +322,7 @@ window.CRM = window.CRM || {};
       document.removeEventListener('crm:themechange', onTheme);
       document.removeEventListener('crm:notifpermission', onPerm);
       if (services._destroy) services._destroy();
-      if (backupBlock._destroy) backupBlock._destroy();
+      if (backupBlock && backupBlock._destroy) backupBlock._destroy();
     };
   }
 

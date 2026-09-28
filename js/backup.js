@@ -223,6 +223,7 @@ window.CRM = window.CRM || {};
     const c = cfg();
     if (isFile() || !c.enabled || c.lastDate === D.today() || running) return [];
     if (CRM.gcal.accessToken('drive')) return [];
+    if (!CRM.store.getSetting('gcalToken', null)) return [];   // на цьому пристрої Google не підключали — копію зробить інший
     if (Date.now() - bootAt < 60000) return [];               // спершу даємо шанс синхронізації
     return [{
       key: `backup:due:${D.today()}`, kind: 'system',
@@ -295,6 +296,10 @@ window.CRM = window.CRM || {};
     document.addEventListener('crm:minute', maybeRun);
     document.addEventListener('crm:googletoken', () => { lastFailAt = 0; setTimeout(() => { bootAt = 0; maybeRun(); }, 500); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') maybeRun(); });
+    // Налаштування прийшли з іншого пристрою (синхронізація) — оновити блок у кабінеті
+    const sig = () => { const c = cfg(); return [c.enabled, c.lastDate, c.lastAt, c.folderId].join('|'); };
+    let last = sig();
+    CRM.store.on(['settings'], () => { const s = sig(); if (s !== last) { last = s; changed(); } });
   }
 
   CRM.backup = { init, status, run, runNow, enable, disable, settingsBlock, FOLDER_NAME };

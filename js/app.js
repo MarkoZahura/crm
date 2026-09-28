@@ -269,11 +269,19 @@ window.CRM = window.CRM || {};
     buildShell();
     theme.apply();
 
-    CRM.search.init();
-    CRM.notify.init();
-    CRM.gcal.init();
-    CRM.sync.init();
-    CRM.backup.init();
+    // Службові модулі запускаємо окремо: помилка в одному (або неповне оновлення сайту,
+    // коли index.html старий і не підключає новий файл) не має зупиняти весь застосунок.
+    const missing = [];
+    [['search', 'js/search.js'], ['notify', 'js/notifications.js'], ['gcal', 'js/gcal.js'], ['sync', 'js/sync.js'], ['backup', 'js/backup.js']]
+      .forEach(([name, file]) => {
+        if (!CRM[name] || typeof CRM[name].init !== 'function') { missing.push(file); return; }
+        try { CRM[name].init(); } catch (e) { console.error(e); }
+      });
+    if (missing.length) {
+      console.error('Не завантажено: ' + missing.join(', '));
+      setTimeout(() => CRM.ui.toast('Сайт оновлено не повністю: не підключено ' + missing.join(', ') +
+        '. Завантаж на GitHub усі файли з папки CRM, разом з index.html (README, розділ «Як оновити сайт»).', { type: 'error', duration: 20000 }), 600);
+    }
 
     CRM.router.onRender((cur) => updateActiveNav(cur));
 
