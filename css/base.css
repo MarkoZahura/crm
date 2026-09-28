@@ -1,0 +1,182 @@
+/* ==========================================================================
+   base.css — кольори обох тем, акцентні кольори, шрифт, базові стилі
+   Усі кольори задаються CSS-змінними: світла тема за замовчуванням,
+   темна — через атрибут data-theme="dark" на <html>.
+   ========================================================================== */
+
+:root {
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  --sidebar-w: 244px;
+  --topbar-h: 56px;
+  --page-max: 1180px;
+
+  --ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* Акцентний колір: -l для світлої теми, -d для темної.
+     Конкретні значення підставляються атрибутом data-accent (див. нижче). */
+  --accent-l: #2563eb;
+  --accent-d: #3b6fe0;
+}
+
+/* ---------- Палітра акцентів (10 кольорів) ----------
+   Кожен колір підібрано так, щоб білий текст на ньому мав контраст ≥ 4.5:1
+   в обох темах. */
+[data-accent="blue"]     { --accent-l: #2563eb; --accent-d: #3b6fe0; }
+[data-accent="indigo"]   { --accent-l: #4f46e5; --accent-d: #5b54e0; }
+[data-accent="violet"]   { --accent-l: #7c3aed; --accent-d: #7e4ae0; }
+[data-accent="pink"]     { --accent-l: #be185d; --accent-d: #c42a6a; }
+[data-accent="red"]      { --accent-l: #dc2626; --accent-d: #d23a3a; }
+[data-accent="orange"]   { --accent-l: #c2410c; --accent-d: #c2491a; }
+[data-accent="amber"]    { --accent-l: #b45309; --accent-d: #b0600f; }
+[data-accent="green"]    { --accent-l: #15803d; --accent-d: #1f8445; }
+[data-accent="teal"]     { --accent-l: #0f766e; --accent-d: #13807a; }
+[data-accent="graphite"] { --accent-l: #334155; --accent-d: #5b6678; }
+
+/* ---------- Світла тема ---------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-sidebar: #f7f7f5;
+  --surface: #ffffff;
+  --surface-2: #f4f4f2;      /* наведення, фон полів */
+  --surface-3: #ebebe8;      /* натискання, активні елементи */
+  --border: #e6e6e3;
+  --border-strong: #d4d4cf;
+
+  --text: #1f1f1d;
+  --text-2: #5f5e5b;
+  --text-3: #6f6e6a;
+
+  --accent: var(--accent-l);
+  --accent-hover: color-mix(in srgb, var(--accent-l) 88%, black);
+  --accent-text: var(--accent-l);
+  --accent-soft: color-mix(in srgb, var(--accent-l) 10%, transparent);
+  --accent-soft-2: color-mix(in srgb, var(--accent-l) 16%, transparent);
+  --on-accent: #ffffff;
+
+  --danger: #c9291c;
+  --danger-hover: #b42318;
+  --danger-soft: #fdecea;
+  --success: #15803d;
+  --success-soft: #e8f5ec;
+  --warning: #b45309;
+  --warning-soft: #fdf3e2;
+  --info: #2563eb;
+  --info-soft: #eaf1fe;
+
+  --overlay: rgba(15, 15, 15, .32);
+  --shadow-pop: 0 12px 32px rgba(15, 15, 15, .12), 0 2px 6px rgba(15, 15, 15, .06), 0 0 0 1px rgba(15, 15, 15, .05);
+  --shadow-drawer: -12px 0 32px rgba(15, 15, 15, .10), 0 0 0 1px rgba(15, 15, 15, .05);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-l) 28%, transparent);
+}
+
+/* ---------- Темна тема ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #191919;
+  --bg-sidebar: #202020;
+  --surface: #202020;
+  --surface-2: #2a2a2a;
+  --surface-3: #333333;
+  --border: #2f2f2f;
+  --border-strong: #3d3d3d;
+
+  --text: #ebebea;
+  --text-2: #a3a3a0;
+  --text-3: #8b8b88;
+
+  --accent: var(--accent-d);
+  --accent-hover: color-mix(in srgb, var(--accent-d) 85%, white);
+  --accent-text: color-mix(in srgb, var(--accent-d) 55%, white);
+  --accent-soft: color-mix(in srgb, var(--accent-d) 20%, transparent);
+  --accent-soft-2: color-mix(in srgb, var(--accent-d) 30%, transparent);
+  --on-accent: #ffffff;
+
+  --danger: #f07167;
+  --danger-hover: #f48a82;
+  --danger-soft: rgba(240, 113, 103, .14);
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, .12);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, .12);
+  --info: #93b0ee;
+  --info-soft: rgba(96, 140, 230, .16);
+
+  --overlay: rgba(0, 0, 0, .55);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, .45), 0 0 0 1px #363636;
+  --shadow-drawer: -12px 0 32px rgba(0, 0, 0, .45), 0 0 0 1px #363636;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-d) 45%, transparent);
+}
+
+/* ---------- Скидання й базова типографіка ---------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+body.no-scroll { overflow: hidden; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+h1 { font-size: 26px; letter-spacing: -0.02em; }
+h2 { font-size: 18px; }
+h3 { font-size: 15px; }
+h4 { font-size: 14px; }
+p { margin: 0; }
+
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+img, svg { display: block; }
+[hidden] { display: none !important; }
+
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+::selection { background: var(--accent-soft-2); }
+
+.icon { width: 18px; height: 18px; flex-shrink: 0; }
+.icon-sm { width: 16px; height: 16px; }
+.icon-lg { width: 22px; height: 22px; }
+
+.muted { color: var(--text-2); }
+.subtle { color: var(--text-3); }
+.num { font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Тонкі смуги прокрутки в стилі інтерфейсу */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

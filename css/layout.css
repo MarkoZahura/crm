@@ -1,0 +1,228 @@
+/* ==========================================================================
+   layout.css — каркас: сайдбар, верхня панель, область сторінки, мобільне меню
+   ========================================================================== */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* ---------- Сайдбар ---------- */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  z-index: 40;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 14px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  transition: background .12s, color .12s;
+}
+.nav-item:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
+.nav-item.active { background: var(--accent-soft); color: var(--accent-text); }
+.nav-item .icon { opacity: .9; }
+.nav-item .nav-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.nav-item.active .nav-count { color: inherit; }
+
+.nav-sep { height: 1px; margin: 8px 6px; background: var(--border); }
+
+.sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  margin-top: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  transition: background .12s;
+}
+.sidebar-profile:hover { background: var(--surface-3); text-decoration: none; }
+.sidebar-profile.active { background: var(--accent-soft); }
+.sidebar-profile-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.sidebar-profile-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-profile-hint { font-size: 12px; color: var(--text-3); }
+
+.sidebar-backdrop { display: none; }
+
+/* ---------- Основна частина ---------- */
+.main { min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.topbar-date { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-date b { color: var(--text); font-weight: 500; }
+.topbar-right { display: flex; align-items: center; gap: 6px; }
+
+.topbar .burger { display: none; }
+
+.search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  min-width: 200px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-3);
+  transition: border-color .12s, background .12s;
+}
+.search-trigger:hover { border-color: var(--border-strong); color: var(--text-2); }
+.search-trigger .kbd { margin-left: auto; }
+
+.bell { position: relative; }
+.bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--bg);
+  pointer-events: none;
+}
+:root[data-theme="dark"] .bell-badge { background: #d93a2f; }
+
+.topbar-divider { width: 1px; height: 22px; margin: 0 4px; background: var(--border); }
+
+/* ---------- Сторінка ---------- */
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 28px 32px 72px;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.page-head-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.page-head-sub { color: var(--text-2); }
+.page-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Мобільна версія ---------- */
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(280px, 84vw);
+    height: auto;
+    transform: translateX(-102%);
+    transition: transform .22s var(--ease);
+    box-shadow: none;
+    z-index: 60;
+  }
+  .app.nav-open .sidebar { transform: none; box-shadow: var(--shadow-pop); }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: var(--overlay);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  .app.nav-open .sidebar-backdrop { display: block; opacity: 1; pointer-events: auto; }
+
+  .topbar .burger { display: inline-flex; }
+  .topbar { padding: 0 10px; }
+  .topbar-date { display: none; }
+  .search-trigger { min-width: 0; width: 36px; padding: 0; justify-content: center; }
+  .search-trigger .search-label,
+  .search-trigger .kbd { display: none; }
+  .topbar-divider { display: none; }
+  .btn.btn-new-task .btn-label { display: none; }
+  .btn.btn-new-task { width: 34px; padding: 0; justify-content: center; }
+
+  .page { padding: 20px 16px 56px; }
+  h1 { font-size: 22px; }
+}
+
+@media (min-width: 861px) {
+  .sidebar-backdrop { display: none !important; }
+}

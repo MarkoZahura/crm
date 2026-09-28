@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="uk" data-theme="light" data-accent="blue">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Моя CRM</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='17' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
+
+  <!-- Тема й акцент застосовуються ще до малювання сторінки, щоб не було «блимання» -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      try {
+        var t = localStorage.getItem('crm.theme');
+        var a = localStorage.getItem('crm.accent');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        root.setAttribute('data-theme', t);
+        if (a) root.setAttribute('data-accent', a);
+      } catch (e) { /* localStorage недоступний — лишається світла тема */ }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+
+  <!-- Chart.js (діаграми) — з CDN, асинхронно; якщо не завантажиться, сайт працює без діаграм -->
+  <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+          integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+          crossorigin="anonymous"
+          onload="document.dispatchEvent(new Event('crm:chartsready'))"
+          onerror="window.__crmChartsFailed = true; document.dispatchEvent(new Event('crm:chartsfailed'))"></script>
+
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/sections.css">
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>
+    <p style="padding:24px;font-family:sans-serif">Для роботи CRM потрібен увімкнений JavaScript.</p>
+  </noscript>
+
+  <!-- Ядро (порядок важливий: кожен файл використовує попередні) -->
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/icons.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/core/defaults.js"></script>
+  <script src="js/core/db.js"></script>
+  <script src="js/core/store.js"></script>
+  <script src="js/core/router.js"></script>
+  <script src="js/core/entities.js"></script>
+  <script src="js/core/rates.js"></script>
+  <script src="js/core/schedule.js"></script>
+  <script src="js/core/charts.js"></script>
+  <script src="js/budget/finance.js"></script>
+
+  <!-- Спільні модулі -->
+  <script src="js/notifications.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/trash.js"></script>
+  <script src="js/demo.js"></script>
+  <script src="js/profile.js"></script>
+
+  <!-- Розділи (задачі — перед Головною: Головна використовує їхні рядки) -->
+  <script src="js/quotes.js"></script>
+  <script src="js/tasks.js"></script>
+  <script src="js/home.js"></script>
+  <script src="js/budget/budget.js"></script>
+  <script src="js/budget/dashboard.js"></script>
+  <script src="js/budget/accounts.js"></script>
+  <script src="js/budget/transactions.js"></script>
+  <script src="js/budget/categories.js"></script>
+  <script src="js/budget/capital.js"></script>
+  <script src="js/budget/recurring.js"></script>
+  <script src="js/budget/goals.js"></script>
+  <script src="js/budget/analytics.js"></script>
+  <script src="js/training.js"></script>
+  <script src="js/learning.js"></script>
+  <script src="js/program.js"></script>
+  <script src="js/gcal.js"></script>
+
+  <!-- Запуск (завжди останній) -->
+  <script src="js/app.js"></script>
+</body>
+</html>
