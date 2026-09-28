@@ -13,6 +13,8 @@
      слухача (onSnapshot) лише ті, що новіші за останню отриману (_ts).
    • Конфлікт: перемагає новіша версія (за updatedAt).
    • Вкладені файли НЕ синхронізуються (Firebase Storage потребує платного тарифу).
+   • Google Календар: синхронізуються Client ID і вибір календарів; вхід у Google —
+     на кожному пристрої свій (ключ доступу діє ~годину й не передається).
    • Вхід Google працює лише з адреси сайту (GitHub Pages, localhost), не з file://.
    ========================================================================== */
 window.CRM = window.CRM || {};
@@ -23,7 +25,8 @@ window.CRM = window.CRM || {};
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const CFG = CRM.SYNC_CONFIG;
   const STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
-  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile'];
+  // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
+  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal'];
   const LS = 'crm.sync.';
   const BATCH = 400;
   const FLUSH_DELAY = 1200;

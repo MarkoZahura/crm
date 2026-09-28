@@ -456,7 +456,7 @@ window.CRM = window.CRM || {};
     const saveBtn = ui.button({ label: 'Зберегти', size: 'sm', disabled: true });
     const fClient = ui.field({
       label: 'Client ID', id: 'gcal-client', input: h('div', { class: 'sub-row', id: 'gcal-client-row' }, clientIn, saveBtn),
-      hint: 'Тип клієнта в Google Cloud — «Web application». Client ID не секретний, але зберігається лише в цьому браузері й не потрапляє в код сайту.'
+      hint: 'Тип клієнта в Google Cloud — «Web application». Client ID не секретний і не потрапляє в код сайту; з увімкненою синхронізацією він сам зʼявиться на інших твоїх пристроях.'
     });
     const onInput = () => {
       fClient.setError(null);
