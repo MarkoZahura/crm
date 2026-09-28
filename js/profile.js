@@ -135,11 +135,12 @@ window.CRM = window.CRM || {};
     }
     renderNotif();
 
+    const syncBlock = CRM.sync.settingsBlock();
     const gcalBlock = CRM.gcal.settingsBlock();
 
-    const card = h('section', { class: 'card' }, notifRow, gcalBlock);
+    const card = h('section', { class: 'card' }, notifRow, syncBlock, gcalBlock);
     card._refresh = renderNotif;
-    card._destroy = gcalBlock._destroy;
+    card._destroy = () => { syncBlock._destroy(); gcalBlock._destroy(); };
     return card;
   }
 

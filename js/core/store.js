@@ -58,6 +58,17 @@ window.CRM = window.CRM || {};
     return () => listeners.delete(l);
   }
 
+  // ---------- Гачок для синхронізації ----------
+  // Модуль синхронізації (sync.js) дізнається про кожну локальну зміну:
+  // { kind: 'put', store, recs } | { kind: 'del', store, ids } | { kind: 'setting', key } | { kind: 'reset' }.
+  // Зміни, що прийшли з хмари (applyRemote / replaceSynced), гачок не викликають.
+  let syncHook = null;
+  function setSyncHook(fn) { syncHook = fn; }
+  function notifySync(ev) {
+    if (!syncHook) return;
+    try { syncHook(ev); } catch (e) { console.error(e); }
+  }
+
   // ---------- Завантаження ----------
   function stripBlob(rec) {
     const meta = Object.assign({}, rec);
@@ -113,6 +124,7 @@ window.CRM = window.CRM || {};
     await CRM.db.put(name, rec);
     cache[name].set(rec.id, rec);
     emit(name);
+    notifySync({ kind: 'put', store: name, recs: [rec] });
     return rec;
   }
 
@@ -121,6 +133,7 @@ window.CRM = window.CRM || {};
     await CRM.db.putMany(name, recs);
     recs.forEach((r) => cache[name].set(r.id, r));
     emit(name);
+    notifySync({ kind: 'put', store: name, recs });
     return recs;
   }
 
@@ -137,6 +150,7 @@ window.CRM = window.CRM || {};
     cache[name].delete(id);
     if (name === 'tasks') await removeAttachmentsOfTask(id);
     emit(name);
+    notifySync({ kind: 'del', store: name, ids: [id] });
   }
 
   // ---------- Кошик (м'яке видалення) ----------
@@ -194,6 +208,7 @@ window.CRM = window.CRM || {};
       names.forEach((n) => byStore[n].forEach((id) => stores[n].delete(id)));
     });
     names.forEach((n) => { byStore[n].forEach((id) => cache[n].delete(id)); emit(n); });
+    names.forEach((n) => notifySync({ kind: 'del', store: n, ids: byStore[n] }));
     if (byStore.tasks) {
       for (const taskId of byStore.tasks) await removeAttachmentsOfTask(taskId);
     }
@@ -233,6 +248,7 @@ window.CRM = window.CRM || {};
       names.forEach((n) => byStore[n].forEach((rec) => stores[n].put(rec)));
     });
     names.forEach((n) => { byStore[n].forEach((rec) => cache[n].set(rec.id, rec)); emit(n); });
+    names.forEach((n) => notifySync({ kind: 'put', store: n, recs: byStore[n] }));
   }
 
   // ---------- Вкладення ----------
@@ -283,6 +299,7 @@ window.CRM = window.CRM || {};
     settings.set(key, value);
     await CRM.db.put('settings', { key, value });
     emit('settings');
+    notifySync({ kind: 'setting', key });
   }
 
   // ---------- Курси валют (кеш) ----------
@@ -376,7 +393,7 @@ window.CRM = window.CRM || {};
     EXPORT_EXCLUDE.forEach((k) => { if (settings.has(k)) data.settings.push({ key: k, value: settings.get(k) }); });
     await CRM.db.replaceStores(data);
     await load();
-    emit('*');
+    emit('*');  notifySync({ kind: 'reset' });
   }
 
   /** Замінити всі дані готовим набором (для демо-даних). data: { tasks: [...], ... } */
@@ -388,7 +405,7 @@ window.CRM = window.CRM || {};
     if (!dataIn.settings) data.settings = Array.from(settings.entries()).map(([key, value]) => ({ key, value }));
     await CRM.db.replaceStores(data);
     await load();
-    emit('*');
+    emit('*');  notifySync({ kind: 'reset' });
   }
 
   /** Очистити всі дані (лишаються тільки тема та акцентний колір). */
@@ -400,7 +417,77 @@ window.CRM = window.CRM || {};
       .map(([key, value]) => ({ key, value }));
     await CRM.db.replaceStores(data);
     await load();
+    emit('*');  notifySync({ kind: 'reset' });
+  }
+
+  // ---------- Зміни з хмари (без виклику гачка синхронізації) ----------
+  /**
+   * items: [{ store, rec }] — записати; [{ store, id, del: true }] — остаточно видалити;
+   *        [{ setting: key, value }] — налаштування (value === undefined → видалити).
+   */
+  async function applyRemote(items) {
+    if (!items || !items.length) return;
+    const puts = {};
+    const dels = {};
+    const setPuts = [];
+    const setDels = [];
+    items.forEach((it) => {
+      if (it.setting) {
+        if (it.value === undefined) setDels.push(it.setting); else setPuts.push({ key: it.setting, value: it.value });
+      } else if (it.del) (dels[it.store] = dels[it.store] || []).push(it.id);
+      else (puts[it.store] = puts[it.store] || []).push(it.rec);
+    });
+    const names = Array.from(new Set(Object.keys(puts).concat(Object.keys(dels))
+      .concat(setPuts.length || setDels.length ? ['settings'] : [])));
+    await CRM.db.run(names, 'readwrite', (stores) => {
+      Object.keys(puts).forEach((n) => puts[n].forEach((r) => stores[n].put(r)));
+      Object.keys(dels).forEach((n) => dels[n].forEach((id) => stores[n].delete(id)));
+      setPuts.forEach((s) => stores.settings.put(s));
+      setDels.forEach((k) => stores.settings.delete(k));
+    });
+    Object.keys(puts).forEach((n) => { puts[n].forEach((r) => cache[n].set(r.id, r)); emit(n); });
+    for (const n of Object.keys(dels)) {
+      dels[n].forEach((id) => cache[n].delete(id));
+      emit(n);
+      if (n === 'tasks') for (const id of dels[n]) await removeAttachmentsOfTask(id);
+    }
+    setPuts.forEach((s) => settings.set(s.key, s.value));
+    setDels.forEach((k) => settings.delete(k));
+    if (setPuts.length || setDels.length) emit('settings');
+  }
+
+  /**
+   * Замінити синхронізовані сховища даними з хмари (перший вхід на пристрої).
+   * byStore: { tasks: [...], ... } для перелічених names; settingsKV: { key: value } для syncKeys.
+   * Вкладення, сповіщення й курси лишаються; вкладення без задачі прибираються.
+   */
+  async function replaceSynced(names, byStore, syncKeys, settingsKV) {
+    await CRM.db.run(names.concat(['settings']), 'readwrite', (stores) => {
+      names.forEach((n) => { stores[n].clear(); (byStore[n] || []).forEach((r) => stores[n].put(r)); });
+      syncKeys.forEach((k) => {
+        if (Object.prototype.hasOwnProperty.call(settingsKV, k)) stores.settings.put({ key: k, value: settingsKV[k] });
+        else stores.settings.delete(k);
+      });
+    });
+    names.forEach((n) => { cache[n] = new Map((byStore[n] || []).map((r) => [r.id, r])); });
+    syncKeys.forEach((k) => {
+      if (Object.prototype.hasOwnProperty.call(settingsKV, k)) settings.set(k, settingsKV[k]); else settings.delete(k);
+    });
+    const orphans = Array.from(attachments.values()).filter((a) => !cache.tasks.has(a.taskId)).map((a) => a.id);
+    if (orphans.length) {
+      await CRM.db.removeMany('attachments', orphans);
+      orphans.forEach((id) => attachments.delete(id));
+    }
     emit('*');
+  }
+
+  /** Оновити updatedAt усіх записів сховищ (без гачка) — щоб після імпорту саме вони «перемогли» в хмарі. */
+  async function touchAll(names) {
+    const now = new Date().toISOString();
+    const byStore = {};
+    names.forEach((n) => { byStore[n] = Array.from(cache[n].values()).map((r) => Object.assign({}, r, { updatedAt: now })); });
+    await CRM.db.run(names, 'readwrite', (stores) => { names.forEach((n) => byStore[n].forEach((r) => stores[n].put(r))); });
+    names.forEach((n) => byStore[n].forEach((r) => cache[n].set(r.id, r)));
   }
 
   async function storageEstimate() {
@@ -416,6 +503,7 @@ window.CRM = window.CRM || {};
     softDelete, restoreBatch, purgeBatch, trashItems, purgeExpired,
     listAttachments, addAttachment, getAttachmentBlob, removeAttachment,
     getSetting, setSetting, getRate, allRates, saveRate, saveRates,
-    exportAll, validateDump, summarize, importAll, replaceAll, clearAll, storageEstimate
+    exportAll, validateDump, summarize, importAll, replaceAll, clearAll, storageEstimate,
+    setSyncHook, applyRemote, replaceSynced, touchAll
   };
 })(window.CRM);

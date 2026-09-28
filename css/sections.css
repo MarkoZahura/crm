@@ -739,3 +739,13 @@
 .prog-profile .link-like { flex-shrink: 0; font-size: 13px; }
 .form-grid.prog-profile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 520px) { .form-grid.prog-profile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+
+/* ---------- Синхронізація ---------- */
+.sync-choice { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--text-2); }
+.sync-choice strong { color: var(--text); font-weight: 600; }
+.sync-choice-actions { flex-wrap: wrap; justify-content: flex-end; }
+.svc-block { border-top: 1px solid var(--border); }
+.svc-block > .setting-row { border-top: 0; }
+.svc-body { display: flex; flex-direction: column; gap: 14px; padding: 0 20px 18px; }
+.svc-info { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-3); }
+@media (max-width: 640px) { .svc-body { padding: 0 16px 16px; } }
