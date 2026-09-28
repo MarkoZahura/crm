@@ -273,6 +273,7 @@ window.CRM = window.CRM || {};
     CRM.notify.init();
     CRM.gcal.init();
     CRM.sync.init();
+    CRM.backup.init();
 
     CRM.router.onRender((cur) => updateActiveNav(cur));
 

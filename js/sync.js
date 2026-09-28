@@ -26,7 +26,9 @@ window.CRM = window.CRM || {};
   const CFG = CRM.SYNC_CONFIG;
   const STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
-  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal'];
+  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup'];
+  // Налаштування, що синхронізувалися з першої версії (для пристроїв, які ввійшли ще тоді)
+  const SETTINGS_V1 = ['profile', 'accent', 'trainingProgram', 'trainingProfile'];
   const LS = 'crm.sync.';
   const BATCH = 400;
   const FLUSH_DELAY = 1200;
@@ -227,6 +229,7 @@ window.CRM = window.CRM || {};
           if (!ok) return;
         }
         if (!user || user.uid !== uid) return;
+        upgradeSettings(uid);
         listen(uid);
         phase = 'on';
         lastError = null;
@@ -253,6 +256,27 @@ window.CRM = window.CRM || {};
     STORES.forEach((n) => CRM.store.list(n, { deleted: 'all' }).forEach((r) => keys.push(keyOf(n, r.id))));
     SETTINGS.forEach((k) => { if (CRM.store.getSetting(k, undefined) !== undefined) keys.push(keyOf('settings', k)); });
     return keys;
+  }
+
+  /**
+   * Нова версія почала синхронізувати ще якісь налаштування (напр., Client ID Google Календаря).
+   * Пристрій, що ввійшов раніше, надсилає їх один раз — інакше вони потрапили б у хмару лише
+   * після наступної зміни. Порожні не надсилаємо, щоб не затерти ними дані з іншого пристрою.
+   */
+  function meaningfulSetting(k, v) {
+    if (v == null) return false;
+    if (k === 'gcal') return !!v.clientId;
+    if (k === 'driveBackup') return !!v.enabled;
+    return true;
+  }
+  function upgradeSettings(uid) {
+    const meta = getMeta(uid);
+    const known = Array.isArray(meta.settings) ? meta.settings : SETTINGS_V1;
+    const added = SETTINGS.filter((k) => !known.includes(k));
+    if (!added.length && Array.isArray(meta.settings)) return;
+    markDirty(uid, added.filter((k) => meaningfulSetting(k, CRM.store.getSetting(k, undefined))).map((k) => keyOf('settings', k)));
+    meta.settings = SETTINGS.slice();
+    setMeta(uid, meta);
   }
 
   function askMode(count) {
@@ -349,6 +373,7 @@ window.CRM = window.CRM || {};
     meta.init = true;
     meta.merge = false;
     meta.pull = pull;
+    meta.settings = SETTINGS.slice();
     setMeta(uid, meta);
     lastSyncAt = new Date();
     return true;

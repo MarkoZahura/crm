@@ -319,7 +319,9 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Експорт / імпорт ----------
-  async function exportAll() {
+  /** Резервна копія. opts.attachments === false — без вкладених файлів (щоденна копія на Google Диск). */
+  async function exportAll(opts) {
+    const withFiles = !(opts && opts.attachments === false);
     const stores = {};
     DATA_STORES.forEach((n) => { stores[n] = list(n, { deleted: 'all' }); });
     stores.settings = Array.from(settings.entries())
@@ -327,11 +329,14 @@ window.CRM = window.CRM || {};
       .map(([key, value]) => ({ key, value }));
     stores.rates = allRates();
     stores.attachments = [];
-    for (const meta of attachments.values()) {
+    if (withFiles) for (const meta of attachments.values()) {
       const blob = await getAttachmentBlob(meta.id);
       stores.attachments.push(Object.assign({}, meta, { data: blob ? await CRM.utils.blobToBase64(blob) : null }));
     }
-    return { app: APP_ID, schema: SCHEMA_VERSION, exportedAt: new Date().toISOString(), stores };
+    const dump = { app: APP_ID, schema: SCHEMA_VERSION, exportedAt: new Date().toISOString() };
+    if (!withFiles) dump.withoutAttachments = true;
+    dump.stores = stores;
+    return dump;
   }
 
   /** Перевірити файл резервної копії. Кидає зрозумілу помилку, якщо щось не так. */
@@ -389,6 +394,12 @@ window.CRM = window.CRM || {};
         data[n] = obj.stores[n];
       }
     });
+    // Копія без вкладених файлів (щоденна, з Google Диска): файли, які вже є на цьому
+    // пристрої, лишаємо — якщо їхня задача є в копії.
+    if (obj.withoutAttachments) {
+      const taskIds = new Set((data.tasks || []).map((t) => t.id));
+      data.attachments = (await CRM.db.getAll('attachments')).filter((a) => taskIds.has(a.taskId));
+    }
     // Службові налаштування цього браузера (напр., токен Google) зберігаємо
     EXPORT_EXCLUDE.forEach((k) => { if (settings.has(k)) data.settings.push({ key: k, value: settings.get(k) }); });
     await CRM.db.replaceStores(data);

@@ -174,6 +174,7 @@ window.CRM = window.CRM || {};
       rows.length
         ? h('div', { class: 'chips' }, rows.map(([l, n]) => h('span', { class: 'badge' }, `${l}: ${n}`)))
         : h('p', { class: 'modal-text' }, 'У файлі немає записів.'),
+      obj.withoutAttachments ? h('p', { class: 'modal-text' }, 'Це копія без вкладених файлів: вкладення, які вже є на цьому пристрої, залишаться.') : null,
       h('div', { class: 'callout callout-warning' }, CRM.icon('alert'),
         h('span', null, h('strong', null, 'Усі поточні дані буде замінено'), ' вмістом файлу.')));
   }
@@ -237,7 +238,7 @@ window.CRM = window.CRM || {};
     ui.toast('Усі дані видалено');
   }
 
-  function dataCard() {
+  function dataCard(backupBlock) {
     const exportBtn = ui.button({ label: 'Експортувати', icon: 'download', size: 'sm' });
     exportBtn.addEventListener('click', () => doExport(exportBtn));
 
@@ -262,6 +263,7 @@ window.CRM = window.CRM || {};
           h('div', { class: 'setting-desc' }, 'Усі записи й вкладення в одному JSON-файлі.' +
             (lastExport ? ` Остання: ${CRM.fmt.dateTime(lastExport)}.` : ' Ще не робилася.'))),
         h('div', { class: 'setting-actions' }, exportBtn)),
+      backupBlock || null,
       h('div', { class: 'setting-row' },
         h('div', { class: 'setting-text' },
           h('div', { class: 'setting-title' }, CRM.icon('upload', { size: 'sm' }), 'Відновлення з копії'),
@@ -288,6 +290,7 @@ window.CRM = window.CRM || {};
   function render(container, route) {
     const appearance = appearanceCard();
     const services = servicesCard();
+    const backupBlock = CRM.backup.settingsBlock();
     ui.mount(container,
       ui.pageHead({ title: 'Мій кабінет', sub: 'Профіль, вигляд і службові налаштування.' }),
       h('div', { class: 'profile-grid' },
@@ -295,17 +298,18 @@ window.CRM = window.CRM || {};
         appearance,
         h('div', { class: 'section-title' }, 'Службове'),
         services,
-        dataCard(),
+        dataCard(backupBlock),
         dangerCard()));
 
     const onTheme = () => appearance._refresh();
     const onPerm = () => services._refresh();
     document.addEventListener('crm:themechange', onTheme);
     document.addEventListener('crm:notifpermission', onPerm);
-    if (route && route.params && route.params.focus === 'gcal') {
+    const focus = route && route.params && route.params.focus;
+    if (focus === 'gcal' || focus === 'backup' || focus === 'sync') {
       CRM.router.consumeParam('focus');
       requestAnimationFrame(() => {
-        const el = document.getElementById('gcal');
+        const el = document.getElementById(focus);
         if (el) el.scrollIntoView({ block: 'center' });
       });
     }
@@ -313,6 +317,7 @@ window.CRM = window.CRM || {};
       document.removeEventListener('crm:themechange', onTheme);
       document.removeEventListener('crm:notifpermission', onPerm);
       if (services._destroy) services._destroy();
+      if (backupBlock._destroy) backupBlock._destroy();
     };
   }
 

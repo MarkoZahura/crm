@@ -33,6 +33,10 @@ window.CRM = window.CRM || {};
   const SCOPE_LIST = 'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
   const SCOPE_EVENTS = 'https://www.googleapis.com/auth/calendar.events.readonly';
   const SCOPES = SCOPE_LIST + ' ' + SCOPE_EVENTS;
+  // Резервні копії на Google Диск (backup.js): доступ лише до файлів, які створила сама CRM
+  const SCOPE_DRIVE = 'https://www.googleapis.com/auth/drive.file';
+  const driveWanted = () => !!((CRM.store.getSetting('driveBackup', null) || {}).enabled);
+  const scopes = () => SCOPES + (driveWanted() ? ' ' + SCOPE_DRIVE : '');
   const REFRESH_MS = 10 * 60 * 1000;   // події оновлюються раз на 10 хв
   const REMIND_MIN = 15;               // нагадування за 15 хв до початку
   const CLIENT_RE = /^\d+-[a-z0-9_]+\.apps\.googleusercontent\.com$/i;
@@ -110,14 +114,15 @@ window.CRM = window.CRM || {};
 
   function getTokenClient() {
     const id = cfg().clientId;
-    if (tokenClient && tokenClientFor === id) return tokenClient;
+    const key = id + '|' + scopes();
+    if (tokenClient && tokenClientFor === key) return tokenClient;
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: id,
-      scope: SCOPES,
+      scope: scopes(),
       callback: onToken,
       error_callback: onTokenError
     });
-    tokenClientFor = id;
+    tokenClientFor = key;
     return tokenClient;
   }
 
@@ -175,12 +180,14 @@ window.CRM = window.CRM || {};
         throw err('scope', 'Google не дав доступу до подій календаря. Натисни «Підключити» ще раз і залиш позначку біля доступу до календаря.');
       }
       const list = oauth.hasGrantedAllScopes(resp, SCOPE_LIST);
+      const drive = oauth.hasGrantedAllScopes(resp, SCOPE_DRIVE);
       const secs = Number(resp.expires_in) || 3600;
-      await CRM.store.setSetting('gcalToken', { accessToken: resp.access_token, expiresAt: Date.now() + Math.max(60, secs - 60) * 1000, list });
+      await CRM.store.setSetting('gcalToken', { accessToken: resp.access_token, expiresAt: Date.now() + Math.max(60, secs - 60) * 1000, list, drive });
       await setCfg({ wanted: true });
       lastError = null;
       changed();
-      ui.toast(o.refresh ? 'Підключення до Google Календаря оновлено' : 'Google Календар підключено', { type: 'success' });
+      document.dispatchEvent(new CustomEvent('crm:googletoken'));
+      if (!o.quiet) ui.toast(o.refresh ? 'Підключення до Google оновлено' : 'Google Календар підключено', { type: 'success' });
       await refresh({ calendars: true });
       return true;
     } catch (e) {
@@ -196,9 +203,10 @@ window.CRM = window.CRM || {};
     const t = token();
     const ok = await ui.confirm({
       title: 'Відключити Google Календар?',
-      message: t
+      message: (t
         ? 'Події зникнуть із Головної, нагадувань про них не буде. Доступ, наданий цьому сайту в Google, буде відкликано.'
-        : 'Події зникнуть із Головної, нагадувань про них не буде. Термін доступу вже сплив, тож CRM більше не звертається до календаря.',
+        : 'Події зникнуть із Головної, нагадувань про них не буде. Термін доступу вже сплив, тож CRM більше не звертається до календаря.') +
+        (driveWanted() ? ' Щоденні копії на Google Диск використовують це саме підключення — вони чекатимуть, доки ти знову не підключиш Google.' : ''),
       confirmText: 'Відключити'
     });
     if (!ok) return false;
@@ -429,6 +437,9 @@ window.CRM = window.CRM || {};
   });
 
   // ---------- Підпис під розкладом на Головній ----------
+  /** Client ID прийшов синхронізацією, але на цьому пристрої вхід у Google ще не робили. */
+  function neverHere() { return !rawToken() && !cache(); }
+
   function statusNote() {
     const s = status();
     const c = cache();
@@ -436,6 +447,9 @@ window.CRM = window.CRM || {};
     if (s === 'file') return h('span', null, 'Google Календар працює лише на GitHub Pages або локальному сервері, не з файлу.');
     if (s === 'no-client' || s === 'disconnected') {
       return h('span', null, 'Google Календар не підключено · ', link('Підключити', () => CRM.router.go('profile', { focus: 'gcal' })));
+    }
+    if (s === 'expired' && neverHere()) {
+      return h('span', null, 'Google Календар ще не підключено на цьому пристрої · ', link('Підключити', () => connect()));
     }
     if (s === 'expired') {
       return h('span', null,
@@ -486,11 +500,13 @@ window.CRM = window.CRM || {};
       ui.toast(v ? 'Client ID збережено — тепер натисни «Підключити»' : 'Client ID видалено', { type: 'success' });
     }
 
+    let shownId = cfg().clientId;   // що показано в полі (щоб не затерти те, що людина друкує)
     const head = h('div', { class: 'setting-row' });
     const body = h('div', { class: 'gcal-body' });
     const block = h('div', { class: 'gcal-block', id: 'gcal' }, head, body);
 
-    function badge(s) {
+    function badge(s, fresh) {
+      if (fresh) return h('span', { class: 'badge', 'data-status': s }, 'не підключено');
       const map = {
         file: ['badge-warning', 'недоступно з файлу'], 'no-client': ['', 'не налаштовано'],
         disconnected: ['', 'не підключено'], expired: ['badge-warning', 'доступ сплив'], connected: ['badge-success', 'підключено']
@@ -508,18 +524,21 @@ window.CRM = window.CRM || {};
       if (s === 'no-client' || s === 'disconnected' || s === 'file') {
         actions.push(ui.button({ label: 'Підключити', icon: 'link', variant: 'primary', size: 'sm', disabled: s !== 'disconnected', title: s === 'no-client' ? 'Спершу вкажи Client ID' : null, onClick: () => connect() }));
       }
-      if (s === 'expired') actions.push(ui.button({ label: 'Оновити підключення', icon: 'refresh', variant: 'primary', size: 'sm', onClick: () => connect({ refresh: true }) }));
+      const fresh = s === 'expired' && neverHere();
+      if (fresh) actions.push(ui.button({ label: 'Підключити', icon: 'link', variant: 'primary', size: 'sm', onClick: () => connect() }));
+      else if (s === 'expired') actions.push(ui.button({ label: 'Оновити підключення', icon: 'refresh', variant: 'primary', size: 'sm', onClick: () => connect({ refresh: true }) }));
       if (s === 'connected') actions.push(ui.button({ label: refreshing ? 'Оновлюю…' : 'Оновити події', icon: 'refresh', size: 'sm', disabled: !!refreshing, onClick: () => refresh({ manual: true }) }));
-      if (s === 'connected' || s === 'expired') actions.push(ui.button({ label: 'Відключити', size: 'sm', onClick: () => disconnect() }));
+      if (s === 'connected' || (s === 'expired' && !fresh)) actions.push(ui.button({ label: 'Відключити', size: 'sm', onClick: () => disconnect() }));
 
       ui.mount(head,
         h('div', { class: 'setting-text' },
-          h('div', { class: 'setting-title' }, CRM.icon('calendar', { size: 'sm' }), 'Google Календар', badge(s)),
+          h('div', { class: 'setting-title' }, CRM.icon('calendar', { size: 'sm' }), 'Google Календар', badge(s, fresh)),
           h('div', { class: 'setting-desc' }, `Лише читання. Події на сьогодні зʼявляються в розкладі на Головній, за ${REMIND_MIN} хв до початку — нагадування.`)),
         h('div', { class: 'setting-actions' }, actions));
 
       clientIn.disabled = s === 'connected' || s === 'expired';
-      if (clientIn.disabled) clientIn.value = c.clientId;
+      if (clientIn.disabled || clientIn.value.trim() === shownId) clientIn.value = c.clientId;
+      shownId = c.clientId;
       saveBtn.disabled = clientIn.disabled || clientIn.value.trim() === c.clientId;
 
       const parts = [];
@@ -555,6 +574,7 @@ window.CRM = window.CRM || {};
         if (ch) info.push(`Події оновлено о ${hhmm(ch.at)} (далі — кожні 10 хв, поки сайт відкритий).`);
       }
       if (s === 'expired' && ch) info.push(`Показано події станом на ${hhmm(ch.at)}.`);
+      if (fresh) info.push('Client ID отримано з іншого твого пристрою. Натисни «Підключити», щоб увійти в Google і на цьому пристрої.');
       if (s !== 'file') {
         parts.push(h('div', { class: 'gcal-info' },
           info.length ? h('div', null, info.join(' ')) : null,
@@ -613,10 +633,30 @@ window.CRM = window.CRM || {};
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
     // Після імпорту чи очищення даних
     CRM.store.on(['*'], () => { tokenClient = null; lastError = null; tick(); });
+    // Client ID прийшов з іншого пристрою (синхронізація) — одразу показати й підготувати вхід
+    let lastId = cfg().clientId;
+    CRM.store.on(['settings'], () => {
+      const id = cfg().clientId;
+      if (id === lastId) return;
+      lastId = id;
+      tokenClient = null;
+      if (id) loadGis().catch(() => {});
+      changed();
+    });
   }
 
+  /** Дійсний ключ доступу Google (для backup.js); need: 'drive' — лише якщо дано доступ до Диска. */
+  function accessToken(need) {
+    const t = token();
+    if (!t) return null;
+    if (need === 'drive' && !t.drive) return null;
+    return t.accessToken;
+  }
+  /** Ключ став недійсним (напр., Google відповів 401) — забути його. */
+  async function dropToken() { await CRM.store.setSetting('gcalToken', null); changed(); }
+
   CRM.gcal = {
-    SCOPES, init, status, connect, disconnect, refresh, statusNote, settingsBlock,
+    SCOPES, SCOPE_DRIVE, init, status, connect, disconnect, refresh, statusNote, settingsBlock, accessToken, dropToken,
     eventsOn, kyivStartISO, isValidClientId: (v) => CLIENT_RE.test(String(v || '').trim())
   };
 })(window.CRM);
