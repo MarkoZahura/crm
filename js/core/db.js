@@ -9,7 +9,7 @@ window.CRM = window.CRM || {};
   'use strict';
 
   const DB_NAME = 'personal-crm';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2; // 2 — харчування (foods, meals)
 
   /** Схема сховищ. Змінюючи схему, збільш DB_VERSION і додай міграцію в onupgradeneeded. */
   const SCHEMA = {
@@ -23,6 +23,8 @@ window.CRM = window.CRM || {};
     goals: { keyPath: 'id' },
     workouts: { keyPath: 'id', indexes: [['date', 'date']] },
     courses: { keyPath: 'id' },
+    foods: { keyPath: 'id' },
+    meals: { keyPath: 'id', indexes: [['date', 'date']] },
     notifications: { keyPath: 'id' },
     rates: { keyPath: 'date' }
   };
@@ -38,14 +40,25 @@ window.CRM = window.CRM || {};
 
   function open() {
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
+    dbPromise = openVersion(DB_VERSION).catch((e) => {
+      // База вже новішої версії (сайт оновлено в іншій вкладці, а ця — зі старого кешу):
+      // відкриваємо як є, без зміни схеми, щоб дані лишилися доступними.
+      if (e && e.name === 'VersionError') return openVersion(undefined);
+      throw e;
+    });
+    dbPromise.catch(() => { dbPromise = null; });
+    return dbPromise;
+  }
+
+  function openVersion(version) {
+    return new Promise((resolve, reject) => {
       if (!('indexedDB' in window) || !window.indexedDB) {
         reject(new Error('Цей браузер не підтримує IndexedDB.'));
         return;
       }
       let req;
       try {
-        req = indexedDB.open(DB_NAME, DB_VERSION);
+        req = version ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME);
       } catch (e) {
         reject(e);
         return;
@@ -74,7 +87,6 @@ window.CRM = window.CRM || {};
       req.onerror = () => reject(req.error || new Error('Не вдалося відкрити базу даних.'));
       req.onblocked = () => reject(new Error('Базу даних заблоковано іншою вкладкою. Закрий інші вкладки з цим сайтом і онови сторінку.'));
     });
-    return dbPromise;
   }
 
   /** Виконати дії в одній транзакції; Promise завершується, коли транзакція записана. */

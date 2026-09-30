@@ -112,6 +112,25 @@ window.CRM = window.CRM || {};
       { id: 'other', label: 'Інше' }
     ],
 
+    // Харчування: прийоми їжі та категорії продуктів
+    mealTypes: [
+      { id: 'breakfast', label: 'Сніданок' },
+      { id: 'lunch', label: 'Обід' },
+      { id: 'dinner', label: 'Вечеря' },
+      { id: 'snack', label: 'Перекус' }
+    ],
+    foodCategories: [
+      { id: 'grains', label: 'Гарніри й хліб' },
+      { id: 'meat', label: 'Мʼясо, птиця, риба' },
+      { id: 'dairy', label: 'Яйця й молочне' },
+      { id: 'veg', label: 'Овочі, бобові, гриби' },
+      { id: 'fruit', label: 'Фрукти й ягоди' },
+      { id: 'nuts', label: 'Горіхи, насіння, олії' },
+      { id: 'sweet', label: 'Солодке, напої, соуси' },
+      { id: 'dish', label: 'Страви' },
+      { id: 'other', label: 'Інше' }
+    ],
+
     courseKinds: [
       { id: 'course', label: 'Курс' },
       { id: 'subject', label: 'Предмет' }

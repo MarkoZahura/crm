@@ -24,9 +24,11 @@ window.CRM = window.CRM || {};
 
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const CFG = CRM.SYNC_CONFIG;
-  const STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
+  const STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods', 'meals'];
+  // Сховища, що синхронізувалися до появи «Харчування» (для пристроїв, які ввійшли ще тоді)
+  const STORES_V1 = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
-  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup'];
+  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget'];
   // Налаштування, що синхронізувалися з першої версії (для пристроїв, які ввійшли ще тоді)
   const SETTINGS_V1 = ['profile', 'accent', 'trainingProgram', 'trainingProfile'];
   const LS = 'crm.sync.';
@@ -229,6 +231,8 @@ window.CRM = window.CRM || {};
           if (!ok) return;
         }
         if (!user || user.uid !== uid) return;
+        await catchUp(uid);
+        if (!user || user.uid !== uid) return;
         upgradeSettings(uid);
         listen(uid);
         phase = 'on';
@@ -248,7 +252,7 @@ window.CRM = window.CRM || {};
     if (STORES.filter((n) => n !== 'categories').some((n) => CRM.store.list(n).length)) return true;
     const p = CRM.store.getSetting('profile', null);
     if (p && (p.name || p.email || p.phone)) return true;
-    return !!(CRM.store.getSetting('trainingProgram', null) || CRM.store.getSetting('trainingProfile', null));
+    return !!(CRM.store.getSetting('trainingProgram', null) || CRM.store.getSetting('trainingProfile', null) || CRM.store.getSetting('nutritionTarget', null));
   }
 
   function localKeys() {
@@ -296,6 +300,36 @@ window.CRM = window.CRM || {};
     markDirty(uid, added.filter((k) => meaningfulSetting(k, CRM.store.getSetting(k, undefined))).map((k) => keyOf('settings', k)));
     meta.settings = SETTINGS.slice();
     setMeta(uid, meta);
+  }
+
+  /**
+   * Нова версія почала синхронізувати нові сховища (харчування) чи налаштування. Поки на пристрої
+   * була стара версія, вона пропускала такі записи з хмари, а позначка «отримано до…» (pull) пішла
+   * далі — тож слухач їх уже не надішле. Один раз дочитуємо їх з хмари окремо.
+   */
+  async function catchUp(uid) {
+    const meta = getMeta(uid);
+    const knownStores = Array.isArray(meta.stores) ? meta.stores : STORES_V1;
+    const knownSettings = Array.isArray(meta.settings) ? meta.settings : SETTINGS_V1;
+    const newStores = STORES.filter((n) => !knownStores.includes(n));
+    const newSettings = SETTINGS.filter((k) => !knownSettings.includes(k));
+    if (newStores.length || newSettings.length) {
+      const snap = await recordsCol(uid).get();
+      const items = [];
+      snap.docs.forEach((d) => {
+        const x = d.data();
+        if (!x) return;
+        if (x.s === 'settings') {
+          // Налаштування беремо з хмари, лише якщо на пристрої його ще немає
+          if (!newSettings.includes(x.id) || x.del || CRM.store.getSetting(x.id, undefined) !== undefined) return;
+        } else if (!newStores.includes(x.s)) return;
+        try { const it = remoteItem(x); if (it) items.push(it); } catch (e) { /* пошкоджений запис — пропускаємо */ }
+      });
+      await CRM.store.applyRemote(items);
+    }
+    const m = getMeta(uid);
+    m.stores = STORES.slice();
+    setMeta(uid, m);
   }
 
   function askMode(count) {
@@ -393,6 +427,7 @@ window.CRM = window.CRM || {};
     meta.merge = false;
     meta.pull = pull;
     meta.settings = SETTINGS.slice();
+    meta.stores = STORES.slice();
     setMeta(uid, meta);
     lastSyncAt = new Date();
     return true;
@@ -587,7 +622,7 @@ window.CRM = window.CRM || {};
       ui.mount(head,
         h('div', { class: 'setting-text' },
           h('div', { class: 'setting-title' }, CRM.icon('refresh', { size: 'sm' }), 'Синхронізація між пристроями', h('span', { class: 'badge ' + b[0], 'data-status': s }, b[1])),
-          h('div', { class: 'setting-desc' }, 'Задачі, бюджет, тренування, навчання й профіль — однакові на компʼютері й телефоні. Вхід через Google, дані в Firebase.')),
+          h('div', { class: 'setting-desc' }, 'Задачі, бюджет, тренування, харчування, навчання й профіль — однакові на компʼютері й телефоні. Вхід через Google, дані в Firebase.')),
         h('div', { class: 'setting-actions' }, actions));
 
       const parts = [];

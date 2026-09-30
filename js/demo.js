@@ -31,7 +31,7 @@ window.CRM = window.CRM || {};
     const tomorrow = D.addDays(T, 1);
     const iso = (date, time) => `${date}T${time || '09:00'}:00.000Z`;
     const nowIso = new Date().toISOString();
-    const base = (o, date) => Object.assign({ createdAt: date ? iso(date) : nowIso, updatedAt: date ? iso(date) : nowIso, deletedAt: null }, o);
+    const base = (o, date, time) => Object.assign({ createdAt: date ? iso(date, time) : nowIso, updatedAt: date ? iso(date, time) : nowIso, deletedAt: null }, o);
 
     // ---------- Категорії ----------
     const categories = [];
@@ -275,7 +275,44 @@ window.CRM = window.CRM || {};
     }), 2));
     goals.push(trashed(base({ id: uid(), name: 'Електросамокат', currency: 'UAH', target: 18000, saved: 2000, deadline: null, category: 'Інше', status: 'active', achievedAt: null, history: [] }), 28));
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, notifications };
+    // ---------- Харчування (останні 4 дні) ----------
+    const foods = [];
+    const meals = [];
+    const N = CRM.nutrition;
+    if (N) {
+      const per100 = (f) => ({ kcal: f.kcal, p: f.p, f: f.f, c: f.c });
+      const B = (code) => N.getFood('b:' + code);
+      const dishIngr = [['cottage-5', 400], ['egg', 110], ['flour', 60], ['sugar', 30], ['sunflower-oil', 20]]
+        .map(([code, grams]) => { const f = B(code); return { foodId: f.id, name: f.name, grams, per100: per100(f) }; });
+      const yieldG = 540;
+      const sum = dishIngr.reduce((a, i) => ({ kcal: a.kcal + i.per100.kcal * i.grams / 100, p: a.p + i.per100.p * i.grams / 100, f: a.f + i.per100.f * i.grams / 100, c: a.c + i.per100.c * i.grams / 100 }), { kcal: 0, p: 0, f: 0, c: 0 });
+      const r1 = (v) => Math.round(v * 10) / 10;
+      const syrnyky = base({ id: uid(), name: 'Сирники домашні', cat: 'dish', kind: 'dish', ingredients: dishIngr, yield: yieldG,
+        kcal: r1(sum.kcal * 100 / yieldG), p: r1(sum.p * 100 / yieldG), f: r1(sum.f * 100 / yieldG), c: r1(sum.c * 100 / yieldG), portion: { label: 'шт', grams: 60 } }, D.addDays(T, -10));
+      const bar = base({ id: uid(), name: 'Протеїновий батончик', cat: 'sweet', kind: 'product', kcal: 350, p: 30, f: 10, c: 35, portion: { label: 'шт', grams: 60 } }, D.addDays(T, -10));
+      foods.push(syrnyky, bar);
+      const entry = (date, meal, time, f, grams, count) => meals.push(base({
+        id: uid(), date, meal, name: f.name, foodId: f.id, grams, per100: per100(f), manual: null,
+        portion: count ? { label: f.portion.label, grams: f.portion.grams, count } : null
+      }, date, time));
+      for (let i = 3; i >= 0; i--) {
+        const day = D.addDays(T, -i);
+        entry(day, 'breakfast', '07:40', B('oatmeal'), 250);
+        entry(day, 'breakfast', '07:41', B('banana'), 120, 1);
+        entry(day, 'breakfast', '07:42', B('coffee'), 200, 1);
+        entry(day, 'lunch', '12:50', B('buckwheat-cooked'), Math.round(between(180, 240)));
+        entry(day, 'lunch', '12:51', B('chicken-breast-cooked'), 150);
+        entry(day, 'lunch', '12:52', B('cucumber'), 120, 1);
+        if (i === 0) continue; // сьогодні день ще триває
+        entry(day, 'dinner', '19:10', syrnyky, 180, 3);
+        entry(day, 'dinner', '19:11', B('sour-cream-15'), 20, 1);
+        if (i % 2) entry(day, 'snack', '16:30', bar, 60, 1);
+        else meals.push(base({ id: uid(), date: day, meal: 'snack', name: 'Кава з тістечком у кафе', foodId: null, grams: null, per100: null, portion: null,
+          manual: { kcal: 420, p: 6, f: 22, c: 48 } }, day, '16:30'));
+      }
+    }
+
+    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, notifications };
   }
 
   CRM.demo = { generate };

@@ -749,3 +749,208 @@
 .svc-body { display: flex; flex-direction: column; gap: 14px; padding: 0 20px 18px; }
 .svc-info { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-3); }
 @media (max-width: 640px) { .svc-body { padding: 0 16px 16px; } }
+
+/* ==========================================================================
+   Харчування
+   ========================================================================== */
+:root, :root[data-theme="light"] { --nut-p: #2a78d6; --nut-f: #c98500; --nut-c: #1a9e6e; }
+:root[data-theme="dark"] { --nut-p: #5b9cea; --nut-f: #e0a82e; --nut-c: #2fbf86; }
+.nut-p { --nut: var(--nut-p); }
+.nut-f { --nut: var(--nut-f); }
+.nut-c { --nut: var(--nut-c); }
+.nut-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--nut, var(--accent)); flex-shrink: 0; }
+.nut-unit { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.nut-over-text { color: var(--warning); }
+
+/* Перемикач дня */
+.nut-daynav { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.nut-day-title { display: flex; align-items: baseline; gap: 8px; min-width: 190px; justify-content: center; }
+.nut-day-name { font-size: 16px; font-weight: 600; }
+.nut-day-date { color: var(--text-2); }
+
+/* Розкладка щоденника: праворуч — підсумок і тиждень, ліворуч — прийоми їжі */
+.nut-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.nut-side { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.nut-main { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+@media (max-width: 1040px) {
+  .nut-grid { display: flex; flex-direction: column; align-items: stretch; }
+  .nut-side { display: contents; }
+  .nut-summary { order: 0; }
+  .nut-main { order: 1; }
+  .nut-week { order: 2; }
+}
+
+/* Кільце калорій */
+.nut-sum-top { display: flex; align-items: center; gap: 20px; }
+.nut-ring { position: relative; width: 132px; height: 132px; flex-shrink: 0; }
+.nut-ring-svg { width: 100%; height: 100%; display: block; }
+.nut-ring-track { fill: none; stroke: var(--surface-3); stroke-width: 9; }
+.nut-ring-bar { fill: none; stroke: var(--accent); stroke-width: 9; stroke-linecap: round; transition: stroke-dasharray .3s var(--ease); }
+.nut-ring-bar.over { stroke: var(--warning); }
+.nut-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.15; }
+.nut-ring-value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.nut-ring-label { font-size: 12px; color: var(--text-3); }
+.nut-sum-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.nut-status { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--text-2); }
+.nut-status strong { color: var(--text); font-weight: 600; }
+.nut-status.over, .nut-status.over strong { color: var(--warning); }
+.nut-status .icon { width: 15px; height: 15px; }
+.nut-macros { display: flex; flex-direction: column; gap: 10px; }
+.nut-macro { display: flex; flex-direction: column; gap: 5px; }
+.nut-macro-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.nut-macro-name { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+.nut-macro-val { font-weight: 600; white-space: nowrap; }
+.nut-macro .meter { flex: none; }
+.nut-macro .meter-fill { background: var(--nut); }
+.nut-callout { margin-top: 16px; }
+@media (max-width: 480px) {
+  .nut-sum-top { flex-direction: column; align-items: stretch; }
+  .nut-summary .nut-ring { align-self: center; }
+}
+
+/* Прийоми їжі */
+.nut-meal + .nut-meal { border-top: 1px solid var(--border); }
+.nut-meal-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px 16px; background: var(--surface-2); flex-wrap: wrap; }
+.nut-meal:first-child .nut-meal-head { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.nut-meal-name { font-weight: 600; }
+.nut-meal-total { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.nut-meal-empty { padding: 10px 16px 12px; font-size: 13px; color: var(--text-3); }
+.nut-entry, .nut-food-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border); cursor: pointer; }
+.nut-meal-head + .nut-entry, .day-head + .nut-food-row { border-top: 0; }
+.nut-entry:hover, .nut-food-row:hover { background: var(--surface-2); }
+.nut-entry:focus-visible, .nut-food-row:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+.nut-entry-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nut-entry-name { display: flex; align-items: center; gap: 6px; font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.nut-entry-sub { font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.nut-entry-kcal, .nut-food-kcal { font-weight: 600; white-space: nowrap; text-align: right; }
+.nut-food-row > .btn { flex-shrink: 0; opacity: .55; }
+.nut-food-row:hover > .btn, .nut-food-row > .btn:focus-visible { opacity: 1; }
+@media (hover: none) { .nut-food-row > .btn { opacity: 1; } }
+@media (max-width: 640px) { .nut-entry, .nut-food-row { padding: 10px 12px; } .nut-meal-head { padding-left: 12px; } }
+
+/* Тиждень */
+.nut-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.nut-bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--text-2); min-width: 0; }
+.nut-bar-col:hover { background: var(--surface-2); }
+.nut-bar-val { font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.nut-bar-track { position: relative; width: 60%; max-width: 30px; height: 110px; display: flex; align-items: flex-end; }
+.nut-bar { width: 100%; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--accent) 45%, transparent); min-height: 2px; }
+.nut-bar-col.sel .nut-bar { background: var(--accent); }
+.nut-bar-col.over .nut-bar { background: color-mix(in srgb, var(--warning) 55%, transparent); }
+.nut-bar-col.over.sel .nut-bar { background: var(--warning); }
+.nut-bar-norm { position: absolute; left: -45%; right: -45%; border-top: 1.5px dashed var(--text-3); z-index: 1; pointer-events: none; }
+.nut-bar-day { font-size: 12px; }
+.nut-bar-date { font-size: 12px; font-weight: 600; color: var(--text); }
+.nut-bar-col.sel .nut-bar-day, .nut-bar-col.sel .nut-bar-date { color: var(--accent-text); }
+.nut-week-legend { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--text-3); }
+.nut-legend-line { width: 18px; border-top: 1.5px dashed var(--text-3); }
+
+/* Вікно «Додати їжу» */
+.nut-add { display: flex; flex-direction: column; gap: 12px; }
+.nut-add-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nut-seg { max-width: 100%; overflow-x: auto; }
+.nut-add-date { font-size: 13px; }
+.nut-added { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: var(--radius); background: var(--success-soft); color: var(--success); font-size: 13px; }
+.nut-added .icon { margin-top: 2px; flex-shrink: 0; }
+.nut-added span { color: var(--text); overflow-wrap: anywhere; }
+.nut-step { display: flex; flex-direction: column; gap: 12px; }
+.nut-results { display: flex; flex-direction: column; max-height: min(46vh, 380px); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.nut-results:empty { display: none; }
+.nut-results-title { padding: 8px 12px 4px; font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--text-3); }
+.nut-results-hint, .nut-results-empty { padding: 12px; font-size: 13px; color: var(--text-2); display: flex; flex-direction: column; gap: 10px; }
+.nut-result { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-top: 1px solid var(--border); background: transparent; text-align: left; color: var(--text); }
+.nut-result:first-child, .nut-results-title + .nut-result { border-top: 0; }
+.nut-result:hover, .nut-result:focus-visible { background: var(--surface-2); outline: none; }
+.nut-result-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nut-result-name { display: flex; align-items: center; gap: 6px; font-weight: 500; overflow-wrap: anywhere; }
+.nut-result-sub { font-size: 12px; color: var(--text-2); }
+.nut-result-kcal { font-weight: 600; white-space: nowrap; }
+.nut-add-links { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+.nut-add-foot { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; }
+.nut-picked { padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); }
+.nut-picked-name { font-weight: 600; }
+.nut-picked-sub { font-size: 12.5px; color: var(--text-2); }
+.nut-amount-row { display: flex; align-items: flex-start; gap: 10px; }
+.nut-amount-row .field { flex: 0 1 140px; }
+.nut-amount { font-size: 16px; font-weight: 600; }
+.nut-unit-fixed { align-self: center; color: var(--text-2); font-weight: 500; }
+.nut-unit-seg { margin-top: 1px; }
+.nut-preview { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.nut-preview-kcal { font-size: 20px; font-weight: 700; }
+.nut-preview-macros { color: var(--text-2); font-size: 13px; }
+.nut-entry-modal .modal-footer, .nut-food-modal .modal-footer { justify-content: flex-start; }
+
+/* Норма */
+.nut-current-body { display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+.nut-current-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nut-current-label { font-size: 13px; color: var(--text-2); }
+.nut-current-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.nut-current-sub { font-size: 13px; color: var(--text-2); }
+.nut-norm-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .nut-norm-grid { grid-template-columns: minmax(0, 1fr); } }
+.nut-body-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 420px) { .nut-body-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.nut-shared-hint { display: flex; align-items: flex-start; gap: 6px; margin-top: -6px; }
+.nut-shared-hint .icon { margin-top: 2px; flex-shrink: 0; }
+.nut-more summary, .nut-how summary { cursor: pointer; color: var(--accent-text); font-weight: 500; }
+.nut-more > .form-grid { margin-top: 12px; }
+.nut-how summary { display: flex; align-items: center; gap: 8px; padding: 14px 20px; list-style: none; }
+.nut-how summary::-webkit-details-marker { display: none; }
+.nut-how-body { padding: 0 20px 16px; display: flex; flex-direction: column; gap: 8px; color: var(--text-2); }
+.nut-how-body strong { color: var(--text); font-weight: 600; }
+.nut-result-box { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: var(--radius-lg); background: var(--surface-2); min-width: 0; }
+.nut-result-empty { display: flex; align-items: center; gap: 10px; color: var(--text-2); }
+.nut-result-empty .icon { color: var(--text-3); flex-shrink: 0; }
+.nut-big { display: flex; flex-direction: column; gap: 2px; }
+.nut-big-label { font-size: 13px; color: var(--text-2); }
+.nut-big-value { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.nut-big-unit { font-size: 14px; font-weight: 500; color: var(--text-2); letter-spacing: 0; }
+.nut-calc-steps { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.nut-calc-steps > div { display: flex; justify-content: space-between; gap: 12px; color: var(--text-2); }
+.nut-calc-steps strong { color: var(--text); font-weight: 600; text-align: right; }
+.nut-bju { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.nut-bju-item { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: var(--radius); background: var(--surface); border-top: 3px solid var(--nut); min-width: 0; }
+.nut-bju-label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.nut-bju-value { font-size: 18px; font-weight: 700; }
+.nut-bju-sub { font-size: 11.5px; color: var(--text-3); }
+@media (max-width: 480px) {
+  .nut-bju { gap: 6px; }
+  .nut-bju-item { padding: 8px; }
+  .nut-bju-label .nut-dot { display: none; }
+  .nut-bju-label { font-size: 12px; overflow-wrap: anywhere; }
+  .nut-bju-value { font-size: 16px; }
+}
+.nut-saved-note { display: flex; align-items: center; gap: 6px; color: var(--success); font-weight: 500; }
+.nut-save-norm { align-self: flex-start; }
+
+/* Продукти */
+.nut-foods-head { flex-wrap: wrap; }
+.nut-food-search { min-width: 180px; }
+.nut-foods-chips { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+@media (max-width: 640px) { .nut-foods-chips { padding: 10px 12px; } }
+.nut-per100 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 560px) { .nut-per100 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.nut-ings { display: flex; flex-direction: column; gap: 6px; }
+.nut-ings:empty { display: none; }
+.nut-ing { display: flex; align-items: center; gap: 8px; }
+.nut-ing-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.nut-ing-grams { width: 72px; text-align: right; }
+.nut-ing-kcal { width: 76px; text-align: right; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.nut-picker { display: flex; flex-direction: column; gap: 6px; }
+.nut-picker-list { max-height: 240px; }
+.nut-dish-sum { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; color: var(--text-2); }
+.nut-dish-sum strong { color: var(--text); }
+
+/* Головна */
+.nut-home { display: flex; align-items: center; gap: 18px; }
+.nut-ring-sm { width: 92px; height: 92px; }
+.nut-ring-sm .nut-ring-value { font-size: 18px; }
+.nut-ring-sm .nut-ring-label { font-size: 11px; }
+.nut-home-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.nut-home-line { font-size: 13.5px; }
+.nut-macros-sm { gap: 7px; }
+.nut-macros-sm .nut-macro-head { font-size: 12.5px; }
+.nut-home-empty { display: flex; flex-direction: column; gap: 12px; }
+.nut-home-empty p { margin: 0; }
+@media (max-width: 400px) { .nut-home { flex-direction: column; align-items: stretch; } .nut-home .nut-ring { align-self: center; } }
+.nut-norm-form .segmented, .nut-entry-modal .segmented { align-self: flex-start; }

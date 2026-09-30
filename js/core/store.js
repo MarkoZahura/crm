@@ -18,7 +18,9 @@ window.CRM = window.CRM || {};
   const TRASH_DAYS = 30;
 
   // Сховища з «звичайними» записами (мають id, можуть бути в Кошику)
-  const DATA_STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'notifications'];
+  // (лише ті, що є в схемі бази: якщо браузер узяв старий db.js з кешу, сайт однаково відкриється)
+  const DATA_STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods', 'meals', 'notifications']
+    .filter((n) => CRM.db.SCHEMA[n]);
   // Налаштування, які не потрапляють в експорт (службові або секретні)
   const EXPORT_EXCLUDE = new Set(['gcalToken', 'gcalCache']);
   // Налаштування, що лишаються після «Очистити всі дані»
@@ -97,6 +99,7 @@ window.CRM = window.CRM || {};
    */
   function list(name, opts) {
     const del = opts && opts.deleted;
+    if (!cache[name]) return [];
     const arr = Array.from(cache[name].values());
     if (del === 'all') return arr;
     if (del === 'only') return arr.filter((r) => r.deletedAt);
@@ -370,7 +373,8 @@ window.CRM = window.CRM || {};
     return {
       tasks: live('tasks'), accounts: live('accounts'), transactions: live('transactions'),
       categories: live('categories'), recurring: live('recurring'), goals: live('goals'),
-      workouts: live('workouts'), courses: live('courses'), attachments: (s.attachments || []).length
+      workouts: live('workouts'), courses: live('courses'), foods: live('foods'), meals: live('meals'),
+      attachments: (s.attachments || []).length
     };
   }
 

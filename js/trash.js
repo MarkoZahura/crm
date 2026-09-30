@@ -15,6 +15,7 @@ window.CRM = window.CRM || {};
     { id: 'tasks', label: 'Задачі', match: (s) => s === 'tasks' },
     { id: 'budget', label: 'Бюджет', match: (s) => ['accounts', 'transactions', 'categories', 'recurring', 'goals'].includes(s) },
     { id: 'training', label: 'Тренування', match: (s) => s === 'workouts' },
+    { id: 'nutrition', label: 'Харчування', match: (s) => s === 'foods' || s === 'meals' },
     { id: 'learning', label: 'Навчання', match: (s) => s === 'courses' }
   ];
   let filter = 'all';
@@ -139,7 +140,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('trash', {
     title: 'Кошик',
-    stores: ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'],
+    stores: ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods', 'meals'],
     render
   });
 

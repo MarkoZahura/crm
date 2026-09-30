@@ -167,7 +167,7 @@ window.CRM = window.CRM || {};
     const rows = [
       ['Задачі', s.tasks], ['Рахунки', s.accounts], ['Транзакції', s.transactions], ['Категорії', s.categories],
       ['Регулярні платежі', s.recurring], ['Фінансові цілі', s.goals], ['Тренування', s.workouts],
-      ['Навчання', s.courses], ['Вкладення', s.attachments]
+      ['Навчання', s.courses], ['Харчування', s.meals], ['Продукти', s.foods], ['Вкладення', s.attachments]
     ].filter((r) => r[1] > 0);
     return h('div', { class: 'stack', style: { gap: '12px' } },
       h('p', { class: 'modal-text' }, obj.exportedAt ? `Копія від ${CRM.fmt.dateTime(obj.exportedAt)}.` : 'Резервна копія.'),

@@ -99,6 +99,7 @@ window.CRM = window.CRM || {};
     { id: 'tasks', label: 'Задачі', icon: 'tasks' },
     { id: 'budget', label: 'Бюджет', icon: 'wallet' },
     { id: 'training', label: 'Тренування', icon: 'dumbbell' },
+    { id: 'nutrition', label: 'Харчування', icon: 'apple' },
     { id: 'learning', label: 'Навчання', icon: 'book' },
     { sep: true },
     { id: 'trash', label: 'Кошик', icon: 'trash', count: () => CRM.store.trashItems().length }
@@ -113,6 +114,8 @@ window.CRM = window.CRM || {};
     el.nav = h('nav', { class: 'nav', 'aria-label': 'Розділи' },
       NAV.map((item) => {
         if (item.sep) return h('div', { class: 'nav-sep', role: 'separator' });
+        // Розділ не завантажився (неповне оновлення сайту) — не показуємо порожній пункт
+        if (item.id !== 'trash' && !CRM.router.routes.has(item.id)) return null;
         const a = h('a', { class: 'nav-item', href: '#/' + item.id, dataset: { route: item.id } },
           CRM.icon(item.icon), h('span', null, item.label),
           item.count ? h('span', { class: 'nav-count', dataset: { count: item.id } }) : null);
@@ -277,6 +280,7 @@ window.CRM = window.CRM || {};
         if (!CRM[name] || typeof CRM[name].init !== 'function') { missing.push(file); return; }
         try { CRM[name].init(); } catch (e) { console.error(e); }
       });
+    if (!CRM.nutrition) missing.push('js/nutrition.js');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));
       setTimeout(() => CRM.ui.toast('Сайт оновлено не повністю: не підключено ' + missing.join(', ') +

@@ -119,6 +119,23 @@ window.CRM = window.CRM || {};
       },
       text: (r) => [r.title, r.notes, (r.topics || []).map((t) => t.title).join(' ')],
       route: (r) => ['learning', { open: r.id }]
+    },
+    foods: {
+      label: 'Продукт', group: 'Продукти', icon: 'apple', iconClass: 'ico-goal', section: 'nutrition',
+      title: (r) => r.name || 'Продукт',
+      sub: (r) => [`${fmt().number(Math.round(Number(r.kcal) || 0), 0)} ккал на 100 г`, r.kind === 'dish' ? 'страва' : null, r.baseId ? 'змінений вбудований' : null].filter(Boolean).join(' · '),
+      text: (r) => [r.name, (r.ingredients || []).map((i) => i.name).join(' ')],
+      route: (r) => ['nutrition/foods', { open: r.id }]
+    },
+    meals: {
+      label: 'Запис харчування', group: 'Харчування', icon: 'utensils', iconClass: 'ico-goal', section: 'nutrition',
+      title: (r) => r.name || 'Їжа',
+      sub: (r) => {
+        const kcal = r.per100 && r.grams ? r.per100.kcal * r.grams / 100 : Number(r.manual && r.manual.kcal) || 0;
+        return [fmt().date(r.date), CRM.dict.label('mealTypes', r.meal), `${fmt().number(Math.round(kcal), 0)} ккал`].filter(Boolean).join(' · ');
+      },
+      text: (r) => [r.name],
+      route: (r) => ['nutrition', { date: r.date, open: r.id }]
     }
   };
 
@@ -141,7 +158,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'courses'],
+    order: ['tasks', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);
