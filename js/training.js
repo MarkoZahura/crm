@@ -3,6 +3,8 @@
    Журнал тренувань (зал / силові, вдома / власна вага, біг / кардіо, інше),
    згрупований по тижнях; підсумок за тиждень або місяць; стовпчики часу
    тренувань за 8 тижнів; «Повторити» — копія тренування на сьогодні.
+   Вкладки: «Журнал» (#/training) і «Програми» (#/training/programs,
+   сторінка програми — #/training/program/<id>; див. programs.js і program.js).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -39,6 +41,13 @@ window.CRM = window.CRM || {};
   function km(v) { return fmt.number(v, 1).replace(/,0$/, '') + ' км'; }
   function typeLabel(t) { return CRM.dict.label('workoutTypes', t) || 'Тренування'; }
   function title(w) { return w.title || typeLabel(w.type); }
+  /** Значок прив'язки до програми: «Програма · день 17» або «Біг на вулиці · тиждень 3, день 2». */
+  function programBadge(w) {
+    if (!w.program) return null;
+    if (w.program.week && CRM.programs) return CRM.programs.badgeText(w);
+    if (w.program.week) return `Програма · тиждень ${w.program.week}, день ${w.program.day}`;
+    return `Програма · день ${w.program.day}`;
+  }
 
   function summaryText(w) {
     if (w.type === 'cardio') return [w.distanceKm ? km(w.distanceKm) : null, pace(w)].filter(Boolean).join(' · ');
@@ -129,7 +138,7 @@ window.CRM = window.CRM || {};
     h('span', { class: 'list-row-icon wo-ico wo-' + w.type }, CRM.icon(TYPE_ICON[w.type] || 'dumbbell', { size: 'sm' })),
     h('span', { class: 'rec-main' },
       h('span', { class: 'rec-name' }, title(w),
-        w.program ? h('span', { class: 'badge badge-accent' }, `Програма · день ${w.program.day}`) : w.title ? h('span', { class: 'badge' }, typeLabel(w.type)) : null),
+        w.program ? h('span', { class: 'badge badge-accent' }, programBadge(w)) : w.title ? h('span', { class: 'badge' }, typeLabel(w.type)) : null),
       h('span', { class: 'rec-sub' }, summaryText(w) || '—')),
     h('span', { class: 'wo-dur num' }, w.durationMin ? durationLabel(w.durationMin) : ''),
     ui.button({ icon: 'repeat', iconOnly: true, size: 'sm', variant: 'ghost', title: 'Повторити сьогодні', onClick: (e) => { e.stopPropagation(); repeatToday(w); } }));
@@ -177,14 +186,31 @@ window.CRM = window.CRM || {};
       body);
   }
 
+  const TABS = [['journal', 'Журнал'], ['programs', 'Програми']];
+
   function render(container, route) {
-    const hasAny = CRM.store.list('workouts').length > 0;
+    const tabId = route.sub === 'programs' || route.sub === 'program' ? 'programs' : 'journal';
+    const nav = h('nav', { class: 'tabs', 'aria-label': 'Вкладки тренувань' },
+      TABS.map(([id, label]) => h('a', {
+        href: '#/training' + (id === 'journal' ? '' : '/' + id), class: 'tab' + (id === tabId ? ' active' : ''),
+        'aria-current': id === tabId ? 'page' : null
+      }, label)));
+    let content;
+    let actions;
+    if (tabId === 'programs') {
+      // Без programs.js (неповне оновлення сайту) лишається вбудована програма «Верх тіла»
+      content = CRM.programs
+        ? (route.sub === 'program' ? CRM.programs.pageView(route.parts[2]) : CRM.programs.listView())
+        : h('div', { class: 'stack' }, CRM.program ? CRM.program.card() : null);
+      actions = CRM.programs ? CRM.programs.importButton({ variant: 'primary' }) : null;
+    } else {
+      const hasAny = CRM.store.list('workouts').length > 0;
+      content = h('div', { class: 'stack' }, hasAny ? summaryCard() : null, hasAny ? weeksChart() : null, journal());
+      actions = ui.button({ label: 'Додати тренування', icon: 'plus', variant: 'primary', onClick: () => openForm() });
+    }
     ui.mount(container,
-      ui.pageHead({
-        title: 'Тренування', sub: 'Журнал і підсумки: зал, вдома, біг.',
-        actions: ui.button({ label: 'Додати тренування', icon: 'plus', variant: 'primary', onClick: () => openForm() })
-      }),
-      h('div', { class: 'stack' }, CRM.program ? CRM.program.card() : null, hasAny ? summaryCard() : null, hasAny ? weeksChart() : null, journal()));
+      ui.pageHead({ title: 'Тренування', sub: 'Журнал, підсумки й програми тренувань: зал, вдома, біг.', actions }),
+      nav, content);
     if (route.params.open) {
       const id = route.params.open;
       CRM.router.consumeParam('open');
@@ -331,7 +357,9 @@ window.CRM = window.CRM || {};
       ui.toast('Тренування перенесено в Кошик', { action: { label: 'Скасувати', onClick: () => CRM.store.restoreBatch(batch) } });
     }
 
+    const hint = isNew && st.hint ? h('div', { class: 'callout' }, CRM.icon('info'), h('span', null, st.hint)) : null;
     const form = h('form', { class: 'form-stack', novalidate: true, onSubmit: submit },
+      hint,
       typeSeg,
       h('div', { class: 'form-grid' }, ui.field({ label: 'Дата', input: dateIn }), fDur),
       fTitle, cardioSection, exSection, fNote,
@@ -352,6 +380,6 @@ window.CRM = window.CRM || {};
     return dlg;
   }
 
-  CRM.router.register('training', { title: 'Тренування', stores: ['workouts'], render });
+  CRM.router.register('training', { title: 'Тренування', stores: ['workouts', 'programs'], render });
   CRM.training = { openForm, stats, tonnage, pace };
 })(window.CRM);

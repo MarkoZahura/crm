@@ -19,7 +19,7 @@ window.CRM = window.CRM || {};
 
   // Сховища з «звичайними» записами (мають id, можуть бути в Кошику)
   // (лише ті, що є в схемі бази: якщо браузер узяв старий db.js з кешу, сайт однаково відкриється)
-  const DATA_STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods', 'meals', 'notifications']
+  const DATA_STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals', 'notifications']
     .filter((n) => CRM.db.SCHEMA[n]);
   // Налаштування, які не потрапляють в експорт (службові або секретні)
   const EXPORT_EXCLUDE = new Set(['gcalToken', 'gcalCache']);
@@ -373,7 +373,7 @@ window.CRM = window.CRM || {};
     return {
       tasks: live('tasks'), accounts: live('accounts'), transactions: live('transactions'),
       categories: live('categories'), recurring: live('recurring'), goals: live('goals'),
-      workouts: live('workouts'), courses: live('courses'), foods: live('foods'), meals: live('meals'),
+      workouts: live('workouts'), programs: live('programs'), courses: live('courses'), foods: live('foods'), meals: live('meals'),
       attachments: (s.attachments || []).length
     };
   }
@@ -447,6 +447,7 @@ window.CRM = window.CRM || {};
     const setPuts = [];
     const setDels = [];
     items.forEach((it) => {
+      if (!it.setting && !cache[it.store]) return; // сховища немає в цій версії бази (старий db.js з кешу)
       if (it.setting) {
         if (it.value === undefined) setDels.push(it.setting); else setPuts.push({ key: it.setting, value: it.value });
       } else if (it.del) (dels[it.store] = dels[it.store] || []).push(it.id);
@@ -454,6 +455,7 @@ window.CRM = window.CRM || {};
     });
     const names = Array.from(new Set(Object.keys(puts).concat(Object.keys(dels))
       .concat(setPuts.length || setDels.length ? ['settings'] : [])));
+    if (!names.length) return;
     await CRM.db.run(names, 'readwrite', (stores) => {
       Object.keys(puts).forEach((n) => puts[n].forEach((r) => stores[n].put(r)));
       Object.keys(dels).forEach((n) => dels[n].forEach((id) => stores[n].delete(id)));
@@ -476,7 +478,8 @@ window.CRM = window.CRM || {};
    * byStore: { tasks: [...], ... } для перелічених names; settingsKV: { key: value } для syncKeys.
    * Вкладення, сповіщення й курси лишаються; вкладення без задачі прибираються.
    */
-  async function replaceSynced(names, byStore, syncKeys, settingsKV) {
+  async function replaceSynced(namesIn, byStore, syncKeys, settingsKV) {
+    const names = namesIn.filter((n) => cache[n]); // лише сховища, що є в цій версії бази
     await CRM.db.run(names.concat(['settings']), 'readwrite', (stores) => {
       names.forEach((n) => { stores[n].clear(); (byStore[n] || []).forEach((r) => stores[n].put(r)); });
       syncKeys.forEach((k) => {
@@ -497,7 +500,8 @@ window.CRM = window.CRM || {};
   }
 
   /** Оновити updatedAt усіх записів сховищ (без гачка) — щоб після імпорту саме вони «перемогли» в хмарі. */
-  async function touchAll(names) {
+  async function touchAll(namesIn) {
+    const names = namesIn.filter((n) => cache[n]);
     const now = new Date().toISOString();
     const byStore = {};
     names.forEach((n) => { byStore[n] = Array.from(cache[n].values()).map((r) => Object.assign({}, r, { updatedAt: now })); });

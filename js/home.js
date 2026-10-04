@@ -1,7 +1,8 @@
 /* ==========================================================================
    home.js — Головна: цитата дня, активні задачі, харчування сьогодні,
    розклад на сьогодні (задачі з дедлайном сьогодні, регулярні платежі,
-   дедлайни навчання, події Google Календаря), доходи й витрати за сьогодні в гривнях.
+   дедлайни навчання, події Google Календаря), доходи й витрати за сьогодні в гривнях,
+   «Сьогоднішнє тренування» за програмами (programs.js).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -170,7 +171,7 @@ window.CRM = window.CRM || {};
         quoteCard(),
         h('div', { class: 'home-grid' },
           h('div', { class: 'home-col' }, tasksCard(), CRM.nutrition ? CRM.nutrition.homeCard() : null),
-          h('div', { class: 'home-col' }, moneyCard(), scheduleCard()))));
+          h('div', { class: 'home-col' }, moneyCard(), CRM.programs ? CRM.programs.homeCard() : null, scheduleCard()))));
     return () => document.removeEventListener('crm:gcalchange', onGcal);
   }
 
@@ -178,7 +179,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'meals', 'foods'],
+    stores: ['tasks', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

@@ -281,6 +281,7 @@ window.CRM = window.CRM || {};
         try { CRM[name].init(); } catch (e) { console.error(e); }
       });
     if (!CRM.nutrition) missing.push('js/nutrition.js');
+    if (!CRM.programs) missing.push('js/programs.js');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));
       setTimeout(() => CRM.ui.toast('Сайт оновлено не повністю: не підключено ' + missing.join(', ') +

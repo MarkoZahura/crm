@@ -166,7 +166,7 @@ window.CRM = window.CRM || {};
     const s = CRM.store.summarize(obj);
     const rows = [
       ['Задачі', s.tasks], ['Рахунки', s.accounts], ['Транзакції', s.transactions], ['Категорії', s.categories],
-      ['Регулярні платежі', s.recurring], ['Фінансові цілі', s.goals], ['Тренування', s.workouts],
+      ['Регулярні платежі', s.recurring], ['Фінансові цілі', s.goals], ['Тренування', s.workouts], ['Програми тренувань', s.programs],
       ['Навчання', s.courses], ['Харчування', s.meals], ['Продукти', s.foods], ['Вкладення', s.attachments]
     ].filter((r) => r[1] > 0);
     return h('div', { class: 'stack', style: { gap: '12px' } },

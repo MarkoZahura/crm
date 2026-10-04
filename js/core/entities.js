@@ -109,6 +109,17 @@ window.CRM = window.CRM || {};
       text: (r) => [r.title, CRM.dict.label('workoutTypes', r.type), (r.exercises || []).map((e) => e.name).join(' '), r.note],
       route: (r) => ['training', { open: r.id }]
     },
+    programs: {
+      label: 'Програма тренувань', group: 'Програми тренувань', icon: 'dumbbell', iconClass: 'ico-danger', section: 'training',
+      title: (r) => r.title || 'Програма тренувань',
+      sub: (r) => [r.kind === 'running' ? 'Біг' : 'Сила', r.durationWeeks ? fmt().count(r.durationWeeks, ['тиждень', 'тижні', 'тижнів']) : null,
+        CRM.programs && !r.deletedAt ? CRM.programs.statusText(r) : null].filter(Boolean).join(' · '),
+      text: (r) => {
+        const plan = r.plan || {};
+        return [r.title, (plan.rules || []).join(' '), (plan.exercises || []).map((e) => e.name).join(' ')];
+      },
+      route: (r) => ['training/program/' + r.id, null]
+    },
     courses: {
       label: 'Навчання', group: 'Навчання', icon: 'graduation', iconClass: 'ico-learning', section: 'learning',
       title: (r) => r.title,
@@ -158,7 +169,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods'],
+    order: ['tasks', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);

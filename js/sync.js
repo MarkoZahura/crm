@@ -24,7 +24,7 @@ window.CRM = window.CRM || {};
 
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const CFG = CRM.SYNC_CONFIG;
-  const STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses', 'foods', 'meals'];
+  const STORES = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'];
   // Сховища, що синхронізувалися до появи «Харчування» (для пристроїв, які ввійшли ще тоді)
   const STORES_V1 = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
@@ -303,7 +303,7 @@ window.CRM = window.CRM || {};
   }
 
   /**
-   * Нова версія почала синхронізувати нові сховища (харчування) чи налаштування. Поки на пристрої
+   * Нова версія почала синхронізувати нові сховища (харчування, програми тренувань) чи налаштування. Поки на пристрої
    * була стара версія, вона пропускала такі записи з хмари, а позначка «отримано до…» (pull) пішла
    * далі — тож слухач їх уже не надішле. Один раз дочитуємо їх з хмари окремо.
    */
@@ -622,7 +622,7 @@ window.CRM = window.CRM || {};
       ui.mount(head,
         h('div', { class: 'setting-text' },
           h('div', { class: 'setting-title' }, CRM.icon('refresh', { size: 'sm' }), 'Синхронізація між пристроями', h('span', { class: 'badge ' + b[0], 'data-status': s }, b[1])),
-          h('div', { class: 'setting-desc' }, 'Задачі, бюджет, тренування, харчування, навчання й профіль — однакові на компʼютері й телефоні. Вхід через Google, дані в Firebase.')),
+          h('div', { class: 'setting-desc' }, 'Задачі, бюджет, тренування й програми, харчування, навчання й профіль — однакові на компʼютері й телефоні. Вхід через Google, дані в Firebase.')),
         h('div', { class: 'setting-actions' }, actions));
 
       const parts = [];

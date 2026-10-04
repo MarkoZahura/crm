@@ -9,6 +9,9 @@
      Виконане визначається за записами журналу (поле program { run, day }),
      тож видалення / відновлення з Кошика одразу змінює позначки.
    • Тренування дня потрапляє в розклад на Головній.
+   • З 04.10.2026 картка живе у вкладці «Тренування → Програми» (сторінка
+     #/training/program/upper30); програма також дає дані для тижневого списку
+     й «Сьогоднішнього тренування» (dayInfo, summary) — див. programs.js.
 
    Налаштування: trainingProgram = { id, run, startDate } (потрапляє в експорт).
    Особисті параметри (вік, зріст, вага, стартові результати) користувач вписує
@@ -29,6 +32,7 @@ window.CRM = window.CRM || {};
   const DAYS = 84;
   const SETTING = 'trainingProgram';
   const PROFILE = 'trainingProfile';
+  const COLOR = 'violet'; // колір програми в тижневому списку й на Головній
 
   // ---------- Бібліотека вправ ----------
   const EX = {
@@ -618,6 +622,49 @@ window.CRM = window.CRM || {};
     return h('div', { class: 'prog-cal' }, h('div', { class: 'prog-grid', role: 'group', 'aria-label': 'Календар програми, 12 тижнів' }, cells), legend);
   }
 
+  function statusText() {
+    const c = cfg();
+    if (!c) return '';
+    const idx = dayIndex(D.today());
+    if (idx < 1) return `старт ${fmt.dateShort(c.startDate)} — ${inDays(1 - idx)}`;
+    if (idx > DAYS) return `завершено ${fmt.dateShort(D.addDays(c.startDate, DAYS - 1))}`;
+    return `день ${idx} з ${DAYS} · тиждень ${Math.ceil(idx / 7)} · ${PHASE[phaseOfWeek(Math.ceil(idx / 7))].name.toLowerCase()}`;
+  }
+
+  // ---------- Дані для вкладки «Програми», тижня й Головної ----------
+  /** Підсумок для картки у списку програм (null — програму не додано). */
+  function summary() {
+    const c = cfg();
+    if (!c) return null;
+    const done = doneMap();
+    return {
+      name: PROGRAM_NAME, startDate: c.startDate, endDate: D.addDays(c.startDate, DAYS - 1), status: statusText(),
+      doneCount: Array.from(done.keys()).filter((d) => d >= 1 && d <= DAYS).length, total: trainingDays().length,
+      weeks: 12, week: Math.min(12, Math.max(1, Math.ceil(dayIndex(D.today()) / 7)))
+    };
+  }
+  /** План на дату: { d, week, rest, title, items: ['Підтягування прямим хватом 3×4', …], done } або null. */
+  function dayInfo(date) {
+    const c = cfg();
+    if (!c) return null;
+    const d = D.diffDays(c.startDate, date) + 1;
+    if (d < 1 || d > DAYS) return null;
+    const p = planFor(d, c.startDate);
+    const items = (p.items || []).map((x) => `${x.t || EX[Array.isArray(x.e) ? x.e[0] : x.e].n} ${x.s}`);
+    return { d, date, week: p.w, rest: p.type === 'R', title: p.type === 'R' ? 'Відпочинок' : TITLES[p.type], items, plan: p, done: doneMap().get(d) || null };
+  }
+  /** Відкрити сторінку програми на дні d. */
+  function openDay(d) {
+    selDay = d;
+    CRM.router.go('training/program/' + PROGRAM_ID);
+  }
+  /** «Виконано» / «Записати тренування» для дня d. */
+  function recordDay(d) {
+    const c = cfg();
+    if (!c || d < 1 || d > DAYS) return;
+    record(planFor(d, c.startDate));
+  }
+
   function card() {
     const c = cfg();
     if (!c) return offerCard();
@@ -629,10 +676,7 @@ window.CRM = window.CRM || {};
     if (selDay == null || selDay < 1 || selDay > DAYS) selDay = Math.min(DAYS, Math.max(1, idx));
     const plan = planFor(selDay, c.startDate);
 
-    let status;
-    if (idx < 1) status = `старт ${fmt.dateShort(c.startDate)} — ${inDays(1 - idx)}`;
-    else if (idx > DAYS) status = `завершено ${fmt.dateShort(D.addDays(c.startDate, DAYS - 1))}`;
-    else status = `день ${idx} з ${DAYS} · тиждень ${Math.ceil(idx / 7)} · ${PHASE[phaseOfWeek(Math.ceil(idx / 7))].name.toLowerCase()}`;
+    const status = statusText();
 
     const menuBtn = h('button', { type: 'button', class: 'btn btn-ghost btn-icon btn-sm', 'aria-label': 'Дії з програмою', title: 'Дії з програмою', 'aria-haspopup': 'menu' }, CRM.icon('more', { size: 'sm' }));
     menuBtn.addEventListener('click', () => openMenu(menuBtn));
@@ -663,9 +707,12 @@ window.CRM = window.CRM || {};
       title: p.type === 'T' ? 'Тест сили' : `Тренування ${TITLES[p.type]}`,
       sub: `Програма · тиждень ${p.w} · ${p.dur}`,
       badge: done ? { text: 'Виконано', cls: 'badge-success' } : null,
-      onClick: () => { selDay = d; CRM.router.go('training'); }
+      onClick: () => openDay(d)
     }];
   });
 
-  CRM.program = { card, planFor, presetFor, parseSets, cfg, doneMap, profile, proteinText, DAYS, PROGRAM_ID, EX };
+  CRM.program = {
+    card, offerCard, summary, dayInfo, openDay, recordDay, statusText, planFor, presetFor, parseSets, cfg, doneMap, profile, proteinText,
+    DAYS, PROGRAM_ID, NAME: PROGRAM_NAME, COLOR, EX
+  };
 })(window.CRM);
