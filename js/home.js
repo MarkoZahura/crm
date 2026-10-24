@@ -1,7 +1,7 @@
 /* ==========================================================================
    home.js — Головна: цитата дня, активні задачі, харчування сьогодні,
    розклад на сьогодні (задачі з дедлайном сьогодні, регулярні платежі,
-   дедлайни навчання, події Google Календаря), доходи й витрати за сьогодні в гривнях,
+   дедлайни навчання, власні події з «Календаря», події Google Календаря), доходи й витрати за сьогодні в гривнях,
    «Сьогоднішнє тренування» за програмами (programs.js).
    ========================================================================== */
 window.CRM = window.CRM || {};
@@ -139,7 +139,8 @@ window.CRM = window.CRM || {};
     const now = D.nowTime();
     let body;
     if (!items.length) {
-      body = ui.empty({ icon: 'calendar', small: true, title: 'На сьогодні нічого не заплановано', text: 'Тут зʼявляться задачі з дедлайном сьогодні, регулярні платежі й події календаря.' });
+      body = ui.empty({ icon: 'calendar', small: true, title: 'На сьогодні нічого не заплановано', text: 'Тут зʼявляться задачі з дедлайном сьогодні, регулярні платежі й події календаря.',
+        action: CRM.calendar ? { label: 'Додати подію', icon: 'plus', onClick: () => CRM.calendar.openNew() } : null });
     } else {
       body = h('div', { class: 'sched' },
         allDay.length ? h('div', { class: 'sched-group' }, 'Протягом дня') : null,
@@ -155,7 +156,9 @@ window.CRM = window.CRM || {};
     return h('section', { class: 'card' },
       h('div', { class: 'card-head' },
         h('h2', null, 'Розклад на сьогодні'),
-        h('span', { class: 'subtle' }, fmt.dateShort(D.today()))),
+        CRM.calendar
+          ? h('a', { href: CRM.router.href('calendar', { view: 'day', date: D.today() }), class: 'btn btn-ghost btn-sm', title: fmt.date(D.today()) }, 'Відкрити календар', CRM.icon('chevronRight', { size: 'sm' }))
+          : h('span', { class: 'subtle' }, fmt.dateShort(D.today()))),
       body,
       calNote ? h('div', { class: 'card-foot' }, CRM.icon('calendar', { size: 'sm' }), calNote) : null);
   }
@@ -179,7 +182,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'events', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

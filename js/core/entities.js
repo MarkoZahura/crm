@@ -52,6 +52,13 @@ window.CRM = window.CRM || {};
       text: (r) => [r.title, r.description, (r.checklist || []).map((c) => c.text).join(' ')],
       route: (r) => ['tasks', { tab: r.done ? 'archive' : null, open: r.id }]
     },
+    events: {
+      label: 'Подія', group: 'Події календаря', icon: 'calendar', iconClass: 'ico-event', section: 'calendar',
+      title: (r) => r.title || 'Без назви',
+      sub: (r) => [fmt().date(r.date), CRM.calendar ? CRM.calendar.whenText(r) : null, CRM.calendar ? CRM.calendar.categoryName(r.cat) : null].filter(Boolean).join(' · '),
+      text: (r) => [r.title, r.note],
+      route: (r) => ['calendar', { view: 'day', date: r.date, open: r.id }]
+    },
     transactions: {
       label: 'Транзакція', group: 'Транзакції', icon: 'receipt', iconClass: 'ico-payment', section: 'budget',
       title: (r) => {
@@ -169,7 +176,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods'],
+    order: ['tasks', 'events', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);

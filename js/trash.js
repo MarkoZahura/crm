@@ -13,6 +13,7 @@ window.CRM = window.CRM || {};
   const FILTERS = [
     { id: 'all', label: 'Усі', match: () => true },
     { id: 'tasks', label: 'Задачі', match: (s) => s === 'tasks' },
+    { id: 'calendar', label: 'Календар', match: (s) => s === 'events' },
     { id: 'budget', label: 'Бюджет', match: (s) => ['accounts', 'transactions', 'categories', 'recurring', 'goals'].includes(s) },
     { id: 'training', label: 'Тренування', match: (s) => s === 'workouts' || s === 'programs' },
     { id: 'nutrition', label: 'Харчування', match: (s) => s === 'foods' || s === 'meals' },
@@ -121,7 +122,7 @@ window.CRM = window.CRM || {};
     if (!all.length) {
       content = h('div', { class: 'card' }, ui.empty({
         icon: 'trash', title: 'Кошик порожній',
-        text: 'Видалені задачі, транзакції, рахунки та інші записи зберігаються тут 30 днів — їх можна відновити.'
+        text: 'Видалені задачі, події, транзакції, рахунки та інші записи зберігаються тут 30 днів — їх можна відновити.'
       }));
     } else if (!items.length) {
       content = h('div', { class: 'card' }, ui.empty({ icon: 'inbox', title: 'У цьому розділі кошик порожній', small: true }));
@@ -140,7 +141,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('trash', {
     title: 'Кошик',
-    stores: ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'],
+    stores: ['tasks', 'events', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'],
     render
   });
 

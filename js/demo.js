@@ -312,7 +312,22 @@ window.CRM = window.CRM || {};
       }
     }
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, notifications };
+    // ---------- Календар (кілька подій навколо сьогодні; без нагадувань) ----------
+    const events = [];
+    const evt = (offset, title, cat, start, dur, note) => events.push(base({
+      id: uid(), title, date: D.addDays(T, offset), allDay: !start, start: start || null, dur: start ? dur : null,
+      cat, remind: null, note: note || ''
+    }, D.addDays(T, -3)));
+    evt(-1, 'Стоматолог', 'health', '12:00', 60);
+    evt(0, 'Заняття з англійської', 'work', '10:00', 90, 'Unit 5: Past Perfect, перевірити домашнє завдання');
+    evt(0, 'Кава з колегою', 'meeting', '10:30', 30);
+    evt(0, 'Робота над курсовою', 'study', '15:00', 120, 'Розділ 2: огляд літератури');
+    evt(1, 'Дзвінок з науковим керівником', 'meeting', '09:30', 30);
+    evt(1, 'Зустріч з друзями', 'personal', '18:30', 90);
+    evt(2, 'День народження Андрія', 'personal', null, null);
+    evt(3, 'Заняття з англійської', 'work', '11:00', 60);
+
+    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, notifications };
   }
 
   CRM.demo = { generate };

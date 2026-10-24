@@ -14,6 +14,7 @@
      task:overdue:<id>:<дата дедлайну>   task:done:<id>:<мітка часу>
      payment:today:<id>:<дата>       payment:tomorrow:<id>:<дата>
      goal:achieved:<id>              event:<id події>:<початок>
+     calevent:<id події>:<дата>T<ГГ:ХХ>   (власні події «Календаря»)
      learning:due-today|due-tomorrow|overdue:<курс>:<тема|course>:<дата>
    ========================================================================== */
 window.CRM = window.CRM || {};

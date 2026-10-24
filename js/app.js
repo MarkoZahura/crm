@@ -96,6 +96,7 @@ window.CRM = window.CRM || {};
   // ---------- Каркас ----------
   const NAV = [
     { id: 'home', label: 'Головна', icon: 'home' },
+    { id: 'calendar', label: 'Календар', icon: 'calendar' },
     { id: 'tasks', label: 'Задачі', icon: 'tasks' },
     { id: 'budget', label: 'Бюджет', icon: 'wallet' },
     { id: 'training', label: 'Тренування', icon: 'dumbbell' },
@@ -282,6 +283,7 @@ window.CRM = window.CRM || {};
       });
     if (!CRM.nutrition) missing.push('js/nutrition.js');
     if (!CRM.programs) missing.push('js/programs.js');
+    if (!CRM.calendar) missing.push('js/calendar.js');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));
       setTimeout(() => CRM.ui.toast('Сайт оновлено не повністю: не підключено ' + missing.join(', ') +

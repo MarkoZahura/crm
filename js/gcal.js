@@ -18,7 +18,10 @@
    Налаштування (IndexedDB → settings):
      gcal       { clientId, wanted, calendars: [id…] | null }  — потрапляє в експорт
      gcalToken  { accessToken, expiresAt, list }               — НЕ експортується
-     gcalCache  { at, from, to, calendars, events }            — НЕ експортується
+     gcalCache  { at, base, from, to, calendars, events }      — НЕ експортується
+   • Події завантажуються наперед: від тижня тому до ~2 місяців уперед (base — день,
+     від якого рахували). Розділ «Календар» може попросити інші дні (ensureRange) —
+     тоді до цього вікна додається потрібний проміжок (до ~13 місяців в обидва боки).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -39,6 +42,9 @@ window.CRM = window.CRM || {};
   const scopes = () => SCOPES + (driveWanted() ? ' ' + SCOPE_DRIVE : '');
   const REFRESH_MS = 10 * 60 * 1000;   // події оновлюються раз на 10 хв
   const REMIND_MIN = 15;               // нагадування за 15 хв до початку
+  const WINDOW_BACK = 7;               // днів назад від сьогодні
+  const WINDOW_AHEAD = 62;             // днів уперед (≈2 місяці)
+  const EXTRA_LIMIT = 400;             // найдальші дні, які може попросити «Календар»
   const CLIENT_RE = /^\d+-[a-z0-9_]+\.apps\.googleusercontent\.com$/i;
 
   let gisPromise = null;
@@ -48,6 +54,8 @@ window.CRM = window.CRM || {};
   let refreshing = null;    // поточне завантаження подій
   let lastError = null;     // { text, code }
   let lastStatus = null;
+  let extra = null;         // { from, to } — проміжок, який попросив «Календар» у цій сесії
+  let lastEnsure = { key: '', at: 0 };
 
   const pad = (n) => String(n).padStart(2, '0');
   const isFile = () => location.protocol === 'file:';
@@ -204,8 +212,8 @@ window.CRM = window.CRM || {};
     const ok = await ui.confirm({
       title: 'Відключити Google Календар?',
       message: (t
-        ? 'Події зникнуть із Головної, нагадувань про них не буде. Доступ, наданий цьому сайту в Google, буде відкликано.'
-        : 'Події зникнуть із Головної, нагадувань про них не буде. Термін доступу вже сплив, тож CRM більше не звертається до календаря.') +
+        ? 'Події зникнуть із Головної й Календаря, нагадувань про них не буде. Доступ, наданий цьому сайту в Google, буде відкликано.'
+        : 'Події зникнуть із Головної й Календаря, нагадувань про них не буде. Термін доступу вже сплив, тож CRM більше не звертається до календаря.') +
         (driveWanted() ? ' Щоденні копії на Google Диск використовують це саме підключення — вони чекатимуть, доки ти знову не підключиш Google.' : ''),
       confirmText: 'Відключити'
     });
@@ -217,6 +225,7 @@ window.CRM = window.CRM || {};
     await CRM.store.setSetting('gcalToken', null);
     await CRM.store.setSetting('gcalCache', null);
     await setCfg({ wanted: false });
+    extra = null;
     lastError = null;
     changed();
     ui.toast('Google Календар відключено');
@@ -315,7 +324,19 @@ window.CRM = window.CRM || {};
     return out;
   }
 
-  /** Завантажити події на сьогодні й завтра (завтра — для нагадувань після півночі). */
+  /** Проміжок завантаження: від тижня тому до ~2 місяців уперед + те, що попросив «Календар». */
+  function windowRange() {
+    const base = D.today();
+    let from = D.addDays(base, -WINDOW_BACK);
+    let to = D.addDays(base, WINDOW_AHEAD);
+    if (extra) {
+      if (extra.from < from) from = extra.from;
+      if (extra.to > to) to = extra.to;
+    }
+    return { base, from, to };
+  }
+
+  /** Завантажити події на весь проміжок (сьогодні й завтра — для Головної й нагадувань). */
   function refresh(opts) {
     const o = opts || {};
     if (refreshing) return refreshing;
@@ -332,15 +353,14 @@ window.CRM = window.CRM || {};
           if (!selected.length && calendars[0]) selected = [calendars[0].id];
           await setCfg({ calendars: selected });
         }
-        const from = D.today();
-        const to = D.addDays(from, 1);
+        const { base, from, to } = windowRange();
         const events = [];
         for (const c of calendars) {
           if (selected.indexOf(c.id) === -1) continue;
           (await fetchEvents(c.id, from, to)).forEach((e) => events.push(e));
         }
         events.sort((a, b) => eventStartMs(a) - eventStartMs(b));
-        await CRM.store.setSetting('gcalCache', { at: new Date().toISOString(), from, to, calendars, events });
+        await CRM.store.setSetting('gcalCache', { at: new Date().toISOString(), base, from, to, calendars, events });
         lastError = null;
         return true;
       } catch (e) {
@@ -380,6 +400,51 @@ window.CRM = window.CRM || {};
     const c = cache();
     if (!c || date < c.from || date > c.to) return [];
     return c.events.filter((e) => occursOn(e, date));
+  }
+
+  /** Події, що зачіпають проміжок [from, to] (для розділу «Календар»). */
+  function eventsBetween(from, to) {
+    if (isFile() || !cfg().wanted) return [];
+    const c = cache();
+    if (!c || to < c.from || from > c.to) return [];
+    return c.events.filter((e) => {
+      if (e.allDay) return e.start <= to && e.end > from;
+      const s = D.toKyivDate(e.start);
+      const en = D.toKyivDate(new Date(Math.max(Date.parse(e.end) - 1, Date.parse(e.start))));
+      return s <= to && en >= from;
+    });
+  }
+
+  /** Який проміжок дат зараз завантажено (або null). */
+  function loadedRange() {
+    if (isFile() || !cfg().wanted) return null;
+    const c = cache();
+    return c ? { from: c.from, to: c.to, at: c.at } : null;
+  }
+
+  /**
+   * «Календар» показує дні [from, to]. Якщо їх ще не завантажено, а доступ дійсний —
+   * завантажити (результат прийде подією crm:gcalchange). Повертає true, якщо завантаження почалося або вже йде.
+   */
+  function ensureRange(from, to) {
+    if (status() !== 'connected' || !D.isDate(from) || !D.isDate(to)) return false;
+    const c = cache();
+    if (c && c.base === D.today() && from >= c.from && to <= c.to) return false;
+    const T = D.today();
+    const lo = D.addDays(T, -EXTRA_LIMIT);
+    const hi = D.addDays(T, EXTRA_LIMIT);
+    const f = from < lo ? lo : from;
+    const t = to > hi ? hi : to;
+    if (f > t) return false;
+    if (c && c.base === T && f >= c.from && t <= c.to) return false;
+    if (refreshing) return true;
+    const key = f + '|' + t;
+    // Після помилки не смикаємо Google щоразу, коли сторінка перемальовується
+    if (lastError && key === lastEnsure.key && Date.now() - lastEnsure.at < REFRESH_MS) return false;
+    lastEnsure = { key, at: Date.now() };
+    extra = { from: f, to: t };
+    refresh();
+    return true;
   }
 
   /** Назва календаря для підпису (основний не підписуємо — там зазвичай адреса пошти). */
@@ -533,7 +598,7 @@ window.CRM = window.CRM || {};
       ui.mount(head,
         h('div', { class: 'setting-text' },
           h('div', { class: 'setting-title' }, CRM.icon('calendar', { size: 'sm' }), 'Google Календар', badge(s, fresh)),
-          h('div', { class: 'setting-desc' }, `Лише читання. Події на сьогодні зʼявляються в розкладі на Головній, за ${REMIND_MIN} хв до початку — нагадування.`)),
+          h('div', { class: 'setting-desc' }, `Лише читання. Події видно в розділі «Календар» і в розкладі на Головній, за ${REMIND_MIN} хв до початку — нагадування.`)),
         h('div', { class: 'setting-actions' }, actions));
 
       clientIn.disabled = s === 'connected' || s === 'expired';
@@ -556,7 +621,7 @@ window.CRM = window.CRM || {};
       if ((s === 'connected' || s === 'expired') && ch && ch.calendars && ch.calendars.length) {
         const sel = c.calendars || [];
         parts.push(h('div', { class: 'gcal-cals' },
-          h('div', { class: 'setting-title' }, 'Календарі на Головній'),
+          h('div', { class: 'setting-title' }, 'Які календарі показувати'),
           ch.calendars.map((cal) => {
             const on = sel.indexOf(cal.id) !== -1;
             return h('button', {
@@ -571,7 +636,7 @@ window.CRM = window.CRM || {};
       const info = [];
       if (s === 'connected') {
         info.push(`Доступ діє до ${hhmm(new Date(t.expiresAt + 60000).toISOString())}.`);
-        if (ch) info.push(`Події оновлено о ${hhmm(ch.at)} (далі — кожні 10 хв, поки сайт відкритий).`);
+        if (ch) info.push(`Події оновлено о ${hhmm(ch.at)} (далі — кожні 10 хв, поки сайт відкритий), завантажено з ${CRM.fmt.dateShort(ch.from)} по ${CRM.fmt.dateShort(ch.to)}.`);
       }
       if (s === 'expired' && ch) info.push(`Показано події станом на ${hhmm(ch.at)}.`);
       if (fresh) info.push('Client ID уже є. Натисни «Підключити», щоб увійти в Google на цьому пристрої.');
@@ -610,7 +675,7 @@ window.CRM = window.CRM || {};
     if (s !== lastStatus) changed();
     if (s !== 'connected') return;
     const c = cache();
-    const stale = !c || c.from !== D.today() || Date.now() - Date.parse(c.at) >= REFRESH_MS;
+    const stale = !c || c.base !== D.today() || Date.now() - Date.parse(c.at) >= REFRESH_MS;
     if (stale && !lastErrorBlocks()) refresh();
   }
   // Після помилки налаштувань (API вимкнено, бракує дозволу) не смикаємо Google щохвилини
@@ -657,6 +722,7 @@ window.CRM = window.CRM || {};
 
   CRM.gcal = {
     SCOPES, SCOPE_DRIVE, init, status, connect, disconnect, refresh, statusNote, settingsBlock, accessToken, dropToken,
-    eventsOn, kyivStartISO, isValidClientId: (v) => CLIENT_RE.test(String(v || '').trim())
+    eventsOn, eventsBetween, loadedRange, ensureRange, occursOn, openEvent, calendarName, hhmm,
+    kyivStartISO, isValidClientId: (v) => CLIENT_RE.test(String(v || '').trim())
   };
 })(window.CRM);

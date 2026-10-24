@@ -9,7 +9,7 @@ window.CRM = window.CRM || {};
   'use strict';
 
   const DB_NAME = 'personal-crm';
-  const DB_VERSION = 3; // 2 — харчування (foods, meals); 3 — програми тренувань (programs)
+  const DB_VERSION = 4; // 2 — харчування (foods, meals); 3 — програми тренувань (programs); 4 — календар (events)
 
   /** Схема сховищ. Змінюючи схему, збільш DB_VERSION і додай міграцію в onupgradeneeded. */
   const SCHEMA = {
@@ -23,6 +23,7 @@ window.CRM = window.CRM || {};
     goals: { keyPath: 'id' },
     workouts: { keyPath: 'id', indexes: [['date', 'date']] },
     programs: { keyPath: 'id' },
+    events: { keyPath: 'id', indexes: [['date', 'date']] },
     courses: { keyPath: 'id' },
     foods: { keyPath: 'id' },
     meals: { keyPath: 'id', indexes: [['date', 'date']] },
