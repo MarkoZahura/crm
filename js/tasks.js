@@ -6,6 +6,10 @@
      вкладення. Зміни існуючої задачі зберігаються автоматично.
    • Виконання — з підтвердженням; можна «Скасувати». Видалене — в Кошик.
    • Правила нагадувань: дедлайн сьогодні / завтра / прострочено.
+   • План (з 24.10.2026, «Календар», етап 2): planDate — день, на який задачу
+     заплановано (окремо від дедлайну), planStart 'ГГ:ХХ' | null — час у годинній
+     сітці, planDur — тривалість у хв (за замовчуванням 30), planOrder — порядок
+     у «Плані дня» серед задач без часу.
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -64,6 +68,21 @@ window.CRM = window.CRM || {};
     return { label: fmt.dateShort(t.deadline) + time, cls: '' };
   }
 
+  /** Найбільший порядок серед задач без часу, запланованих на дату (для нових — у кінець списку). */
+  function nextPlanOrder(date, exceptId) {
+    let max = -1;
+    CRM.store.list('tasks').forEach((x) => {
+      if (x.id !== exceptId && x.planDate === date && !x.planStart && typeof x.planOrder === 'number' && x.planOrder > max) max = x.planOrder;
+    });
+    return max + 1;
+  }
+
+  /** Підпис плану: «сьогодні, 10:00» або null. */
+  function planLabel(t) {
+    if (!t.planDate) return null;
+    return fmt.relDay(t.planDate).toLowerCase() + (t.planStart ? ', ' + t.planStart : '');
+  }
+
   // ---------- Дрібні елементи ----------
   function priorityTag(p) {
     const item = CRM.dict.get('priorities', p) || CRM.dict.get('priorities', 'medium');
@@ -120,6 +139,7 @@ window.CRM = window.CRM || {};
     const meta = [];
     if (checklist.length) meta.push(h('span', { class: 'task-meta-item', title: 'Чекліст' }, CRM.icon('listChecks', { size: 'sm' }), `${doneCount}/${checklist.length}`));
     if (files) meta.push(h('span', { class: 'task-meta-item', title: 'Вкладення' }, CRM.icon('paperclip', { size: 'sm' }), String(files)));
+    if (t.planDate && !t.done) meta.push(h('span', { class: 'task-meta-item task-plan' + (t.planDate < D.today() ? ' overdue' : ''), title: 'Заплановано в календарі' }, CRM.icon('target', { size: 'sm' }), 'План: ' + planLabel(t)));
     if (o.archive && t.completedAt) meta.push(h('span', { class: 'task-meta-item' }, 'Виконано ' + fmt.dateShort(D.toKyivDate(t.completedAt))));
 
     const row = h('div', {
@@ -144,10 +164,11 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Дії ----------
-  async function complete(id) {
+  /** opts.confirm === false — без вікна підтвердження (галочка в «Календарі»; є «Скасувати»). */
+  async function complete(id, opts) {
     const t = CRM.store.get('tasks', id);
     if (!t || t.done) return false;
-    const ok = await ui.confirm({
+    const ok = opts && opts.confirm === false ? true : await ui.confirm({
       title: `Позначити задачу „${t.title}“ виконаною?`,
       message: 'Вона перейде в Архів. Повернути її можна кнопкою «Відновити».',
       confirmText: 'Так, виконано'
@@ -170,6 +191,16 @@ window.CRM = window.CRM || {};
       }
     });
     return true;
+  }
+
+  /** Створити задачу одразу (без панелі) — напр., з «Плану дня» в «Календарі». */
+  async function create(fields) {
+    const rec = await CRM.store.save('tasks', Object.assign({
+      title: '', description: '', status: 'todo', priority: 'medium',
+      deadline: null, deadlineTime: null, checklist: [], done: false, completedAt: null
+    }, fields || {}));
+    CRM.notify.runRules();
+    return rec;
   }
 
   async function reopen(id) {
@@ -325,6 +356,35 @@ window.CRM = window.CRM || {};
       commit({ deadline: date || null, deadlineTime: date && time ? time : null });
       renderQuick();
     }
+    // --- План (день у «Календарі») ---
+    const planDateIn = ui.dateInput({
+      value: task.planDate, placeholder: 'Не заплановано', ariaLabel: 'Заплановано на',
+      onChange: (d) => setPlan(d, planTimeIn.value)
+    });
+    const planTimeIn = ui.timeInput({ value: task.planStart || '', ariaLabel: 'Час у плані (необовʼязково)', onChange: (t) => setPlan(planDateIn.dateValue, t) });
+    planTimeIn.disabled = !task.planDate;
+    planTimeIn.title = 'Час — необовʼязково: без нього задача стоїть у «Плані дня» по порядку';
+    const planClear = h('button', { type: 'button', class: 'btn btn-ghost btn-sm', hidden: !task.planDate, onClick: () => setPlan(null, null) }, 'Очистити');
+    function setPlan(date, time) {
+      planDateIn.dateValue = date || null;
+      planTimeIn.value = date ? (time || '') : '';
+      planTimeIn.disabled = !date;
+      planClear.hidden = !date;
+      const changes = { planDate: date || null, planStart: date && time ? time : null };
+      if (date && !time && (date !== task.planDate || task.planStart)) changes.planOrder = nextPlanOrder(date, task.id);
+      commit(changes);
+      renderPlanQuick();
+    }
+    const planQuick = h('div', { class: 'chips' });
+    function renderPlanQuick() {
+      const T = D.today();
+      ui.mount(planQuick, [['Сьогодні', T], ['Завтра', D.addDays(T, 1)]].map(([label, date]) => h('button', {
+        type: 'button', class: 'chip' + (planDateIn.dateValue === date ? ' active' : ''),
+        onClick: () => setPlan(date, planTimeIn.value)
+      }, label)));
+    }
+    renderPlanQuick();
+
     const quick = h('div', { class: 'chips' });
     function renderQuick() {
       const T = D.today();
@@ -510,6 +570,11 @@ window.CRM = window.CRM || {};
         h('div', { class: 'editor-value' },
           h('div', { class: 'deadline-inputs' }, dateIn, timeIn, clearBtn),
           quick),
+        h('div', { class: 'editor-label' }, CRM.icon('target', { size: 'sm' }), 'Заплановано'),
+        h('div', { class: 'editor-value' },
+          h('div', { class: 'deadline-inputs' }, planDateIn, planTimeIn, planClear),
+          planQuick,
+          h('div', { class: 'field-hint' }, 'День, коли збираєшся робити задачу, — вона зʼявиться в «Календарі». Дедлайн — до коли треба встигнути.')),
         h('div', { class: 'editor-label' }, CRM.icon('flag', { size: 'sm' }), 'Пріоритет'),
         h('div', { class: 'editor-value' }, prioSeg),
         h('div', { class: 'editor-label' }, CRM.icon('clock', { size: 'sm' }), 'Статус'),
@@ -525,7 +590,7 @@ window.CRM = window.CRM || {};
       initialFocus: isNew ? titleIn : 'container',
       onBeforeClose: (reason) => {
         if (isNew) {
-          const hasInput = titleIn.value.trim() || descIn.value.trim() || task.checklist.length || pendingFiles.length || task.deadline;
+          const hasInput = titleIn.value.trim() || descIn.value.trim() || task.checklist.length || pendingFiles.length || task.deadline || task.planDate;
           if (!hasInput) return true;
           ui.confirm({
             title: 'Не створювати задачу?', message: 'Введені дані не збережуться.',
@@ -659,7 +724,7 @@ window.CRM = window.CRM || {};
   });
 
   CRM.tasks = {
-    openNew, openTask, complete, reopen, remove, sortTasks, deadlineInfo, priorityTag, checkbox, taskRow,
-    activeTasks, archivedTasks
+    openNew, openTask, create, complete, reopen, remove, sortTasks, deadlineInfo, priorityTag, checkbox, taskRow,
+    activeTasks, archivedTasks, nextPlanOrder, planLabel
   };
 })(window.CRM);

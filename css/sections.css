@@ -38,6 +38,7 @@
 .task-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-3); }
 .task-meta-item { display: inline-flex; align-items: center; gap: 4px; }
 .task-meta-item .icon { width: 14px; height: 14px; }
+.task-plan.overdue { color: var(--danger); }
 .task-cols { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 .task-due { min-width: 132px; text-align: right; font-size: 13px; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .task-row.compact .task-due { min-width: 0; }
@@ -197,6 +198,7 @@
 }
 .sched-row:hover { background: var(--surface-2); }
 .sched-row.past { opacity: .6; }
+.sched-row.done .sched-title { text-decoration: line-through; color: var(--text-2); }
 .sched-time { width: 42px; flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--text); }
 .sched-time.allday { font-weight: 500; color: var(--text-3); font-size: 12px; }
 .sched-row .list-row-icon { width: 28px; height: 28px; }
@@ -1235,6 +1237,101 @@
 .kal-arow-sub { font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kal-arow.done .kal-arow-title { text-decoration: line-through; color: var(--text-2); }
 
+/* Задачі в календарі (етап 2) */
+.kal-tcheck { width: 16px; height: 16px; }
+.kal-tcheck .icon { width: 11px; height: 11px; }
+.kal-chip.k-task { cursor: pointer; }
+.kal-chip .kal-tcheck { width: 14px; height: 14px; }
+.kal-chip .kal-tcheck .icon { width: 10px; height: 10px; color: inherit; }
+.kal-chip.k-task:focus-visible { box-shadow: inset 3px 0 0 var(--c), var(--focus-ring); }
+.kal-ev.k-task { padding-left: 25px; }
+.kal-ev.k-task .kal-tcheck { position: absolute; left: 6px; top: 4px; }
+.kal-ev.k-task.short .kal-tcheck { top: 50%; transform: translateY(-50%); }
+.kal-ev.done { opacity: .62; }
+.kal-ev.done .kal-ev-title { text-decoration: line-through; }
+.kal-ev.kal-dragging { pointer-events: none; }
+.kal-ev.kal-out { opacity: .3; }
+.kal-ghost-task .kal-ghost-time { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* «День»: сітка + «План дня» праворуч (на вузькому екрані — над сіткою) */
+.kal-dayview { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-areas: "grid panel"; gap: 12px; align-items: start; }
+.kal-dayview > .kal-card { grid-area: grid; }
+.kal-day-panel {
+  grid-area: panel; display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  height: max(420px, calc(100vh - 250px)); height: max(420px, calc(100dvh - 250px));
+}
+.kal-dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 14px 16px 6px; }
+.kal-dhead h2 { font-size: 16px; }
+.kal-dbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 8px; }
+.kal-dlist { display: flex; flex-direction: column; gap: 2px; min-height: 48px; padding: 4px; border-radius: var(--radius); transition: background .12s; }
+.kal-dlist.kal-drop { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.kal-drow {
+  position: relative; display: flex; align-items: flex-start; gap: 8px; padding: 8px 8px 8px 2px;
+  border-radius: var(--radius-sm); background: var(--surface); cursor: grab;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.kal-drow:hover { background: var(--surface-2); }
+.kal-drow:focus-visible { box-shadow: var(--focus-ring); }
+.kal-drow.kal-floating { background: var(--surface); }
+.kal-grip { display: flex; flex-shrink: 0; margin-top: 1px; color: var(--text-3); opacity: .7; }
+.kal-drow:hover .kal-grip { opacity: 1; }
+.kal-drow .kal-tcheck { margin-top: 1px; }
+.kal-drow-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.kal-drow-title { font-size: 14px; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; }
+.kal-drow.done .kal-drow-title { text-decoration: line-through; color: var(--text-2); }
+.kal-drow-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--text-3); }
+.kal-dmeta { display: inline-flex; align-items: center; gap: 4px; }
+.kal-dmeta .icon { width: 13px; height: 13px; }
+.kal-dmeta-dl { color: var(--danger); }
+.kal-ins-before::before, .kal-ins-after::after {
+  content: ''; position: absolute; left: 4px; right: 4px; height: 3px; border-radius: 2px; background: var(--accent); pointer-events: none;
+}
+.kal-ins-before::before { top: -3px; }
+.kal-ins-after::after { bottom: -3px; }
+.kal-dempty { padding: 10px 8px; font-size: 13px; line-height: 1.45; color: var(--text-3); }
+.kal-dtimed { margin-top: 10px; padding: 0 4px; }
+.kal-dsub { padding: 4px 4px 2px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.kal-dtimed-row {
+  display: flex; gap: 10px; width: 100%; padding: 6px 4px; border: 0; border-radius: var(--radius-sm);
+  background: none; font-size: 13px; text-align: left; color: var(--text);
+}
+.kal-dtimed-row:hover { background: var(--surface-2); }
+.kal-dtimed-row .num { flex-shrink: 0; width: 40px; color: var(--text-2); }
+.kal-dtimed-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kal-dtimed-row.done .kal-dtimed-title { text-decoration: line-through; color: var(--text-2); }
+.kal-dadd { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+.kal-dadd-row { display: flex; gap: 6px; }
+.kal-dadd-row .input { flex: 1; min-width: 0; }
+.kal-pick-btn { align-self: flex-start; }
+
+/* Невиконане з минулих днів */
+.kal-roll { align-items: center; flex-wrap: wrap; }
+.kal-roll-text { flex: 1 1 auto; color: var(--text); }
+.kal-roll-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Вибір задачі / список невиконаних */
+.kal-pick-pop { width: 340px; max-width: calc(100vw - 16px); }
+.kal-pick { display: flex; flex-direction: column; padding: 6px; }
+.kal-pick-head { padding: 6px 8px 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.kal-pick-list { display: flex; flex-direction: column; max-height: min(360px, 60vh); overflow-y: auto; }
+.kal-pick-row {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; min-width: 0; padding: 7px 8px;
+  border: 0; border-radius: var(--radius-sm); background: none; text-align: left; color: var(--text);
+}
+.kal-pick-row:hover, .kal-pick-row:focus-visible { background: var(--surface-2); }
+.kal-pick-title { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kal-pick-meta { font-size: 12px; color: var(--text-3); }
+.kal-pick-empty { padding: 8px; font-size: 13px; color: var(--text-3); }
+.kal-roll-row { display: flex; align-items: center; gap: 6px; }
+.kal-roll-row .kal-pick-row { flex: 1; }
+.kal-kind { align-self: flex-start; }
+
+@media (max-width: 900px) {
+  .kal-dayview { grid-template-columns: minmax(0, 1fr); grid-template-areas: "panel" "grid"; }
+  .kal-day-panel { height: auto; max-height: none; }
+  .kal-dbody { overflow: visible; }
+}
+
 @media (max-width: 700px) {
   .kal-range { font-size: 15px; }
   .kal-layers-btn .btn-label { display: none; }
@@ -1246,6 +1343,10 @@
   .kal-ev { padding: 2px 4px; font-size: 11px; }
   .kal-chip { padding: 1px 4px; font-size: 11px; }
   .kal-scroll:not(.single) .kal-chip .icon { display: none; }
+  .kal-scroll:not(.single) .kal-chip .kal-tcheck { display: none; }
+  .kal-ev.k-task { padding-left: 21px; }
+  .kal-ev.k-task .kal-tcheck { left: 3px; width: 15px; height: 15px; }
+  .kal-drow { padding-top: 10px; padding-bottom: 10px; }
   .kal-month { padding: 6px; }
   .kal-mgrid { gap: 2px; }
   .kal-mcell { align-items: center; min-height: 54px; padding: 3px; }

@@ -91,7 +91,8 @@ window.CRM = window.CRM || {};
   function scheduleItems() {
     const T = D.today();
     const items = [];
-    CRM.tasks.activeTasks().filter((t) => t.deadline === T).forEach((t) => {
+    // Задачі, заплановані на сьогодні, показує «Календар» (зі своїм рядком) — тут без дубля
+    CRM.tasks.activeTasks().filter((t) => t.deadline === T && !(CRM.calendar && t.planDate === T)).forEach((t) => {
       items.push({
         time: t.deadlineTime || null, kind: 'task', icon: 'tasks', cls: 'ico-task',
         title: t.title,
@@ -114,16 +115,18 @@ window.CRM = window.CRM || {};
     scheduleSources.forEach((fn) => {
       try { (fn(T) || []).forEach((it) => items.push(it)); } catch (e) { console.error(e); }
     });
-    // Спершу «протягом дня», потім — за часом
+    // Спершу «протягом дня» (задачі з «Плану дня» — першими, у своєму порядку), потім — за часом
+    const ord = (x) => (x.order == null ? 1 : 0);
     return items.sort((a, b) => {
       if (!a.time && b.time) return -1;
       if (a.time && !b.time) return 1;
+      if (!a.time && (ord(a) - ord(b) || (a.order || 0) - (b.order || 0))) return ord(a) - ord(b) || (a.order || 0) - (b.order || 0);
       return (a.time || '').localeCompare(b.time || '') || a.title.localeCompare(b.title, 'uk');
     });
   }
 
   function scheduleRow(it) {
-    return h('button', { type: 'button', class: 'sched-row', onClick: it.onClick },
+    return h('button', { type: 'button', class: 'sched-row' + (it.done ? ' done' : ''), onClick: it.onClick },
       h('span', { class: 'sched-time num' + (it.time ? '' : ' allday') }, it.time || 'день'),
       h('span', { class: 'list-row-icon ' + it.cls }, CRM.icon(it.icon, { size: 'sm' })),
       h('span', { class: 'sched-main' },
@@ -139,7 +142,7 @@ window.CRM = window.CRM || {};
     const now = D.nowTime();
     let body;
     if (!items.length) {
-      body = ui.empty({ icon: 'calendar', small: true, title: 'На сьогодні нічого не заплановано', text: 'Тут зʼявляться задачі з дедлайном сьогодні, регулярні платежі й події календаря.',
+      body = ui.empty({ icon: 'calendar', small: true, title: 'На сьогодні нічого не заплановано', text: 'Тут зʼявляться задачі на сьогодні (з дедлайном або в плані дня), регулярні платежі й події календаря.',
         action: CRM.calendar ? { label: 'Додати подію', icon: 'plus', onClick: () => CRM.calendar.openNew() } : null });
     } else {
       body = h('div', { class: 'sched' },

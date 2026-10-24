@@ -7,6 +7,10 @@
    • Показує також події Google Календаря (лише читання, gcal.js), тренування з
      програм, регулярні платежі й дедлайни задач — кожне вмикається в «Показати».
    • Нагадування про власні події — поки сайт відкритий (як і решта нагадувань).
+   • Задачі в плані (етап 2): ті самі задачі з «Задач» із полем planDate. Без часу —
+     у «Плані дня» (порядок перетягуванням), з часом (planStart, planDur) — у годинній
+     сітці. Галочка — виконати без підтвердження (є «Скасувати»). Невиконані з минулих
+     днів — плашка «Перенести на сьогодні» (лише за командою, без автоматики).
 
    Подія: { id, title, date: 'РРРР-ММ-ДД', allDay, start: 'ГГ:ХХ' | null, dur: хвилини | null,
             cat: id категорії, remind: хвилини до початку | null, note }
@@ -29,6 +33,8 @@ window.CRM = window.CRM || {};
   const MIN_VIS = 20;       // найменша «видима» тривалість для розкладки, хв
   const LONG_PRESS = 380;   // мс — довге натискання на телефоні
   const MAX_CHIPS = 3;      // скільки пунктів «на весь день» показувати в клітинці
+  const TASK_DUR = 30;      // тривалість задачі в сітці, якщо не змінювали, хв
+  const TASK_COLOR = 'var(--accent)';
 
   const VIEWS = [
     { id: 'day', label: 'День', days: 1 },
@@ -59,12 +65,13 @@ window.CRM = window.CRM || {};
 
   const LAYERS = [
     { id: 'own', label: 'Мої події' },
+    { id: 'tasks', label: 'Задачі в плані' },
     { id: 'gcal', label: 'Google Календар' },
     { id: 'training', label: 'Тренування з програм' },
     { id: 'payments', label: 'Регулярні платежі' },
     { id: 'deadlines', label: 'Дедлайни задач' }
   ];
-  const KIND_ORDER = { own: 0, gcal: 1, training: 2, payment: 3, deadline: 4 };
+  const KIND_ORDER = { own: 0, task: 1, gcal: 2, training: 3, payment: 4, deadline: 5 };
 
   // ---------- Налаштування вигляду (лише в цьому браузері) ----------
   function lsGet(key, def) { try { const v = localStorage.getItem(key); return v == null ? def : v; } catch (e) { return def; } }
@@ -92,6 +99,8 @@ window.CRM = window.CRM || {};
     const c = lsGet('crm.cal.cat', 'personal');
     return CATEGORIES.some((x) => x.id === c) ? c : 'personal';
   }
+  /** Що додає швидке вікно: 'event' чи 'task' (запамʼятовується). */
+  function lastKind() { return lsGet('crm.cal.kind', 'event') === 'task' ? 'task' : 'event'; }
 
   // ---------- Час ----------
   function toMin(s) {
@@ -145,6 +154,40 @@ window.CRM = window.CRM || {};
     return CRM.store.list('events')
       .filter((e) => D.isDate(e.date) && e.date >= from && e.date <= to)
       .map((e) => ({ ev: e, date: e.date }));
+  }
+
+  // ---------- Задачі в плані ----------
+  /** Час задачі в сітці (хв від 00:00) або null — задача «без часу». */
+  function taskStart(t) {
+    const s = toMin(t.planStart);
+    return s == null ? null : Math.min(s, DAY_MIN - SNAP);
+  }
+  function taskDur(t) { return Number(t.planDur) > 0 ? Number(t.planDur) : TASK_DUR; }
+  function taskEnd(t) { return Math.min(DAY_MIN, taskStart(t) + taskDur(t)); }
+  function byPlanOrder(a, b) {
+    const oa = typeof a.planOrder === 'number' ? a.planOrder : Infinity;
+    const ob = typeof b.planOrder === 'number' ? b.planOrder : Infinity;
+    return (oa - ob) || (a.createdAt || '').localeCompare(b.createdAt || '');
+  }
+  /** Задачі в плані: шар увімкнено й tasks.js свіжий (при неповному оновленні сайту — без них). */
+  function tasksOn(L) { return !!(L.tasks && CRM.tasks && CRM.tasks.create); }
+  /** Задачі (і виконані теж), заплановані на дні [from, to]. */
+  function plannedTasks(from, to) {
+    return CRM.store.list('tasks').filter((t) => D.isDate(t.planDate) && t.planDate >= from && t.planDate <= to);
+  }
+  /** Задачі без часу на день — у порядку «Плану дня». */
+  function untimedOn(date) {
+    return plannedTasks(date, date).filter((t) => taskStart(t) == null).sort(byPlanOrder);
+  }
+  /** Невиконані задачі, заплановані на минулі дні. */
+  function overdueTasks() {
+    const T = D.today();
+    return CRM.store.list('tasks').filter((t) => !t.done && D.isDate(t.planDate) && t.planDate < T)
+      .sort((a, b) => a.planDate.localeCompare(b.planDate) || byPlanOrder(a, b));
+  }
+  function deadlineNote(t, date) {
+    if (!t.deadline || t.deadline !== date) return '';
+    return 'дедлайн' + (t.deadlineTime ? ' о ' + t.deadlineTime : ' цього дня');
   }
 
   // ---------- Проміжок для перегляду ----------
@@ -211,6 +254,28 @@ window.CRM = window.CRM || {};
       });
     }
 
+    if (tasksOn(L)) {
+      plannedTasks(from, to).sort(byPlanOrder).forEach((t, i) => {
+        const d = t.planDate;
+        const dl = deadlineNote(t, d);
+        const it = {
+          key: 'task:' + t.id, kind: 'task', title: t.title || 'Без назви', color: TASK_COLOR, icon: 'tasks',
+          task: t, date: d, done: !!t.done, overdue: !t.done && d < T, editable: true, order: i
+        };
+        const s = taskStart(t);
+        if (s == null) {
+          it.sub = ['Задача', dl].filter(Boolean).join(' · ');
+          put(d, 'allDay', it);
+        } else {
+          it.startMin = s;
+          it.endMin = taskEnd(t);
+          it.sub = [`${fromMin(it.startMin)}–${fromMin(it.endMin)}`, dl].filter(Boolean).join(' · ');
+          it.past = d < T || (d === T && it.endMin <= nm);
+          put(d, 'timed', it);
+        }
+      });
+    }
+
     if (L.gcal && CRM.gcal && CRM.gcal.eventsBetween) {
       const gColor = CRM.dict.categoryColor('teal');
       CRM.gcal.eventsBetween(from, to).forEach((g) => {
@@ -266,6 +331,8 @@ window.CRM = window.CRM || {};
     if (L.deadlines && CRM.tasks) {
       CRM.tasks.activeTasks().forEach((t) => {
         if (!t.deadline || t.deadline < from || t.deadline > to) return;
+        // Задача й так стоїть у плані цього дня (з позначкою «дедлайн») — без дубля
+        if (tasksOn(L) && t.planDate === t.deadline) return;
         put(t.deadline, 'allDay', {
           key: 'dl:' + t.id, kind: 'deadline', title: t.title || 'Без назви', time: t.deadlineTime || null,
           sub: 'Дедлайн задачі' + (t.deadlineTime ? ' о ' + t.deadlineTime : ''),
@@ -276,7 +343,8 @@ window.CRM = window.CRM || {};
     }
 
     byDay.forEach((b) => {
-      b.allDay.sort((a, c) => (KIND_ORDER[a.kind] - KIND_ORDER[c.kind]) || (a.time || '').localeCompare(c.time || '') || a.title.localeCompare(c.title, 'uk'));
+      b.allDay.sort((a, c) => (KIND_ORDER[a.kind] - KIND_ORDER[c.kind]) || ((a.order || 0) - (c.order || 0)) ||
+        (a.time || '').localeCompare(c.time || '') || a.title.localeCompare(c.title, 'uk'));
       b.timed.sort((a, c) => (a.startMin - c.startMin) || ((c.endMin - c.startMin) - (a.endMin - a.startMin)));
     });
     return byDay;
@@ -318,6 +386,11 @@ window.CRM = window.CRM || {};
 
   let rerenderLater = false; // перемалювати, щойно закриється вікно швидкого додавання
   function closeQuick() { if (quick && quick.isOpen) quick.close('force'); quick = null; }
+  /** Віконце закрилося: якщо поки воно було відкрите, прийшли зміни з Google — перемалювати. */
+  function popClosed(pop) {
+    if (quick === pop) quick = null;
+    if (rerenderLater) { rerenderLater = false; setTimeout(() => CRM.router.rerender(), 0); }
+  }
   function clicksBlocked() { return Date.now() < suppressUntil; }
 
   // ---------- Збереження ----------
@@ -347,6 +420,101 @@ window.CRM = window.CRM || {};
     ui.toast(`Подію «${ev.title}» видалено`, {
       action: { label: 'Скасувати', onClick: () => CRM.store.restoreBatch(batch) }
     });
+  }
+
+  // ---------- Задачі: план ----------
+  const PLAN_FIELDS = ['planDate', 'planStart', 'planDur', 'planOrder'];
+  function planSnapshot(list) {
+    return list.map((t) => {
+      const s = { id: t.id };
+      PLAN_FIELDS.forEach((f) => { s[f] = t[f] === undefined ? null : t[f]; });
+      return s;
+    });
+  }
+  /** «Скасувати»: повернути поля плану задач, як були. */
+  async function restorePlans(snap) {
+    const recs = snap.map((s) => {
+      const cur = CRM.store.get('tasks', s.id);
+      return cur ? Object.assign({}, cur, s) : null;
+    }).filter(Boolean);
+    if (recs.length) await CRM.store.saveMany('tasks', recs);
+  }
+  function planText(date, start) { return dayShort(date) + (start ? ', ' + start : ''); }
+
+  /**
+   * Запланувати задачу: to = { date, start: 'ГГ:ХХ' | null, index: місце в «Плані дня» }.
+   * Без часу — задача стає в список дня (порядок решти перенумеровується).
+   */
+  async function planTask(id, to) {
+    const cur = CRM.store.get('tasks', id);
+    if (!cur || !D.isDate(to.date)) { CRM.router.rerender(); return; }
+    const start = to.start || null;
+    const changes = { planDate: to.date, planStart: start };
+    const others = [];
+    if (!start) {
+      const list = untimedOn(to.date).filter((t) => t.id !== id);
+      const at = to.index == null ? list.length : clamp(to.index, 0, list.length);
+      list.splice(at, 0, cur);
+      list.forEach((t, i) => {
+        if (t.id === id) changes.planOrder = i;
+        else if (t.planOrder !== i) others.push(Object.assign({}, t, { planOrder: i }));
+      });
+    }
+    const wasStart = cur.planStart || null;
+    const same = cur.planDate === to.date && wasStart === start && (start || changes.planOrder === cur.planOrder);
+    if (same && !others.length) { CRM.router.rerender(); return; }
+    const snap = planSnapshot([cur].concat(others.map((o) => CRM.store.get('tasks', o.id))));
+    await CRM.store.saveMany('tasks', [Object.assign({}, cur, changes)].concat(others));
+    // Просто змінили порядок у списку того самого дня — без повідомлення
+    if (cur.planDate === to.date && !wasStart && !start) return;
+    ui.toast(`«${cur.title}» — у плані: ${planText(to.date, start)}`, {
+      type: 'success', action: { label: 'Скасувати', onClick: () => restorePlans(snap) }
+    });
+  }
+
+  async function resizeTask(id, dur) {
+    const cur = CRM.store.get('tasks', id);
+    if (!cur) return;
+    const snap = planSnapshot([cur]);
+    const saved = await CRM.store.patch('tasks', id, { planDur: dur });
+    ui.toast(`«${saved.title}»: ${saved.planStart}–${fromMin(taskEnd(saved))} (${durText(dur)})`, {
+      type: 'success', action: { label: 'Скасувати', onClick: () => restorePlans(snap) }
+    });
+  }
+
+  /** Галочка: виконати (без вікна підтвердження, з «Скасувати») або повернути в активні. */
+  async function toggleTask(id) {
+    const t = CRM.store.get('tasks', id);
+    if (!t) return;
+    if (t.done) await CRM.tasks.reopen(id);
+    else await CRM.tasks.complete(id, { confirm: false });
+  }
+
+  /** «Перенести на сьогодні»: невиконані з минулих днів — у кінець сьогоднішнього списку. */
+  async function rollOver() {
+    const list = overdueTasks();
+    if (!list.length) return;
+    const T = D.today();
+    const snap = planSnapshot(list);
+    let order = untimedOn(T).length;
+    await CRM.store.saveMany('tasks', list.map((t) => Object.assign({}, t, { planDate: T, planStart: null, planOrder: order++ })));
+    ui.toast(`Перенесено на сьогодні: ${fmt.count(list.length, ['задача', 'задачі', 'задач'])}`, {
+      type: 'success', action: { label: 'Скасувати', onClick: () => restorePlans(snap) }
+    });
+  }
+
+  /** Нова задача прямо з календаря. plan = { date, start, dur }. */
+  async function addTask(title, plan, opts) {
+    if (!layers().tasks) setLayer('tasks', true);
+    const rec = await CRM.tasks.create({
+      title, planDate: plan.date, planStart: plan.start || null, planDur: plan.start && plan.dur ? plan.dur : null,
+      planOrder: plan.start ? null : CRM.tasks.nextPlanOrder(plan.date)
+    });
+    if (opts && opts.quiet) return rec;
+    ui.toast(`Задачу додано в план: ${planText(plan.date, plan.start)}`, {
+      type: 'success', action: { label: 'Відкрити', onClick: () => CRM.tasks.openTask(rec.id) }
+    });
+    return rec;
   }
 
   // ---------- Перетягування: мишка й довге натискання ----------
@@ -473,18 +641,64 @@ window.CRM = window.CRM || {};
     };
   }
 
+  // ---------- Куди можна покласти задачу поза сіткою ----------
+  /** Список «План дня» або клітинка дня («весь день», місяць) під пальцем/мишкою. */
+  function dropAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el || !el.closest) return null;
+    const list = el.closest('[data-task-list]');
+    if (list) return { kind: 'list', el: list, date: list.dataset.taskList };
+    const col = el.closest('.kal-col');
+    if (col) return { kind: 'col', el: col, date: col.dataset.date };
+    const day = el.closest('[data-drop-date]');
+    if (day) return { kind: 'day', el: day, date: day.dataset.dropDate };
+    return null;
+  }
+  /** Місце вставки в списку: перед рядком index (або в кінці) — з позначкою-лінією. */
+  function listSlot(list, y, skip) {
+    const rows = Array.from(list.querySelectorAll('.kal-drow')).filter((r) => r !== skip);
+    let index = rows.length;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      if (y < r.top + r.height / 2) { index = i; break; }
+    }
+    clearSlots();
+    if (rows.length) rows[Math.min(index, rows.length - 1)].classList.add(index < rows.length ? 'kal-ins-before' : 'kal-ins-after');
+    return index;
+  }
+  function clearSlots() {
+    document.querySelectorAll('.kal-ins-before, .kal-ins-after').forEach((r) => r.classList.remove('kal-ins-before', 'kal-ins-after'));
+  }
+
   /** Перетягування події в годинній сітці: перенести (move) або змінити тривалість (resize). */
   function gridSession(block, it, ctx, sx, sy, target) {
     const mode = target && target.closest && target.closest('.kal-resize') ? 'resize' : 'move';
+    const isTask = it.kind === 'task';
     const col0 = block.parentElement;
     const dur = it.endMin - it.startMin;
     const grab = ctx.minuteAt(col0, sy) - it.startMin;
     const st = { date: it.date, start: it.startMin, end: it.endMin, x: sx, y: sy };
     const timeEl = block.querySelector('.kal-ev-time');
+    let out = null;   // задачу несуть із сітки: у «План дня» або на «весь день»
     block.classList.add('kal-dragging');
     block.setAttribute('aria-grabbed', 'true');
 
+    function setOut(o) {
+      if (out && (!o || o.el !== out.el)) out.el.classList.remove('kal-drop');
+      if (!o || o.kind !== 'list') clearSlots();
+      out = o;
+      block.classList.toggle('kal-out', !!o);
+      if (!o) return;
+      o.el.classList.add('kal-drop');
+      if (o.kind === 'list') o.index = listSlot(o.el, st.y, null);
+    }
+
     function apply() {
+      if (isTask && mode === 'move') {
+        const o = dropAt(st.x, st.y);
+        setOut(o && o.kind !== 'col' ? o : null);
+        if (out) return;
+      }
       if (mode === 'move') {
         const col = ctx.colAt(st.x);
         const s = clamp(snap(ctx.minuteAt(col, st.y) - grab), 0, DAY_MIN - dur);
@@ -515,12 +729,118 @@ window.CRM = window.CRM || {};
       move(x, y) { st.x = x; st.y = y; apply(); },
       end(commit) {
         cancelAnimationFrame(raf);
-        block.classList.remove('kal-dragging');
+        block.classList.remove('kal-dragging', 'kal-out');
         block.removeAttribute('aria-grabbed');
+        const o = out;
+        setOut(null);
+        if (commit && o) { planTask(it.task.id, { date: o.date, start: null, index: o.index }); return; }
         const changed = st.date !== it.date || st.start !== it.startMin || st.end !== it.endMin;
         if (!commit || !changed) { CRM.router.rerender(); return; }
+        if (isTask) {
+          if (mode === 'move') planTask(it.task.id, { date: st.date, start: fromMin(st.start) });
+          else resizeTask(it.task.id, st.end - st.start);
+          return;
+        }
         if (mode === 'move') moveEvent(it.ev, { date: st.date, start: fromMin(st.start) }, 'move');
         else moveEvent(it.ev, { dur: st.end - st.start }, 'resize');
+      }
+    };
+  }
+
+  /**
+   * Перетягування задачі без часу (рядок «Плану дня», пункт «весь день» чи місяця):
+   * у список — змінити порядок; у годинну сітку — дати час; на інший день — перенести.
+   */
+  function taskSession(el, it, sx, sy) {
+    const t = it.task;
+    const dur = taskDur(t);
+    const r = el.getBoundingClientRect();
+    const w = Math.min(r.width, 300);
+    const clone = el.cloneNode(true);
+    clone.classList.add('kal-floating');
+    clone.classList.remove('kal-ins-before', 'kal-ins-after');
+    clone.style.width = w + 'px';
+    document.body.appendChild(clone);
+    el.classList.add('kal-lifted');
+    const offX = clamp(sx - r.left, 0, w - 12);
+    const offY = sy - r.top;
+    const scrollEl = document.querySelector('.kal-scroll');
+    const sticky = scrollEl ? scrollEl.querySelector('.kal-sticky') : null;
+    let x = sx;
+    let y = sy;
+    let tgt = null;
+    let ghost = null;
+
+    function clearTarget() {
+      if (tgt && tgt.el && tgt.kind !== 'col') tgt.el.classList.remove('kal-drop');
+      clearSlots();
+      tgt = null;
+    }
+    function update() {
+      clone.style.left = (x - offX) + 'px';
+      clone.style.top = (y - offY) + 'px';
+      const o = dropAt(x, y);
+      if (!o || !tgt || o.el !== tgt.el) clearTarget();
+      tgt = o;
+      if (o && o.kind === 'col') {
+        const m = clamp(snap((y - o.el.getBoundingClientRect().top) / HOUR * 60 - dur / 2), 0, DAY_MIN - dur);
+        o.min = m;
+        if (!ghost) ghost = h('div', { class: 'kal-ghost kal-ghost-task' }, h('span', { class: 'kal-ghost-time num' }));
+        if (ghost.parentElement !== o.el) o.el.appendChild(ghost);
+        ghost.style.top = px(m);
+        ghost.style.height = px(dur, true);
+        ghost.firstChild.textContent = `${fromMin(m)}–${fromMin(m + dur)} · ${t.title}`;
+        clone.style.visibility = 'hidden';
+        return;
+      }
+      if (ghost) { ghost.remove(); ghost = null; }
+      clone.style.visibility = '';
+      if (!o) return;
+      o.el.classList.add('kal-drop');
+      if (o.kind === 'list') o.index = listSlot(o.el, y, el);
+    }
+
+    // Біля країв: прокручуємо годинну сітку й сторінку (на телефоні список — над сіткою).
+    // Сітку — лише коли задача вже побувала всередині неї: інакше, щойно її заносять згори,
+    // сітка «тікає» з-під курсора.
+    let raf = 0;
+    let armed = false;
+    const tick = () => {
+      let moved = false;
+      if (scrollEl) {
+        const sr = scrollEl.getBoundingClientRect();
+        const top = sticky ? sticky.getBoundingClientRect().bottom : sr.top;
+        let dy = 0;
+        if (x >= sr.left && x <= sr.right) {
+          if (y >= top + 28 && y <= sr.bottom - 28) armed = true;
+          else if (!armed) dy = 0;
+          else if (y > top && y < top + 28) dy = -Math.min(16, 6 + (top + 28 - y) / 3);
+          else if (y > sr.bottom - 28 && y < sr.bottom + 6) dy = Math.min(16, 6 + (y - sr.bottom + 28) / 3);
+        }
+        if (dy) { const b = scrollEl.scrollTop; scrollEl.scrollTop += dy; moved = scrollEl.scrollTop !== b; }
+      }
+      const vh = window.innerHeight;
+      const wy = y < 40 ? -Math.min(18, 6 + (40 - y) / 2) : y > vh - 40 ? Math.min(18, 6 + (y - vh + 40) / 2) : 0;
+      if (wy) { const b = window.scrollY; window.scrollBy(0, wy); moved = moved || window.scrollY !== b; }
+      if (moved) update();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    update();
+
+    return {
+      move(nx, ny) { x = nx; y = ny; update(); },
+      end(commit) {
+        cancelAnimationFrame(raf);
+        const o = tgt;
+        clearTarget();
+        if (ghost) ghost.remove();
+        clone.remove();
+        el.classList.remove('kal-lifted');
+        if (!commit || !o) return;
+        if (o.kind === 'list') planTask(t.id, { date: o.date, start: null, index: o.index });
+        else if (o.kind === 'col') planTask(t.id, { date: o.date, start: fromMin(o.min) });
+        else if (o.date !== t.planDate) planTask(t.id, { date: o.date, start: t.planStart || null });
       }
     };
   }
@@ -563,6 +883,7 @@ window.CRM = window.CRM || {};
   // ---------- Відкрити пункт ----------
   function openItem(it) {
     if (it.kind === 'own') openEditor(it.ev.id);
+    else if (it.kind === 'task') CRM.tasks.openTask(it.task.id);
     else if (it.kind === 'gcal') showGoogle(it.gev);
     else if (it.onOpen) it.onOpen();
   }
@@ -615,12 +936,31 @@ window.CRM = window.CRM || {};
   function quickAdd(anchor, preset, onClose) {
     closeQuick();
     let cat = lastCat();
+    let kind = CRM.tasks && CRM.tasks.create ? lastKind() : 'event';
     const titleIn = ui.input({ placeholder: 'Назва події', maxlength: 200, 'aria-label': 'Назва події' });
     const timeIn = preset.allDay ? ui.timeInput({ ariaLabel: 'Час початку (необовʼязково)' }) : null;
     const errEl = h('div', { class: 'kal-quick-err', role: 'alert' });
-    const when = preset.allDay
+    const whenText0 = preset.allDay
       ? `${dayShort(preset.date)} · весь день`
       : `${dayShort(preset.date)} · ${preset.start}–${fromMin(Math.min(DAY_MIN, toMin(preset.start) + preset.dur))}`;
+    const whenEl = h('span', null, whenText0);
+    const cats = catPicker(cat, (v) => { cat = v; }, true);
+    const kindSeg = h('div', { class: 'segmented kal-kind', role: 'radiogroup', 'aria-label': 'Що додати' });
+    function setKind(k) {
+      kind = k;
+      lsSet('crm.cal.kind', k);
+      ui.mount(kindSeg, [['event', 'Подія'], ['task', 'Задача']].map(([id, label]) => h('button', {
+        type: 'button', role: 'radio', class: id === k ? 'active' : '', 'aria-checked': id === k ? 'true' : 'false',
+        onClick: () => { setKind(id); titleIn.focus({ preventScroll: true }); }
+      }, label)));
+      const isTask = k === 'task';
+      titleIn.placeholder = isTask ? 'Назва задачі' : 'Назва події';
+      titleIn.setAttribute('aria-label', isTask ? 'Назва задачі' : 'Назва події');
+      cats.hidden = isTask;
+      whenEl.textContent = isTask && preset.allDay ? `${dayShort(preset.date)} · у «План дня»` : whenText0;
+      errEl.textContent = '';
+    }
+    setKind(kind);
 
     function values() {
       const title = titleIn.value.trim();
@@ -637,7 +977,12 @@ window.CRM = window.CRM || {};
     async function add() {
       const v = values();
       if (v.error) { errEl.textContent = v.error; return; }
-      if (!v.title) { errEl.textContent = 'Вкажи назву події'; titleIn.focus(); return; }
+      if (!v.title) { errEl.textContent = kind === 'task' ? 'Вкажи назву задачі' : 'Вкажи назву події'; titleIn.focus(); return; }
+      if (kind === 'task') {
+        pop.close('saved');
+        await addTask(v.title, { date: v.date, start: v.allDay ? null : v.start, dur: preset.allDay ? null : v.dur });
+        return;
+      }
       if (!canSave()) return;
       lsSet('crm.cal.cat', v.cat);
       pop.close('saved');
@@ -646,6 +991,14 @@ window.CRM = window.CRM || {};
     function more() {
       const v = values();
       pop.close('more');
+      if (kind === 'task') {
+        const start = v.error || v.allDay ? null : v.start;
+        CRM.tasks.openNew({
+          title: titleIn.value.trim(), planDate: preset.date, planStart: start, planDur: start && !preset.allDay ? v.dur : null,
+          planOrder: start ? null : CRM.tasks.nextPlanOrder(preset.date)
+        });
+        return;
+      }
       openEditor(null, v.error ? Object.assign({}, preset, { title: titleIn.value.trim(), cat }) : v);
     }
     titleIn.addEventListener('input', () => { errEl.textContent = ''; });
@@ -653,10 +1006,11 @@ window.CRM = window.CRM || {};
     if (timeIn) timeIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); timeIn.dispatchEvent(new Event('change')); add(); } });
 
     const content = h('div', { class: 'kal-quick' },
-      h('div', { class: 'kal-quick-when' }, CRM.icon('clock', { size: 'sm' }), h('span', null, when)),
+      CRM.tasks && CRM.tasks.create ? kindSeg : null,
+      h('div', { class: 'kal-quick-when' }, CRM.icon('clock', { size: 'sm' }), whenEl),
       titleIn,
       timeIn ? h('label', { class: 'kal-quick-time' }, h('span', null, 'Час'), timeIn, h('span', { class: 'subtle' }, 'необовʼязково')) : null,
-      catPicker(cat, (v) => { cat = v; }, true),
+      cats,
       errEl,
       h('div', { class: 'kal-quick-actions' },
         ui.button({ label: 'Детальніше', size: 'sm', variant: 'ghost', onClick: more }),
@@ -664,9 +1018,8 @@ window.CRM = window.CRM || {};
     const pop = ui.popover(anchor, content, {
       align: 'start', className: 'kal-quick-pop',
       onClose: () => {
-        if (quick === pop) quick = null;
         if (onClose) onClose();
-        if (rerenderLater) { rerenderLater = false; setTimeout(() => CRM.router.rerender(), 0); }
+        popClosed(pop);
       }
     });
     quick = pop;
@@ -804,6 +1157,33 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Пункти (чіпи) ----------
+  /** Галочка задачі в календарі. */
+  function taskCheck(t) {
+    return h('button', {
+      type: 'button', class: 'task-check kal-tcheck' + (t.done ? ' checked' : ''), role: 'checkbox',
+      'aria-checked': t.done ? 'true' : 'false',
+      'aria-label': t.done ? `Повернути «${t.title}» в активні` : `Позначити «${t.title}» виконаною`,
+      title: t.done ? 'Виконано — натисни, щоб повернути' : 'Позначити виконаною',
+      onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; toggleTask(t.id); }
+    }, CRM.icon('check', { size: 'sm' }));
+  }
+
+  /** Задача «без часу» в рядку «весь день» чи в місяці: галочка + назва, перетягується. */
+  function taskChip(it, cls, label, o) {
+    const el = h('div', {
+      class: cls.join(' '), role: 'button', tabIndex: 0, style: { '--c': it.color },
+      title: [label, it.sub].filter(Boolean).join(' · '), dataset: { key: it.key },
+      onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; openItem(it); },
+      onKeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openItem(it); } }
+    },
+    taskCheck(it.task),
+    o.time ? h('span', { class: 'kal-chip-time num' }, o.time) : null,
+    h('span', { class: 'kal-chip-title' }, label),
+    o.withSub && it.sub ? h('span', { class: 'kal-chip-sub' }, it.sub) : null);
+    attachDrag(el, (sx, sy) => taskSession(el, it, sx, sy));
+    return el;
+  }
+
   function chip(it, opts) {
     const o = opts || {};
     const cls = ['kal-chip', 'k-' + it.kind];
@@ -811,6 +1191,7 @@ window.CRM = window.CRM || {};
     if (it.overdue) cls.push('overdue');
     if (it.tentative) cls.push('tentative');
     const label = (it.time ? it.time + ' ' : '') + it.title;
+    if (it.kind === 'task') return taskChip(it, cls, label, o);
     const el = h('button', {
       type: 'button', class: cls.join(' '), style: { '--c': it.color },
       title: [label, it.sub].filter(Boolean).join(' · '), dataset: { key: it.key },
@@ -825,7 +1206,8 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Годинна сітка (день, 3 дні, тиждень) ----------
-  function gridView(r, data) {
+  function gridView(r, data, opts) {
+    const o = opts || {};
     const T = D.today();
     const nm = nowMin();
     const n = r.days.length;
@@ -850,7 +1232,8 @@ window.CRM = window.CRM || {};
     const allRow = h('div', { class: 'kal-row kal-allrow', style },
       h('div', { class: 'kal-gutter kal-gutter-label' }, 'весь день'),
       r.days.map((d) => {
-        const items = data.get(d).allDay;
+        // У «Дні» задачі без часу стоять у «Плані дня» праворуч — тут без дубля
+        const items = o.noUntimedTasks ? data.get(d).allDay.filter((it) => it.kind !== 'task') : data.get(d).allDay;
         const limit = single ? Infinity : MAX_CHIPS;
         const cell = h('div', { class: 'kal-ad' + (D.weekday(d) >= 5 ? ' weekend' : ''), dataset: { date: d, dropDate: d } },
           items.slice(0, limit).map((it) => chip(it, { withSub: single })),
@@ -972,22 +1355,170 @@ window.CRM = window.CRM || {};
     if (short) cls.push('short');
     if (it.past) cls.push('past');
     if (it.tentative) cls.push('tentative');
+    if (it.done) cls.push('done');
+    if (it.overdue) cls.push('overdue');
     const w = 100 / (it.ncols || 1);
     const el = h('div', {
       class: cls.join(' '), role: 'button', tabIndex: 0, dataset: { key: it.key },
-      'aria-label': `${it.title}, ${it.sub}`, title: `${it.title}\n${it.sub}${it.kind === 'gcal' ? '\nGoogle Календар' : ''}`,
+      'aria-label': `${it.title}, ${it.sub}`,
+      title: `${it.title}\n${it.sub}${it.kind === 'gcal' ? '\nGoogle Календар' : it.kind === 'task' ? '\nЗадача' : ''}`,
       style: {
         '--c': it.color, top: px(it.startMin), height: px(Math.max(it.endMin - it.startMin, MIN_VIS * 0.8), true),
         left: `calc(${(it.col || 0) * w}% + 1px)`, width: `calc(${w}% - 3px)`
       }
     },
+    it.kind === 'task' ? taskCheck(it.task) : null,
     h('span', { class: 'kal-ev-title' }, it.title),
     h('span', { class: 'kal-ev-time num' }, it.sub),
     it.editable ? h('span', { class: 'kal-resize', 'aria-hidden': 'true', title: 'Потягни, щоб змінити тривалість' }) : null);
     el.addEventListener('click', () => { if (!clicksBlocked()) openItem(it); });
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openItem(it); } });
+    el.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openItem(it); } });
     if (it.editable) attachDrag(el, (sx, sy, target) => gridSession(el, it, ctx, sx, sy, target));
     return el;
+  }
+
+  // ---------- «План дня» (перегляд «День») ----------
+  let panelDraft = { date: '', text: '' };  // недописана назва нової задачі (переживає перемальовування)
+  let refocusTask = null;                    // після зміни порядку з клавіатури — фокус назад на рядок
+
+  function planRow(t, i, n, date) {
+    const it = { kind: 'task', task: t, key: 'task:' + t.id, date };
+    const dl = deadlineNote(t, date);
+    const checklist = t.checklist || [];
+    const meta = [];
+    if (t.priority === 'high' && !t.done) meta.push(h('span', { class: 'kal-dmeta kal-dmeta-prio' }, h('span', { class: 'prio-dot prio-high' }), 'високий пріоритет'));
+    if (dl) meta.push(h('span', { class: 'kal-dmeta' + (t.done ? '' : ' kal-dmeta-dl') }, CRM.icon('flag', { size: 'sm' }), dl));
+    if (checklist.length) meta.push(h('span', { class: 'kal-dmeta' }, CRM.icon('listChecks', { size: 'sm' }), `${checklist.filter((c) => c.done).length}/${checklist.length}`));
+    const row = h('div', {
+      class: 'kal-drow' + (t.done ? ' done' : ''), role: 'listitem', tabIndex: 0, dataset: { id: t.id },
+      'aria-label': `${t.title}${t.done ? ', виконано' : ''}. Enter — відкрити, Alt+стрілки — змінити порядок`,
+      title: 'Перетягни, щоб змінити порядок або дати задачі час у сітці'
+    },
+    h('span', { class: 'kal-grip', 'aria-hidden': 'true' }, CRM.icon('grip', { size: 'sm' })),
+    taskCheck(t),
+    h('span', { class: 'kal-drow-main' },
+      h('span', { class: 'kal-drow-title' }, t.title || 'Без назви'),
+      meta.length ? h('span', { class: 'kal-drow-meta' }, meta) : null));
+    row.addEventListener('click', (e) => {
+      if (clicksBlocked() || e.target.closest('.kal-tcheck')) return;
+      CRM.tasks.openTask(t.id);
+    });
+    row.addEventListener('keydown', (e) => {
+      if (e.target !== row) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); CRM.tasks.openTask(t.id); return; }
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        const to = i + (e.key === 'ArrowUp' ? -1 : 1);
+        if (to < 0 || to >= n) return;
+        refocusTask = t.id;
+        planTask(t.id, { date, start: null, index: to });
+      }
+    });
+    attachDrag(row, (sx, sy) => taskSession(row, it, sx, sy));
+    return row;
+  }
+
+  function dayPanel(date) {
+    const all = plannedTasks(date, date).sort(byPlanOrder);
+    const untimed = all.filter((t) => taskStart(t) == null);
+    const timed = all.filter((t) => taskStart(t) != null).sort((a, b) => taskStart(a) - taskStart(b));
+    const done = all.filter((t) => t.done).length;
+
+    const list = h('div', { class: 'kal-dlist', role: 'list', 'aria-label': 'Задачі без часу', dataset: { taskList: date } },
+      untimed.map((t, i) => planRow(t, i, untimed.length, date)),
+      untimed.length ? null : h('div', { class: 'kal-dempty' }, all.length
+        ? 'Задач без часу немає. Перетягни сюди задачу із сітки, щоб прибрати їй час.'
+        : 'На цей день задач ще немає — допиши нову нижче або вибери з наявних.'));
+
+    const timedBox = timed.length ? h('div', { class: 'kal-dtimed' },
+      h('div', { class: 'kal-dsub' }, 'За часом — у сітці'),
+      timed.map((t) => h('button', {
+        type: 'button', class: 'kal-dtimed-row' + (t.done ? ' done' : ''), onClick: () => CRM.tasks.openTask(t.id)
+      },
+      h('span', { class: 'num' }, t.planStart),
+      h('span', { class: 'kal-dtimed-title' }, t.title || 'Без назви')))) : null;
+
+    const addIn = ui.input({ placeholder: 'Нова задача на цей день…', maxlength: 200, 'aria-label': 'Нова задача на цей день', class: 'input kal-newtask-in' });
+    addIn.value = panelDraft.date === date ? panelDraft.text : '';
+    async function addFromInput() {
+      const title = addIn.value.trim();
+      if (!title) { addIn.focus(); return; }
+      addIn.value = '';
+      panelDraft = { date, text: '' };
+      await addTask(title, { date }, { quiet: true });
+    }
+    addIn.addEventListener('input', () => { panelDraft = { date, text: addIn.value }; });
+    addIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addFromInput(); } });
+    const pickBtn = ui.button({ label: 'Вибрати з задач', icon: 'tasks', size: 'sm', variant: 'ghost', className: 'kal-pick-btn' });
+    pickBtn.setAttribute('aria-haspopup', 'dialog');
+    pickBtn.addEventListener('click', () => pickTasks(pickBtn, date));
+
+    return h('section', { class: 'card kal-day-panel', 'aria-label': 'План дня' },
+      h('div', { class: 'kal-dhead' },
+        h('h2', null, 'План дня'),
+        all.length ? h('span', { class: 'subtle num' }, `${done} з ${all.length} виконано`) : null),
+      h('div', { class: 'kal-dbody' }, list, timedBox),
+      h('div', { class: 'kal-dadd' },
+        h('div', { class: 'kal-dadd-row' }, addIn,
+          ui.button({ icon: 'plus', iconOnly: true, size: 'sm', title: 'Додати задачу', onClick: addFromInput })),
+        pickBtn));
+  }
+
+  /** Вибрати наявну задачу й поставити її в план дня. */
+  function pickTasks(anchor, date) {
+    closeQuick();
+    const list = CRM.tasks.sortTasks(CRM.tasks.activeTasks().filter((t) => t.planDate !== date), 'deadline')
+      .sort((a, b) => (a.planDate ? 1 : 0) - (b.planDate ? 1 : 0));
+    const content = h('div', { class: 'kal-pick' },
+      h('div', { class: 'kal-pick-head' }, 'Додати в план: ' + dayShort(date)),
+      list.length
+        ? h('div', { class: 'kal-pick-list', role: 'menu' }, list.map((t) => {
+          const dl = CRM.tasks.deadlineInfo(t);
+          const meta = [t.planDate ? 'у плані: ' + CRM.tasks.planLabel(t) : 'без плану', dl ? 'дедлайн: ' + dl.label.toLowerCase() : null].filter(Boolean).join(' · ');
+          return h('button', {
+            type: 'button', role: 'menuitem', class: 'kal-pick-row',
+            onClick: () => { pop.close('picked'); planTask(t.id, { date, start: null }); }
+          }, h('span', { class: 'kal-pick-title' }, t.title || 'Без назви'), h('span', { class: 'kal-pick-meta' }, meta));
+        }))
+        : h('div', { class: 'kal-pick-empty' }, 'Усі активні задачі вже в плані цього дня.'));
+    const pop = ui.popover(anchor, content, {
+      align: 'start', className: 'kal-pick-pop',
+      onClose: () => popClosed(pop)
+    });
+    quick = pop;
+    quickRoute = location.hash;
+    const first = pop.el.querySelector('.kal-pick-row');
+    if (first) first.focus({ preventScroll: true });
+  }
+
+  /** Плашка: невиконані задачі з минулих днів. Нічого не переносить сама — лише за кнопкою. */
+  function rollBanner() {
+    const list = overdueTasks();
+    if (!list.length) return null;
+    const whichBtn = ui.button({ label: 'Які?', size: 'sm', variant: 'ghost' });
+    whichBtn.setAttribute('aria-haspopup', 'dialog');
+    whichBtn.addEventListener('click', () => {
+      closeQuick();
+      const pop = ui.popover(whichBtn, h('div', { class: 'kal-pick' },
+        h('div', { class: 'kal-pick-head' }, 'Не виконано з минулих днів'),
+        h('div', { class: 'kal-pick-list' }, list.map((t) => h('div', { class: 'kal-roll-row' },
+          h('button', { type: 'button', class: 'kal-pick-row', onClick: () => { pop.close('open'); CRM.tasks.openTask(t.id); } },
+            h('span', { class: 'kal-pick-title' }, t.title || 'Без назви'),
+            h('span', { class: 'kal-pick-meta' }, 'було в плані: ' + dayShort(t.planDate) + (t.planStart ? ', ' + t.planStart : ''))),
+          ui.button({
+            label: 'На сьогодні', size: 'sm',
+            onClick: () => { pop.close('moved'); planTask(t.id, { date: D.today(), start: null }); }
+          }))))),
+      { align: 'start', className: 'kal-pick-pop', onClose: () => popClosed(pop) });
+      quick = pop;
+      quickRoute = location.hash;
+    });
+    return h('div', { class: 'callout callout-warning kal-roll', role: 'status' },
+      CRM.icon('alert'),
+      h('span', { class: 'kal-roll-text' }, 'Не виконано з минулих днів: ', h('strong', { class: 'num' }, String(list.length))),
+      h('span', { class: 'kal-roll-actions' },
+        whichBtn,
+        ui.button({ label: 'Перенести на сьогодні', size: 'sm', onClick: rollOver })));
   }
 
   // ---------- Місяць ----------
@@ -1097,10 +1628,15 @@ window.CRM = window.CRM || {};
     // Перемальовування (напр., прийшли зміни з іншого пристрою) не закриває віконце, де людина пише назву
     if (location.hash !== quickRoute) closeQuick();
     const r = rangeOf(view, anchor);
-    if (CRM.gcal && CRM.gcal.ensureRange && layers().gcal) CRM.gcal.ensureRange(r.from, r.to);
+    const L = layers();
+    if (CRM.gcal && CRM.gcal.ensureRange && L.gcal) CRM.gcal.ensureRange(r.from, r.to);
     const data = collect(r.from, r.to);
     const T = D.today();
     const isToday = T >= r.from && T <= r.to && (view !== 'month' || T.slice(0, 7) === r.monthStart.slice(0, 7));
+    const withPanel = view === 'day' && tasksOn(L);
+    // Людина саме вписує нову задачу в «План дня» — після перемальовування поле знову в фокусі
+    const ae = document.activeElement;
+    const typing = !!(ae && ae.classList && ae.classList.contains('kal-newtask-in') && container.contains(ae));
 
     const sub = view === 'month' ? fmt.month(r.monthStart) : rangeText(r.from, r.to);
     const toolbar = h('div', { class: 'kal-toolbar' },
@@ -1111,22 +1647,38 @@ window.CRM = window.CRM || {};
         h('span', { class: 'kal-range' }, sub)),
       h('div', { class: 'kal-tools' }, viewSwitch(view, anchor), layersButton()));
 
-    const main = view === 'month' ? monthView(r, data, anchor) : gridView(r, data);
+    let main = view === 'month' ? monthView(r, data, anchor) : gridView(r, data, { noUntimedTasks: withPanel });
+    if (withPanel) {
+      const grid = main;
+      main = h('div', { class: 'kal-dayview' }, dayPanel(anchor), grid);
+      main._afterMount = grid._afterMount;
+    }
     const hint = h('div', { class: 'kal-hint' },
       h('span', { class: 'kal-hint-mouse' }, view === 'month'
-        ? 'Клікни на день, щоб додати подію; перетягни подію на інший день, щоб перенести.'
-        : 'Клікни на вільний час, щоб додати подію (або протягни мишкою для свого проміжку). Перетягни подію, щоб перенести; потягни за нижній край — щоб змінити тривалість.'),
+        ? 'Клікни на день, щоб додати подію чи задачу; перетягни пункт на інший день, щоб перенести.'
+        : 'Клікни на вільний час, щоб додати подію чи задачу (або протягни мишкою для свого проміжку). Перетягни пункт, щоб перенести; потягни за нижній край — щоб змінити тривалість.' +
+          (withPanel ? ' Задачу з «Плану дня» можна перетягнути в сітку (зʼявиться час) і назад.' : '')),
       h('span', { class: 'kal-hint-touch' }, view === 'month'
-        ? 'Торкнися дня, щоб побачити його події. Утримуй подію, щоб перетягнути її на інший день.'
-        : 'Торкнися вільного часу, щоб додати подію. Утримуй подію, щоб перетягнути її; утримуй нижній край — щоб змінити тривалість.'));
+        ? 'Торкнися дня, щоб побачити його події. Утримуй пункт, щоб перетягнути його на інший день.'
+        : 'Торкнися вільного часу, щоб додати подію чи задачу. Утримуй пункт, щоб перетягнути його; утримуй нижній край — щоб змінити тривалість.' +
+          (withPanel ? ' Утримуй задачу в «Плані дня», щоб змінити порядок або перетягнути її в сітку.' : '')));
 
     ui.mount(container,
       ui.pageHead({
         title: 'Календар',
         actions: ui.button({ label: 'Подія', icon: 'plus', variant: 'primary', onClick: () => openNew(r) })
       }),
-      h('div', { class: 'kal stack' }, toolbar, gcalNote(r), main, hint));
+      h('div', { class: 'kal stack' }, toolbar, gcalNote(r), tasksOn(L) && isToday ? rollBanner() : null, main, hint));
     if (main._afterMount) main._afterMount();
+    if (typing) {
+      const inp = container.querySelector('.kal-newtask-in');
+      if (inp) inp.focus({ preventScroll: true });
+    }
+    if (refocusTask) {
+      const row = container.querySelector(`.kal-drow[data-id="${CSS.escape(refocusTask)}"]`);
+      refocusTask = null;
+      if (row) row.focus({ preventScroll: true });
+    }
 
     // Відкрити подію з адреси (пошук, сповіщення)
     if (p.open) {
@@ -1172,6 +1724,18 @@ window.CRM = window.CRM || {};
     sub: ['Календар', whenText(ev), categoryName(ev.cat)].join(' · '),
     onClick: () => go('day', date)
   })));
+  // Задачі, заплановані на день, — у порядку «Плану дня» (виконані — з позначкою)
+  CRM.home.addScheduleSource((date) => plannedTasks(date, date).sort(byPlanOrder).map((t, i) => {
+    const s = taskStart(t);
+    return {
+      time: s == null ? null : fromMin(s), order: i, kind: 'task', icon: 'tasks', cls: 'ico-task',
+      title: t.title || 'Без назви',
+      sub: ['План дня', s == null ? null : `${fromMin(s)}–${fromMin(taskEnd(t))}`, deadlineNote(t, date)].filter(Boolean).join(' · '),
+      badge: t.done ? { text: 'Виконано', cls: 'badge-success' } : null,
+      done: !!t.done,
+      onClick: () => CRM.tasks.openTask(t.id)
+    };
+  }));
 
   // ---------- Нагадування ----------
   CRM.notify.addRule(() => {
@@ -1198,7 +1762,8 @@ window.CRM = window.CRM || {};
   });
 
   CRM.calendar = {
-    CATEGORIES, VIEWS, LAYERS, REMINDERS, HOUR,
-    whenText, categoryName, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go
+    CATEGORIES, VIEWS, LAYERS, REMINDERS, HOUR, TASK_DUR,
+    whenText, categoryName, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
+    plannedTasks, untimedOn, overdueTasks, planTask, rollOver
   };
 })(window.CRM);
