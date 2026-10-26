@@ -327,6 +327,11 @@ window.CRM = window.CRM || {};
     evt(1, 'Зустріч з друзями', 'personal', '18:30', 90);
     evt(2, 'День народження Андрія', 'personal', null, null);
     evt(3, 'Заняття з англійської', 'work', '11:00', 60);
+    // Повторювана подія: щотижня в пн, ср і пт (почалася два тижні тому)
+    events.push(base({
+      id: uid(), title: 'Ранкова пробіжка', date: D.addDays(T, -14), allDay: false, start: '07:00', dur: 30,
+      cat: 'health', remind: null, note: '', repeat: { freq: 'week', every: 1, days: [0, 2, 4], until: null, count: null }
+    }, D.addDays(T, -14)));
 
     return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, notifications };
   }

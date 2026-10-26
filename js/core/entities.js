@@ -55,9 +55,18 @@ window.CRM = window.CRM || {};
     events: {
       label: 'Подія', group: 'Події календаря', icon: 'calendar', iconClass: 'ico-event', section: 'calendar',
       title: (r) => r.title || 'Без назви',
-      sub: (r) => [fmt().date(r.date), CRM.calendar ? CRM.calendar.whenText(r) : null, CRM.calendar ? CRM.calendar.categoryName(r.cat) : null].filter(Boolean).join(' · '),
+      sub: (r) => {
+        const C = CRM.calendar;
+        const rep = C && C.repeatText ? C.repeatText(r) : '';
+        return [rep || fmt().date(r.date), C ? C.whenText(r) : null, C ? C.categoryName(r.cat) : null].filter(Boolean).join(' · ');
+      },
       text: (r) => [r.title, r.note],
-      route: (r) => ['calendar', { view: 'day', date: r.date, open: r.id }]
+      // Повторювана подія — найближчий повтор
+      route: (r) => {
+        const C = CRM.calendar;
+        const n = C && C.isSeries && C.isSeries(r) ? C.nextOccurrence(r, CRM.date.today()) : null;
+        return ['calendar', { view: 'day', date: n ? n.date : r.date, open: r.id, occ: n ? n.occ : null }];
+      }
     },
     transactions: {
       label: 'Транзакція', group: 'Транзакції', icon: 'receipt', iconClass: 'ico-payment', section: 'budget',

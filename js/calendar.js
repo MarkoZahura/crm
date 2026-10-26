@@ -12,10 +12,20 @@
      сітці. Галочка — виконати без підтвердження (є «Скасувати»). Невиконані з минулих
      днів — плашка «Перенести на сьогодні» (лише за командою, без автоматики).
 
+   • Повтори (етап 3): серія — один запис із правилом repeat; окремий день серії можна
+     перенести чи змінити «лише цей» (overrides) або скасувати (skip). Перетягування
+     переносить лише цей день; у формі — «Лише цю / Цю й наступні / Усі події серії».
+
    Подія: { id, title, date: 'РРРР-ММ-ДД', allDay, start: 'ГГ:ХХ' | null, dur: хвилини | null,
-            cat: id категорії, remind: хвилини до початку | null, note }
+            cat: id категорії, remind: хвилини до початку | null, note,
+            repeat?: { freq: 'day'|'week'|'month'|'year', every: 1–99, days: [0–6] (лише week; 0 — пн),
+                       until: 'РРРР-ММ-ДД' | null, count: 1–999 | null } | null,
+            skip?: ['РРРР-ММ-ДД' — скасовані дні серії (початкові дати)],
+            overrides?: { 'РРРР-ММ-ДД' (початкова дата): { date?, allDay?, start?, dur?, title?, cat?, remind?, note? } } }
+   Для серії date — день, від якого рахуються повтори. Щомісячна подія на 29–31 число в коротшому
+   місяці — в останній день місяця (як регулярні платежі).
    Подія не виходить за межі доби (найпізніше — до 24:00).
-   Адреса: #/calendar?view=day|3days|week|month&date=РРРР-МM-ДД[&open=<id події>]
+   Адреса: #/calendar?view=day|3days|week|month&date=РРРР-МM-ДД[&open=<id події>[&occ=<початкова дата повтору>]]
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -149,12 +159,197 @@ window.CRM = window.CRM || {};
     return `${ev.start}–${fromMin(evEnd(ev))}`;
   }
 
-  /** Власні події, що припадають на [from, to]: [{ ev, date }]. */
-  function occurrences(from, to) {
-    return CRM.store.list('events')
-      .filter((e) => D.isDate(e.date) && e.date >= from && e.date <= to)
-      .map((e) => ({ ev: e, date: e.date }));
+  // ---------- Повтори ----------
+  const FREQS = ['day', 'week', 'month', 'year'];
+  const WEEKDAYS_ACC = ['понеділок', 'вівторок', 'середу', 'четвер', 'пʼятницю', 'суботу', 'неділю'];
+  const UNIT_FORMS = {
+    day: ['день', 'дні', 'днів'], week: ['тиждень', 'тижні', 'тижнів'],
+    month: ['місяць', 'місяці', 'місяців'], year: ['рік', 'роки', 'років']
+  };
+  const MAX_EVERY = 99;
+  const MAX_COUNT = 999;
+  const FAR = '9999-12-31';
+  const TIME_F = ['allDay', 'start', 'dur'];
+  const TEXT_F = ['title', 'cat', 'remind', 'note'];
+  const plural = (n, forms) => fmt.plural(n, forms);
+
+  function isSeries(ev) { return !!(ev && ev.repeat && FREQS.includes(ev.repeat.freq) && D.isDate(ev.date)); }
+
+  /** Правило повтору в чистому вигляді (однаковий порядок полів — щоб порівнювати рядком) або null. */
+  function normRule(r, date) {
+    if (!r || !FREQS.includes(r.freq)) return null;
+    const out = { freq: r.freq, every: clamp(Math.round(Number(r.every) || 1), 1, MAX_EVERY), days: null, until: null, count: null };
+    if (r.freq === 'week') {
+      const days = Array.from(new Set((Array.isArray(r.days) ? r.days : []).map(Number)))
+        .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b);
+      out.days = days.length ? days : [D.isDate(date) ? D.weekday(date) : 0];
+    }
+    if (D.isDate(r.until)) out.until = r.until;
+    else if (Number(r.count) > 0) out.count = clamp(Math.round(Number(r.count)), 1, MAX_COUNT);
+    return out;
   }
+  function ruleOf(ev) { return isSeries(ev) ? normRule(ev.repeat, ev.date) : null; }
+  const sameRule = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null);
+  function shiftDays(days, delta) {
+    return Array.from(new Set(days.map((d) => (((d + delta) % 7) + 7) % 7))).sort((a, b) => a - b);
+  }
+
+  /** Дати за правилом, починаючи від start, що потрапляють у [from, to]; limit — не більше стількох. */
+  function ruleDates(start, rule, from, to, limit) {
+    const out = [];
+    const max = limit || Infinity;
+    if (from < start) from = start;
+    if (from > to) return out;
+    const N = rule.every;
+    let guard = 0;
+    const push = (d) => { if (d >= from && d <= to) out.push(d); return out.length >= max; };
+    if (rule.freq === 'day') {
+      for (let k = Math.max(0, Math.ceil(D.diffDays(start, from) / N)); guard++ < 50000; k++) {
+        const d = D.addDays(start, k * N);
+        if (d > to || push(d)) break;
+      }
+      return out;
+    }
+    if (rule.freq === 'week') {
+      const w0 = D.startOfWeek(start);
+      let i = Math.floor(D.diffDays(w0, D.startOfWeek(from)) / 7);
+      i -= i % N;
+      for (; guard++ < 20000; i += N) {
+        const ws = D.addDays(w0, i * 7);
+        if (ws > to) break;
+        for (const wd of rule.days) {
+          const d = D.addDays(ws, wd);
+          if (d < start) continue;
+          if (d > to) return out;
+          if (push(d)) return out;
+        }
+      }
+      return out;
+    }
+    // Щомісяця / щороку: те саме число (у коротшому місяці — останній день)
+    const ps = D.parse(start);
+    const pf = D.parse(from);
+    const step = rule.freq === 'year' ? 12 * N : N;
+    const diffM = (pf.y * 12 + pf.m) - (ps.y * 12 + ps.m);
+    for (let k = Math.max(0, Math.floor(diffM / step) - 1); guard++ < 20000; k++) {
+      const d = D.addMonths(start, k * step, ps.d);
+      if (d > to || push(d)) break;
+    }
+    return out;
+  }
+
+  // Останній день серії «після N разів» рахується від початку — запамʼятовуємо
+  const countCache = new Map();
+  function lastByCount(ev, rule) {
+    const key = [ev.id, ev.updatedAt, ev.date, JSON.stringify(rule)].join('|');
+    if (countCache.has(key)) return countCache.get(key);
+    const list = ruleDates(ev.date, rule, ev.date, FAR, rule.count);
+    const last = list.length ? list[list.length - 1] : null;
+    if (countCache.size > 300) countCache.clear();
+    countCache.set(key, last);
+    return last;
+  }
+  /** Початкові дати повторів серії в [from, to] (скасовані й перенесені — теж). */
+  function seriesDates(ev, from, to) {
+    const rule = ruleOf(ev);
+    if (!rule) return [];
+    let end = to;
+    if (rule.until && rule.until < end) end = rule.until;
+    if (rule.count) {
+      const last = lastByCount(ev, rule);
+      if (!last) return [];
+      if (last < end) end = last;
+    }
+    return ruleDates(ev.date, rule, from, end);
+  }
+  function isOccurrence(ev, d) { return D.isDate(d) && seriesDates(ev, d, d).length === 1; }
+  function skipped(ev, d) { return Array.isArray(ev.skip) && ev.skip.includes(d); }
+
+  /** Як виглядає повтор серії, що за правилом припадає на день orig (з урахуванням змін «лише цього»). */
+  function instanceOf(ev, orig) {
+    const o = (ev.overrides && ev.overrides[orig]) || {};
+    const inst = Object.assign({}, ev);
+    TIME_F.concat(TEXT_F).forEach((f) => { if (o[f] !== undefined) inst[f] = o[f]; });
+    inst.date = D.isDate(o.date) ? o.date : orig;
+    inst.occ = orig;
+    delete inst.overrides;
+    delete inst.skip;
+    return inst;
+  }
+
+  /** Повтори однієї серії, що показуються в [from, to]: [{ ev: повтор, date, series }]. */
+  function seriesInstances(e, from, to) {
+    const out = [];
+    const ov = e.overrides || {};
+    seriesDates(e, from, to).forEach((d) => {
+      if (skipped(e, d)) return;
+      const o = ov[d];
+      if (o && D.isDate(o.date) && o.date !== d) return; // перенесено на інший день — нижче
+      out.push({ ev: instanceOf(e, d), date: d, series: e });
+    });
+    Object.keys(ov).forEach((orig) => {
+      const o = ov[orig];
+      if (!o || !D.isDate(o.date) || o.date === orig || o.date < from || o.date > to) return;
+      if (skipped(e, orig) || !isOccurrence(e, orig)) return;
+      out.push({ ev: instanceOf(e, orig), date: o.date, series: e });
+    });
+    return out;
+  }
+
+  /** Власні події (і повтори серій), що припадають на [from, to]: [{ ev, date, series? }]. */
+  function occurrences(from, to) {
+    const out = [];
+    CRM.store.list('events').forEach((e) => {
+      if (!D.isDate(e.date)) return;
+      if (isSeries(e)) { seriesInstances(e, from, to).forEach((x) => out.push(x)); return; }
+      if (e.date >= from && e.date <= to) out.push({ ev: e, date: e.date });
+    });
+    return out;
+  }
+
+  const byWhen = (a, b) => a.date.localeCompare(b.date) || (a.ev.allDay ? -1 : 0) - (b.ev.allDay ? -1 : 0) ||
+    String(a.ev.start || '').localeCompare(String(b.ev.start || ''));
+  /** Найближчий повтор не раніше за from (або останній, якщо серія вже скінчилась): { date, occ } | null. */
+  function nextOccurrence(ev, from) {
+    if (!isSeries(ev)) return null;
+    const f = from || D.today();
+    const next = seriesInstances(ev, f, D.addDays(f, 800)).sort(byWhen)[0];
+    if (next) return { date: next.date, occ: next.ev.occ };
+    const past = seriesInstances(ev, ev.date, D.addDays(f, -1)).sort(byWhen);
+    const last = past[past.length - 1];
+    return last ? { date: last.date, occ: last.ev.occ } : null;
+  }
+  /** Повтор серії, що показується в день date (або null). */
+  function occOn(ev, date) {
+    const x = D.isDate(date) ? seriesInstances(ev, date, date).sort(byWhen)[0] : null;
+    return x ? x.ev.occ : null;
+  }
+
+  /** «щотижня у середу, до 20 грудня 2026» — опис правила (з малої літери). */
+  function ruleText(rule, base) {
+    if (!rule) return '';
+    const N = rule.every;
+    const every = (unit) => `кожні ${N} ${plural(N, UNIT_FORMS[unit])}`;
+    let s;
+    if (rule.freq === 'day') s = N === 1 ? 'щодня' : every('day');
+    else if (rule.freq === 'week') {
+      const k = rule.days.join(',');
+      const names = rule.days.map((d) => CRM.WEEKDAYS_SHORT[d].toLowerCase()).join(', ');
+      if (N === 1 && k === '0,1,2,3,4') s = 'щобудня (пн–пт)';
+      else if (N === 1 && rule.days.length === 7) s = 'щодня';
+      else if (rule.days.length === 1) s = (N === 1 ? 'щотижня' : every('week')) + ' у ' + WEEKDAYS_ACC[rule.days[0]];
+      else s = (N === 1 ? 'щотижня' : every('week')) + ': ' + names;
+    } else {
+      const p = D.parse(base);
+      if (rule.freq === 'month') s = (N === 1 ? 'щомісяця' : every('month')) + `, ${p.d} числа`;
+      else s = (N === 1 ? 'щороку' : every('year')) + `, ${p.d} ${CRM.MONTHS_GEN[p.m - 1]}`;
+    }
+    if (rule.until) s += `, до ${fmt.date(rule.until)}`;
+    else if (rule.count) s += `, ${rule.count} ${plural(rule.count, ['раз', 'рази', 'разів'])}`;
+    return s;
+  }
+  /** «Щотижня у середу» — для пошуку, Кошика, підказок; '' — не повторюється. */
+  function repeatText(ev) { return isSeries(ev) ? capitalize(ruleText(ruleOf(ev), ev.date)) : ''; }
 
   // ---------- Задачі в плані ----------
   /** Час задачі в сітці (хв від 00:00) або null — задача «без часу». */
@@ -237,10 +432,10 @@ window.CRM = window.CRM || {};
     const nm = nowMin();
 
     if (L.own) {
-      occurrences(from, to).forEach(({ ev, date }) => {
+      occurrences(from, to).forEach(({ ev, date, series }) => {
         const it = {
-          key: 'own:' + ev.id + ':' + date, kind: 'own', title: ev.title || 'Без назви', color: catColor(ev.cat),
-          icon: 'calendar', ev, date, editable: true
+          key: 'own:' + ev.id + ':' + (ev.occ || date), kind: 'own', title: ev.title || 'Без назви', color: catColor(ev.cat),
+          icon: 'calendar', ev, date, editable: true, series: !!series, rep: series ? repeatText(series) : ''
         };
         if (ev.allDay || !ev.start) {
           put(date, 'allDay', Object.assign(it, { sub: categoryName(ev.cat) }));
@@ -402,6 +597,7 @@ window.CRM = window.CRM || {};
   }
 
   async function moveEvent(ev, changes, kind) {
+    if (ev.occ) { await moveOccurrence(ev, changes, kind); return; }
     const cur = CRM.store.get('events', ev.id);
     if (!cur) return;
     const before = { date: cur.date, start: cur.start, dur: cur.dur, allDay: cur.allDay };
@@ -417,8 +613,243 @@ window.CRM = window.CRM || {};
 
   async function removeEvent(ev) {
     const batch = await CRM.store.softDelete('events', ev.id);
-    ui.toast(`Подію «${ev.title}» видалено`, {
+    ui.toast(`${isSeries(ev) ? 'Серію подій' : 'Подію'} «${ev.title}» видалено`, {
       action: { label: 'Скасувати', onClick: () => CRM.store.restoreBatch(batch) }
+    });
+  }
+
+  // ---------- Повтори: зміни ----------
+  const normF = (f, v) => {
+    if (f === 'note') return v || '';
+    if (f === 'allDay') return !!v;
+    if (f === 'remind' || f === 'dur') return v == null || v === '' ? null : Number(v);
+    return v == null ? null : v;
+  };
+  /** Лишити в зміні «лише цього» тільки те, що справді відрізняється від серії. */
+  function cleanOverride(series, occ, o) {
+    const n = {};
+    if (D.isDate(o.date) && o.date !== occ) n.date = o.date;
+    if (o.allDay !== undefined && normF('allDay', o.allDay) !== normF('allDay', series.allDay)) {
+      n.allDay = !!o.allDay;
+      n.start = o.allDay ? null : (o.start || null);
+      n.dur = o.allDay ? null : normF('dur', o.dur);
+    } else {
+      ['start', 'dur'].forEach((f) => { if (o[f] !== undefined && normF(f, o[f]) !== normF(f, series[f])) n[f] = o[f]; });
+    }
+    TEXT_F.forEach((f) => { if (o[f] !== undefined && normF(f, o[f]) !== normF(f, series[f])) n[f] = o[f]; });
+    return Object.keys(n).length ? n : null;
+  }
+  /** Прибрати з зміни «лише цього» поля, які щойно змінили для багатьох повторів. */
+  function stripOverride(o, ch) {
+    if (!o) return null;
+    const n = Object.assign({}, o);
+    Object.keys(ch).forEach((f) => { delete n[f]; });
+    if (TIME_F.some((f) => f in ch)) TIME_F.forEach((f) => { delete n[f]; });
+    return Object.keys(n).length ? n : null;
+  }
+  function withOverride(series, occ, o) {
+    const ov = Object.assign({}, series.overrides || {});
+    const clean = o ? cleanOverride(series, occ, o) : null;
+    if (clean) ov[occ] = clean; else delete ov[occ];
+    return ov;
+  }
+  /** Знімок полів серії для «Скасувати». */
+  function seriesSnap(s) {
+    return { repeat: s.repeat || null, skip: s.skip || [], overrides: s.overrides || {} };
+  }
+
+  /** Перетягування повтору: переноситься лише цей день серії. */
+  async function moveOccurrence(inst, changes, kind) {
+    const cur = CRM.store.get('events', inst.id);
+    if (!cur) return;
+    const snap = seriesSnap(cur);
+    const o = Object.assign({}, (cur.overrides || {})[inst.occ] || {}, changes);
+    if (changes.date === undefined && !o.date) o.date = inst.date;
+    const saved = await CRM.store.patch('events', cur.id, { overrides: withOverride(cur, inst.occ, o) });
+    const shown = instanceOf(saved, inst.occ);
+    const text = kind === 'resize'
+      ? `«${shown.title}» (лише цього разу): ${whenText(shown)} (${durText(shown.dur)})`
+      : `«${shown.title}» перенесено лише цього разу: ${dayShort(shown.date)}${shown.allDay ? '' : ', ' + whenText(shown)}`;
+    ui.toast(text, {
+      type: 'success',
+      action: { label: 'Скасувати', onClick: () => CRM.store.patch('events', cur.id, snap) }
+    });
+  }
+
+  /** Що людина змінила у формі порівняно з показаним повтором. */
+  function changedFields(inst, V) {
+    const ch = {};
+    if (V.date !== inst.date) ch.date = V.date;
+    if (TIME_F.some((f) => normF(f, V[f]) !== normF(f, inst[f]))) TIME_F.forEach((f) => { ch[f] = V[f]; });
+    TEXT_F.forEach((f) => { if (normF(f, V[f]) !== normF(f, inst[f])) ch[f] = V[f]; });
+    return ch;
+  }
+  /** Чи є в серії повтори раніше за цей (не скасовані). */
+  function hasEarlier(series, occ) {
+    return seriesDates(series, series.date, D.addDays(occ, -1)).some((d) => !skipped(series, d));
+  }
+  function pickKeys(obj, test) {
+    const out = {};
+    Object.keys(obj || {}).forEach((k) => { if (test(k)) out[k] = obj[k]; });
+    return out;
+  }
+  function freshCopy(rec) {
+    const c = CRM.utils.deepClone(rec);
+    ['id', 'createdAt', 'updatedAt', 'deletedAt', 'deleteBatch', 'deleteHead'].forEach((f) => { delete c[f]; });
+    return c;
+  }
+
+  /**
+   * Зберегти зміни повтору з форми. scope: 'one' | 'following' | 'all'.
+   * inst — показаний повтор, V — значення форми, rule — правило з форми (null — «Не повторюється»).
+   * Повертає функцію «Скасувати».
+   */
+  async function saveScoped(series, inst, V, rule, scope) {
+    const occ = inst.occ;
+    const ch = changedFields(inst, V);
+    const old = ruleOf(series);
+    const same = sameRule(rule, old);
+    const before = CRM.utils.deepClone(series);
+    const undoSeries = () => CRM.store.save('events', before);
+
+    if (scope === 'one') {
+      const o = Object.assign({}, (series.overrides || {})[occ] || {}, ch);
+      await CRM.store.patch('events', series.id, { overrides: withOverride(series, occ, o) });
+      return undoSeries;
+    }
+    if (scope === 'following' && !hasEarlier(series, occ)) scope = 'all';
+    const shift = ch.date ? D.diffDays(occ, ch.date) : 0;
+
+    if (!rule) {
+      // «Не повторюється»: цей повтор стає звичайною подією
+      const single = Object.assign(freshCopy(series), V, { repeat: null, skip: [], overrides: {} });
+      if (scope === 'all') {
+        await CRM.store.save('events', Object.assign({}, single, { id: series.id, createdAt: series.createdAt }));
+        return undoSeries;
+      }
+      const a = Object.assign({}, series, { repeat: Object.assign({}, old, { until: D.addDays(occ, -1), count: null }),
+        skip: (series.skip || []).filter((d) => d < occ), overrides: pickKeys(series.overrides, (k) => k < occ) });
+      await CRM.store.save('events', a);
+      const b = await CRM.store.save('events', single);
+      return async () => { await CRM.store.removeForever('events', b.id); await undoSeries(); };
+    }
+
+    const nextRule = (base) => {
+      let r = rule;
+      if (same) {
+        r = Object.assign({}, old);
+        if (base && old.count) r.count = Math.max(1, old.count - seriesDates(series, series.date, D.addDays(occ, -1)).length);
+        if (shift && r.freq === 'week') r.days = shiftDays(r.days, shift);
+      }
+      return r;
+    };
+    const carry = same && !shift;   // правило й дні ті самі — окремі зміни окремих днів лишаються
+
+    if (scope === 'all') {
+      const s = CRM.utils.deepClone(series);
+      Object.keys(ch).forEach((f) => { if (f !== 'date') s[f] = ch[f]; });
+      if (shift) s.date = D.addDays(series.date, shift);
+      s.repeat = nextRule(false);
+      if (carry) {
+        const ov = Object.assign({}, s.overrides || {});
+        const mine = stripOverride(ov[occ], ch);
+        if (mine) ov[occ] = mine; else delete ov[occ];
+        s.overrides = ov;
+      } else { s.overrides = {}; s.skip = []; }
+      await CRM.store.save('events', s);
+      return undoSeries;
+    }
+
+    // «Цю й наступні»: стара серія закінчується напередодні, з цього дня — нова
+    const a = Object.assign({}, series, {
+      repeat: Object.assign({}, old, { until: D.addDays(occ, -1), count: null }),
+      skip: (series.skip || []).filter((d) => d < occ),
+      overrides: pickKeys(series.overrides, (k) => k < occ)
+    });
+    const b = freshCopy(series);
+    Object.keys(ch).forEach((f) => { if (f !== 'date') b[f] = ch[f]; });
+    b.date = D.addDays(occ, shift);
+    b.repeat = nextRule(true);
+    if (carry) {
+      b.skip = (series.skip || []).filter((d) => d > occ);
+      b.overrides = pickKeys(series.overrides, (k) => k > occ);
+      const mine = stripOverride((series.overrides || {})[occ], ch);
+      if (mine) b.overrides[occ] = mine;
+    } else { b.skip = []; b.overrides = {}; }
+    await CRM.store.save('events', a);
+    const saved = await CRM.store.save('events', b);
+    return async () => { await CRM.store.removeForever('events', saved.id); await undoSeries(); };
+  }
+
+  /** Видалити повтор: лише цей (skip), цей і наступні (серія закінчується) або всю серію (Кошик). */
+  async function deleteScoped(series, inst, scope) {
+    const occ = inst.occ;
+    const title = series.title || 'Без назви';
+    if (scope === 'following' && !hasEarlier(series, occ)) scope = 'all';
+    if (scope === 'all') { await removeEvent(series); return; }
+    const snap = seriesSnap(series);
+    const undo = { label: 'Скасувати', onClick: () => CRM.store.patch('events', series.id, snap) };
+    if (scope === 'one') {
+      const ov = Object.assign({}, series.overrides || {});
+      delete ov[occ];
+      await CRM.store.patch('events', series.id, { skip: (series.skip || []).filter((d) => d !== occ).concat(occ).sort(), overrides: ov });
+      ui.toast(`«${title}»: ${dayShort(inst.date)} — скасовано`, { action: undo });
+      return;
+    }
+    await CRM.store.patch('events', series.id, {
+      repeat: Object.assign({}, ruleOf(series), { until: D.addDays(occ, -1), count: null }),
+      skip: (series.skip || []).filter((d) => d < occ),
+      overrides: pickKeys(series.overrides, (k) => k < occ)
+    });
+    ui.toast(`«${title}»: повтори з ${dayShort(inst.date)} видалено`, { action: undo });
+  }
+
+  /** Вікно «Лише цю / Цю й наступні / Усі події серії». Повертає Promise<scope | null>. */
+  function chooseScope(o) {
+    return new Promise((resolve) => {
+      const del = o.mode === 'delete';
+      const day = dayShort(o.inst.date);
+      const opts = [
+        o.allowOne ? { id: 'one', label: 'Лише цю', sub: del ? `${day} — інші дні серії лишаються` : day } : null,
+        { id: 'following', label: 'Цю й наступні', sub: `${day} і всі наступні` },
+        { id: 'all', label: 'Усі події серії', sub: del ? 'Уся серія перейде в Кошик (можна відновити протягом 30 днів)'
+          : o.reset ? 'Окремі зміни окремих днів буде скинуто' : 'Від першого дня серії' }
+      ].filter(Boolean);
+      let value = opts[0].id;
+      let result = null;
+      const list = h('div', { class: 'kal-scope', role: 'radiogroup', 'aria-label': del ? 'Що видалити' : 'Що змінити' });
+      const draw = (focusIt) => {
+        ui.mount(list, opts.map((x) => h('button', {
+          type: 'button', role: 'radio', class: 'kal-scope-opt' + (x.id === value ? ' active' : ''),
+          'aria-checked': x.id === value ? 'true' : 'false', tabIndex: x.id === value ? 0 : -1, dataset: { scope: x.id },
+          onClick: () => { value = x.id; draw(true); },
+          onDblclick: () => { value = x.id; result = value; dlg.close('confirm'); }
+        },
+        h('span', { class: 'kal-scope-dot', 'aria-hidden': 'true' }),
+        h('span', { class: 'kal-scope-main' },
+          h('span', { class: 'kal-scope-label' }, x.label),
+          h('span', { class: 'kal-scope-sub' }, x.sub)))));
+        if (focusIt) { const a = list.querySelector('.kal-scope-opt.active'); if (a) a.focus({ preventScroll: true }); }
+      };
+      list.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const i = opts.findIndex((x) => x.id === value);
+        value = opts[clamp(i + (e.key === 'ArrowDown' ? 1 : -1), 0, opts.length - 1)].id;
+        draw(true);
+      });
+      draw(false);
+      const okBtn = ui.button({
+        label: del ? 'Видалити' : 'Зберегти', variant: del ? 'danger' : 'primary',
+        onClick: () => { result = value; dlg.close('confirm'); }
+      });
+      const dlg = ui.modal({
+        title: del ? 'Видалити повторювану подію' : 'Змінити повторювану подію', size: 'sm', center: true, className: 'kal-scope-modal',
+        body: list,
+        footer: [ui.button({ label: 'Скасувати', onClick: () => dlg.close('cancel') }), okBtn],
+        initialFocus: list.querySelector('.kal-scope-opt.active'),
+        onClose: () => resolve(result)
+      });
     });
   }
 
@@ -882,7 +1313,7 @@ window.CRM = window.CRM || {};
 
   // ---------- Відкрити пункт ----------
   function openItem(it) {
-    if (it.kind === 'own') openEditor(it.ev.id);
+    if (it.kind === 'own') openEditor(it.ev.id, null, it.ev.occ || null);
     else if (it.kind === 'task') CRM.tasks.openTask(it.task.id);
     else if (it.kind === 'gcal') showGoogle(it.gev);
     else if (it.onOpen) it.onOpen();
@@ -1041,13 +1472,23 @@ window.CRM = window.CRM || {};
     return btn;
   }
 
-  /** Відкрити форму: id — наявна подія; preset — значення нової. */
-  function openEditor(id, preset) {
+  /**
+   * Відкрити форму: id — наявна подія; preset — значення нової;
+   * occ — для серії: початкова дата повтору, який відкрили (інакше — найближчий).
+   */
+  function openEditor(id, preset, occ) {
     const cur = id ? CRM.store.get('events', id) : null;
     if (id && !cur) { ui.toast('Цієї події більше немає', { type: 'error' }); return null; }
     if (cur && cur.deletedAt) { ui.toast('Подія в Кошику — віднови її, щоб відкрити'); return null; }
     closeQuick();
-    const ev = cur ? CRM.utils.deepClone(cur) : Object.assign({
+    const series0 = cur && isSeries(cur) ? cur : null;
+    let inst = null;   // повтор серії, який редагуємо
+    if (series0) {
+      let o = occ && isOccurrence(series0, occ) && !skipped(series0, occ) ? occ : null;
+      if (!o) { const n = nextOccurrence(series0, D.today()); o = n ? n.occ : null; }
+      inst = o ? instanceOf(series0, o) : null;
+    }
+    const ev = inst ? CRM.utils.deepClone(inst) : cur ? CRM.utils.deepClone(cur) : Object.assign({
       title: '', date: D.today(), allDay: false, start: '09:00', dur: 60, cat: lastCat(), remind: 15, note: ''
     }, preset || {});
     if (!ev.allDay && !ev.start) ev.allDay = true;
@@ -1058,7 +1499,7 @@ window.CRM = window.CRM || {};
 
     const titleIn = ui.input({ value: ev.title, maxlength: 200, placeholder: 'Наприклад, Заняття з англійської', 'aria-label': 'Назва' });
     const fTitle = ui.field({ label: 'Назва', required: true, input: titleIn });
-    const dateIn = ui.dateInput({ value: ev.date, clearable: false, ariaLabel: 'Дата' });
+    const dateIn = ui.dateInput({ value: ev.date, clearable: false, ariaLabel: 'Дата', onChange: () => repDateChanged() });
     const startIn = ui.timeInput({ value: fromMin(s0), ariaLabel: 'Початок' });
     const endIn = ui.timeInput({ value: fromMin(Math.min(DAY_MIN, s0 + span)), ariaLabel: 'Кінець' });
     const durEl = h('span', { class: 'kal-dur subtle' });
@@ -1095,6 +1536,157 @@ window.CRM = window.CRM || {};
     fRemind.hidden = allDay;
     const noteIn = ui.textarea({ value: ev.note || '', rows: 3, maxlength: 2000, placeholder: 'Необовʼязково: що підготувати, посилання, адреса…', 'aria-label': 'Нотатки' });
 
+    // --- Повторення ---
+    const rule0 = series0 ? ruleOf(series0) : null;
+    // Для наявної серії підписи й дні тижня рахуються від її першого дня, а не від показаного повтору
+    const repBase = () => (series0 ? series0.date : (dateIn.dateValue || ev.date));
+    const rp = {
+      mode: presetOf(rule0, repBase()),
+      every: rule0 ? rule0.every : 1,
+      unit: rule0 ? rule0.freq : 'week',
+      days: rule0 && rule0.days ? rule0.days.slice() : [D.weekday(repBase())],
+      daysTouched: !!rule0,
+      end: rule0 ? (rule0.until ? 'until' : rule0.count ? 'count' : 'never') : 'never',
+      until: rule0 && rule0.until ? rule0.until : null,
+      count: rule0 && rule0.count ? rule0.count : 10
+    };
+    const repSel = ui.select([], { 'aria-label': 'Повторення' });
+    const everyIn = ui.input({ value: String(rp.every), inputmode: 'numeric', maxlength: 2, 'aria-label': 'Інтервал повтору', class: 'input kal-rep-num' });
+    const unitSel = ui.select([], { 'aria-label': 'Одиниця повтору' });
+    const wdays = h('div', { class: 'kal-wdays', role: 'group', 'aria-label': 'Дні тижня' });
+    const endSel = ui.select([{ value: 'never', label: 'Ніколи' }, { value: 'until', label: 'До дати' }, { value: 'count', label: 'Після кількох разів' }],
+      { value: rp.end, 'aria-label': 'Закінчення повтору' });
+    const untilIn = ui.dateInput({
+      value: rp.until || D.addMonths(ev.date, 3), clearable: false, ariaLabel: 'Повторювати до',
+      onChange: (v) => { rp.until = v; fRepeat.setError(null); repSummary(); }
+    });
+    if (!rp.until) rp.until = untilIn.dateValue;
+    const countIn = ui.input({ value: String(rp.count), inputmode: 'numeric', maxlength: 3, 'aria-label': 'Скільки разів', class: 'input kal-rep-num' });
+    const countWord = h('span', { class: 'subtle' });
+    const customBox = h('div', { class: 'kal-rep-custom' },
+      h('div', { class: 'kal-rep-row' }, h('span', { class: 'kal-rep-lbl' }, 'Кожні'), everyIn, unitSel),
+      wdays);
+    const countBox = h('span', { class: 'kal-rep-row' }, countIn, countWord);
+    const endBox = h('div', { class: 'kal-rep-row kal-rep-end' }, h('span', { class: 'kal-rep-lbl' }, 'Закінчення'), endSel, untilIn, countBox);
+    const repSum = h('div', { class: 'kal-rep-sum' });
+    const fRepeat = ui.field({ label: 'Повторення', input: repSel });
+    const repErrEl = fRepeat.querySelector('.field-error');
+    [customBox, endBox, repSum].forEach((x) => fRepeat.insertBefore(x, repErrEl));
+
+    function fillRepOptions() {
+      const b = repBase();
+      const p = D.parse(b);
+      ui.mount(repSel, [
+        ['', 'Не повторюється'], ['day', 'Щодня'], ['weekdays', 'Щобудня (пн–пт)'],
+        ['week', `Щотижня (у ${WEEKDAYS_ACC[D.weekday(b)]})`], ['month', `Щомісяця (${p.d} числа)`],
+        ['year', `Щороку (${p.d} ${CRM.MONTHS_GEN[p.m - 1]})`], ['custom', 'Свій варіант…']
+      ].map(([v, l]) => h('option', { value: v }, l)));
+      repSel.value = rp.mode;
+    }
+    function fillUnits() {
+      ui.mount(unitSel, FREQS.map((f) => h('option', { value: f }, plural(rp.every, UNIT_FORMS[f]))));
+      unitSel.value = rp.unit;
+    }
+    function drawWdays() {
+      ui.mount(wdays, CRM.WEEKDAYS_SHORT.map((w, i) => h('button', {
+        type: 'button', class: 'kal-wday' + (rp.days.includes(i) ? ' active' : ''), 'aria-pressed': rp.days.includes(i) ? 'true' : 'false',
+        'aria-label': capitalize(CRM.WEEKDAYS[i]), title: capitalize(CRM.WEEKDAYS[i]), dataset: { wd: String(i) },
+        onClick: () => {
+          const on = rp.days.includes(i);
+          if (on && rp.days.length === 1) return;   // хоч один день лишається
+          rp.days = on ? rp.days.filter((d) => d !== i) : rp.days.concat(i).sort((a, b) => a - b);
+          rp.daysTouched = true;
+          fRepeat.setError(null);
+          drawWdays();
+          repSummary();
+        }
+      }, w)));
+    }
+    /** Правило з форми (null — не повторюється). */
+    function formRule() {
+      const b = repBase();
+      let r;
+      if (!rp.mode) return null;
+      if (rp.mode === 'day') r = { freq: 'day', every: 1 };
+      else if (rp.mode === 'weekdays') r = { freq: 'week', every: 1, days: [0, 1, 2, 3, 4] };
+      else if (rp.mode === 'week') r = { freq: 'week', every: 1, days: [D.weekday(b)] };
+      else if (rp.mode === 'month' || rp.mode === 'year') r = { freq: rp.mode, every: 1 };
+      else r = { freq: rp.unit, every: rp.every, days: rp.unit === 'week' ? rp.days : null };
+      if (rp.end === 'until') r.until = rp.until;
+      else if (rp.end === 'count') r.count = rp.count;
+      return normRule(r, b);
+    }
+    function repSummary() {
+      countWord.textContent = plural(rp.count, ['раз', 'рази', 'разів']);
+      const r = formRule();
+      let s = r ? capitalize(ruleText(r, repBase())) : '';
+      if (r && series0) {
+        const first = ruleDates(series0.date, rule0, series0.date, FAR, 1)[0];
+        if (first) s += ` · серія з ${fmt.date(first)}`;
+      }
+      repSum.textContent = s;
+    }
+    function repRefresh() {
+      customBox.hidden = rp.mode !== 'custom';
+      wdays.hidden = rp.unit !== 'week';
+      endBox.hidden = !rp.mode;
+      repSum.hidden = !rp.mode;
+      untilIn.hidden = rp.end !== 'until';
+      countBox.hidden = rp.end !== 'count';
+      fillUnits();
+      drawWdays();
+      repSummary();
+    }
+    /** Змінили дату у формі: для нової серії підписи (і день тижня, якщо дні не вибирали) — від нової дати. */
+    function repDateChanged() {
+      if (series0) return;
+      if (!rp.daysTouched) rp.days = [D.weekday(repBase())];
+      fillRepOptions();
+      repRefresh();
+    }
+    /** Помилка в «Повторенні» або null. date — не раніше якої дати має бути «До дати» (null — не перевіряти). */
+    function repError(date) {
+      if (!rp.mode) return null;
+      if (rp.mode === 'custom') {
+        const n = Number(everyIn.value.trim());
+        if (!Number.isInteger(n) || n < 1 || n > MAX_EVERY) return `Інтервал — ціле число від 1 до ${MAX_EVERY}`;
+      }
+      if (rp.end === 'until' && (!D.isDate(rp.until) || (date && rp.until < date))) return 'Дата закінчення — не раніше за дату події';
+      if (rp.end === 'count') {
+        const n = Number(countIn.value.trim());
+        if (!Number.isInteger(n) || n < 1 || n > MAX_COUNT) return `Кількість разів — від 1 до ${MAX_COUNT}`;
+      }
+      return null;
+    }
+    repSel.addEventListener('change', () => {
+      const prev = formRule();
+      rp.mode = repSel.value;
+      // «Свій варіант…» починається з того, що було вибрано
+      if (rp.mode === 'custom' && prev) {
+        rp.unit = prev.freq;
+        rp.every = prev.every;
+        if (prev.days) { rp.days = prev.days.slice(); rp.daysTouched = true; }
+        everyIn.value = String(rp.every);
+      }
+      fRepeat.setError(null);
+      repRefresh();
+    });
+    everyIn.addEventListener('input', () => {
+      const n = parseInt(everyIn.value, 10);
+      if (n > 0) { rp.every = Math.min(n, MAX_EVERY); fillUnits(); repSummary(); }
+      fRepeat.setError(null);
+    });
+    unitSel.addEventListener('change', () => { rp.unit = unitSel.value; repRefresh(); });
+    endSel.addEventListener('change', () => { rp.end = endSel.value; fRepeat.setError(null); repRefresh(); });
+    countIn.addEventListener('input', () => {
+      const n = parseInt(countIn.value, 10);
+      if (n > 0) rp.count = Math.min(n, MAX_COUNT);
+      fRepeat.setError(null);
+      repSummary();
+    });
+    fillRepOptions();
+    repRefresh();
+
     async function save() {
       const title = titleIn.value.trim();
       if (!title) { fTitle.setError('Вкажи назву події'); titleIn.focus(); return; }
@@ -1109,16 +1701,43 @@ window.CRM = window.CRM || {};
         start = fromMin(s);
         dur = e - s;
       }
-      if (!canSave()) return;
       const rv = remindSel.value;
-      const rec = Object.assign({}, cur || {}, {
+      const V = {
         title, date: dateIn.dateValue || ev.date, allDay, start, dur, cat,
         remind: allDay || rv === '' ? null : Number(rv), note: noteIn.value.trim()
-      });
+      };
+      // Правило серії не змінювали (напр., переносять останній повтор на день пізніше) — дату закінчення не перевіряємо
+      const rErr = repError(series0 && inst && sameRule(formRule(), rule0) ? null : V.date);
+      if (rErr) { fRepeat.setError(rErr); return; }
+      const rule = formRule();
+      if (!canSave()) return;
       lsSet('crm.cal.cat', cat);
+
+      // Повтор серії: що саме змінити — лише цей день, цей і наступні чи всю серію
+      if (series0 && inst) {
+        const ruleChanged = !sameRule(rule, rule0);
+        const ch = changedFields(inst, V);
+        if (!ruleChanged && !Object.keys(ch).length) { dlg.close('saved'); return; }
+        const scope = await chooseScope({ mode: 'edit', allowOne: !ruleChanged, inst, reset: ruleChanged || !!ch.date });
+        if (!scope) return;
+        dlg.close('saved');
+        const undo = await saveScoped(series0, inst, V, rule, scope);
+        const day = dayShort(inst.date);
+        const text = !rule
+          ? (scope === 'all' || !hasEarlier(series0, inst.occ) ? `«${title}» більше не повторюється` : `«${title}»: повтори з ${day} прибрано`)
+          : scope === 'one' ? `«${title}» — змінено лише ${dayShort(V.date)}`
+            : scope === 'following' && hasEarlier(series0, inst.occ) ? `«${title}» — змінено з ${day} і далі` : `«${title}» — змінено всі події серії`;
+        ui.toast(text, { type: 'success', action: { label: 'Скасувати', onClick: undo } });
+        return;
+      }
+
+      const rec = Object.assign({}, cur || {}, V);
+      if (rule) rec.repeat = rule;
+      else if (cur && cur.repeat) { rec.repeat = null; rec.skip = []; rec.overrides = {}; }
       dlg.close('saved');
-      await CRM.store.save('events', rec);
-      ui.toast(cur ? 'Подію збережено' : `Подію додано: ${dayShort(rec.date)}${allDay ? '' : ', ' + whenText(rec)}`, { type: 'success' });
+      const saved = await CRM.store.save('events', rec);
+      if (cur) { ui.toast(rule && !rule0 ? `Подію збережено: ${ruleText(rule, saved.date)}` : 'Подію збережено', { type: 'success' }); return; }
+      ui.toast(`Подію додано: ${dayShort(saved.date)}${allDay ? '' : ', ' + whenText(saved)}${rule ? ' · ' + ruleText(rule, saved.date) : ''}`, { type: 'success' });
     }
     titleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
 
@@ -1126,13 +1745,22 @@ window.CRM = window.CRM || {};
       fTitle,
       h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), allDayBox),
       fTimes,
+      fRepeat,
       ui.field({ label: 'Категорія', input: catPicker(cat, (v) => { cat = v; }) }),
       fRemind,
       ui.field({ label: 'Нотатки', input: noteIn }));
     const footer = [
       cur ? ui.button({ label: 'Видалити', icon: 'trash', variant: 'danger-ghost', className: 'kal-del', onClick: async () => {
+        if (series0 && inst) {
+          const scope = await chooseScope({ mode: 'delete', allowOne: true, inst });
+          if (!scope) return;
+          dlg.close('delete');
+          await deleteScoped(series0, inst, scope);
+          return;
+        }
         const ok = await ui.confirm({
-          title: 'Видалити подію?', message: `«${cur.title}» перейде в Кошик — її можна відновити протягом 30 днів.`,
+          title: series0 ? 'Видалити серію подій?' : 'Видалити подію?',
+          message: `«${cur.title}» ${series0 ? '(усі повтори) ' : ''}перейде в Кошик — її можна відновити протягом 30 днів.`,
           confirmText: 'Видалити', danger: true
         });
         if (!ok) return;
@@ -1142,8 +1770,25 @@ window.CRM = window.CRM || {};
       ui.button({ label: 'Скасувати', onClick: () => dlg.close('button') }),
       ui.button({ label: cur ? 'Зберегти' : 'Додати', variant: 'primary', onClick: save })
     ];
-    const dlg = ui.modal({ title: cur ? 'Подія' : 'Нова подія', size: 'md', className: 'kal-editor-modal', body, footer, initialFocus: titleIn });
+    const dlg = ui.modal({
+      title: cur ? (series0 ? 'Повторювана подія' : 'Подія') : 'Нова подія',
+      size: 'md', className: 'kal-editor-modal', body, footer, initialFocus: titleIn
+    });
     return dlg;
+  }
+
+  /** Який пункт «Повторення» відповідає правилу. */
+  function presetOf(rule, base) {
+    if (!rule) return '';
+    if (rule.every !== 1) return 'custom';
+    if (rule.freq === 'day') return 'day';
+    if (rule.freq === 'week') {
+      const k = rule.days.join(',');
+      if (k === '0,1,2,3,4') return 'weekdays';
+      if (k === String(D.weekday(base))) return 'week';
+      return 'custom';
+    }
+    return rule.freq;   // month / year — число береться з першого дня серії
   }
 
   /** «+ Подія»: на сьогодні (наступна година), якщо сьогодні видно, інакше — на перший день. */
@@ -1194,10 +1839,10 @@ window.CRM = window.CRM || {};
     if (it.kind === 'task') return taskChip(it, cls, label, o);
     const el = h('button', {
       type: 'button', class: cls.join(' '), style: { '--c': it.color },
-      title: [label, it.sub].filter(Boolean).join(' · '), dataset: { key: it.key },
+      title: [label, it.sub, it.rep].filter(Boolean).join(' · '), dataset: { key: it.key },
       onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; openItem(it); }
     },
-    it.kind === 'own' ? null : CRM.icon(it.done ? 'check' : it.icon, { size: 'sm' }),
+    it.kind === 'own' ? (it.series ? CRM.icon('repeat', { size: 'sm', className: 'kal-rep-ico' }) : null) : CRM.icon(it.done ? 'check' : it.icon, { size: 'sm' }),
     o.time ? h('span', { class: 'kal-chip-time num' }, o.time) : null,
     h('span', { class: 'kal-chip-title' }, label),
     o.withSub && it.sub ? h('span', { class: 'kal-chip-sub' }, it.sub) : null);
@@ -1361,14 +2006,14 @@ window.CRM = window.CRM || {};
     const el = h('div', {
       class: cls.join(' '), role: 'button', tabIndex: 0, dataset: { key: it.key },
       'aria-label': `${it.title}, ${it.sub}`,
-      title: `${it.title}\n${it.sub}${it.kind === 'gcal' ? '\nGoogle Календар' : it.kind === 'task' ? '\nЗадача' : ''}`,
+      title: `${it.title}\n${it.sub}${it.kind === 'gcal' ? '\nGoogle Календар' : it.kind === 'task' ? '\nЗадача' : it.rep ? '\n' + it.rep : ''}`,
       style: {
         '--c': it.color, top: px(it.startMin), height: px(Math.max(it.endMin - it.startMin, MIN_VIS * 0.8), true),
         left: `calc(${(it.col || 0) * w}% + 1px)`, width: `calc(${w}% - 3px)`
       }
     },
     it.kind === 'task' ? taskCheck(it.task) : null,
-    h('span', { class: 'kal-ev-title' }, it.title),
+    h('span', { class: 'kal-ev-title' }, it.series ? CRM.icon('repeat', { size: 'sm', className: 'kal-rep-ico' }) : null, it.title),
     h('span', { class: 'kal-ev-time num' }, it.sub),
     it.editable ? h('span', { class: 'kal-resize', 'aria-hidden': 'true', title: 'Потягни, щоб змінити тривалість' }) : null);
     el.addEventListener('click', () => { if (!clicksBlocked()) openItem(it); });
@@ -1683,8 +2328,12 @@ window.CRM = window.CRM || {};
     // Відкрити подію з адреси (пошук, сповіщення)
     if (p.open) {
       const id = p.open;
+      const ser = CRM.store.get('events', id);
+      // Для серії — повтор з адреси (occ) або той, що показується в цей день
+      const occ = D.isDate(p.occ) ? p.occ : ser && isSeries(ser) ? occOn(ser, anchor) : null;
       CRM.router.consumeParam('open');
-      setTimeout(() => openEditor(id), 0);
+      CRM.router.consumeParam('occ');
+      setTimeout(() => openEditor(id, null, occ), 0);
     }
 
     // Події Google не зберігаються в розділах даних — слухаємо окрему подію; тема — кольори
@@ -1764,6 +2413,7 @@ window.CRM = window.CRM || {};
   CRM.calendar = {
     CATEGORIES, VIEWS, LAYERS, REMINDERS, HOUR, TASK_DUR,
     whenText, categoryName, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
-    plannedTasks, untimedOn, overdueTasks, planTask, rollOver
+    plannedTasks, untimedOn, overdueTasks, planTask, rollOver,
+    FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn
   };
 })(window.CRM);

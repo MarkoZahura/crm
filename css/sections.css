@@ -1194,6 +1194,38 @@
 .kal-check { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 4px; border: 0; background: none; font-size: 14px; color: var(--text); text-align: left; }
 .kal-check .task-check { pointer-events: none; }
 .kal-editor-modal .modal-footer .kal-del { margin-right: auto; }
+
+/* Повтори: значок, поле «Повторення», вибір «Лише цю / Цю й наступні / Усі» */
+.kal-ev-title .kal-rep-ico { display: inline-block; width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; opacity: .75; }
+.kal-chip .kal-rep-ico { width: 11px; height: 11px; opacity: .85; }
+.kal-rep-custom { display: flex; flex-direction: column; gap: 8px; }
+.kal-rep-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.kal-rep-row .select { width: auto; min-width: 0; max-width: 100%; }
+.kal-rep-lbl { font-size: 13px; color: var(--text-2); }
+.kal-rep-num { width: 64px; text-align: center; }
+.kal-rep-end .date-trigger { min-width: 0; }
+.kal-wdays { display: flex; flex-wrap: wrap; gap: 6px; }
+.kal-wday {
+  width: 38px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-full);
+  background: var(--surface); font-size: 13px; color: var(--text-2);
+}
+.kal-wday:hover { border-color: var(--border-strong); color: var(--text); }
+.kal-wday.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.kal-rep-sum { font-size: 12.5px; color: var(--text-2); }
+.kal-rep-sum:empty { display: none; }
+.kal-scope { display: flex; flex-direction: column; gap: 6px; }
+.kal-scope-opt {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); text-align: left; color: var(--text);
+}
+.kal-scope-opt:hover { border-color: var(--border-strong); }
+.kal-scope-opt.active { border-color: var(--accent); background: var(--accent-soft); }
+.kal-scope-dot { position: relative; width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; border: 2px solid var(--border-strong); border-radius: 50%; }
+.kal-scope-opt.active .kal-scope-dot { border-color: var(--accent); }
+.kal-scope-opt.active .kal-scope-dot::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; background: var(--accent); }
+.kal-scope-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kal-scope-label { font-size: 14px; font-weight: 500; }
+.kal-scope-sub { font-size: 12.5px; color: var(--text-2); }
 .kal-layers { min-width: 240px; }
 .kal-layers .kal-check { width: 100%; height: 34px; padding: 0 8px; border-radius: var(--radius-sm); }
 .kal-layers .kal-check:hover { background: var(--surface-2); }
