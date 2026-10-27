@@ -132,7 +132,7 @@ window.CRM = window.CRM || {};
 
   /**
    * Відкрити форму транзакції.
-   * opts: { id } — редагування; або { type, accountId, categoryId, date, amount, comment } — нова.
+   * opts: { id } — редагування; або { type, accountId, categoryId, subcategoryId, date, amount, comment } — нова.
    */
   function openTxForm(opts) {
     const o = opts || {};
@@ -154,7 +154,7 @@ window.CRM = window.CRM || {};
 
     const st = existing ? CRM.utils.deepClone(existing) : {
       type: o.type || 'expense', amount: o.amount || null, accountId: o.accountId || lastAccount(o.type || 'expense') || defaultAccount(),
-      toAccountId: null, toAmount: null, categoryId: o.categoryId || null, subcategoryId: null,
+      toAccountId: null, toAmount: null, categoryId: o.categoryId || null, subcategoryId: (o.categoryId && o.subcategoryId) || null,
       date: o.date || D.today(), comment: o.comment || ''
     };
     let toTouched = !isNew && st.type === 'transfer' && st.toAmount != null && st.toAmount !== st.amount;

@@ -285,13 +285,14 @@ window.CRM = window.CRM || {};
     const type = o.type || 'info';
     const iconName = type === 'success' ? 'checkCircle' : type === 'error' ? 'alert' : 'info';
     let timer = null;
-    const el = h('div', { class: 'toast toast-' + type },
+    const el = h('div', { class: 'toast toast-' + type + (o.actions && o.actions.length > 1 ? ' toast-multi' : '') },
       h('span', { class: 'toast-ico' }, CRM.icon(iconName)),
       h('div', { class: 'toast-msg' }, message),
-      o.action ? h('button', {
+      // action — одна кнопка; actions — кілька (напр., «Змінити» і «Скасувати»)
+      (o.actions || (o.action ? [o.action] : [])).map((a) => h('button', {
         type: 'button', class: 'toast-action',
-        onClick: () => { close(); o.action.onClick(); }
-      }, o.action.label) : null,
+        onClick: () => { close(); a.onClick(); }
+      }, a.label)),
       h('button', { type: 'button', class: 'toast-close', 'aria-label': 'Закрити', onClick: () => close() }, CRM.icon('x', { size: 'sm' })));
 
     function close() {
@@ -302,7 +303,7 @@ window.CRM = window.CRM || {};
     }
     function start() {
       clearTimeout(timer);
-      timer = setTimeout(close, o.duration || (o.action ? 7000 : 4000));
+      timer = setTimeout(close, o.duration || (o.action || o.actions ? 7000 : 4000));
     }
     el.addEventListener('mouseenter', () => clearTimeout(timer));
     el.addEventListener('mouseleave', start);

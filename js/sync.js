@@ -28,7 +28,7 @@ window.CRM = window.CRM || {};
   // Сховища, що синхронізувалися до появи «Харчування» (для пристроїв, які ввійшли ще тоді)
   const STORES_V1 = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
-  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget'];
+  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget', 'quickInput'];
   // Налаштування, що синхронізувалися з першої версії (для пристроїв, які ввійшли ще тоді)
   const SETTINGS_V1 = ['profile', 'accent', 'trainingProgram', 'trainingProfile'];
   const LS = 'crm.sync.';
@@ -294,6 +294,7 @@ window.CRM = window.CRM || {};
     if (v == null) return false;
     if (k === 'gcal') return !!v.clientId;
     if (k === 'driveBackup') return !!v.enabled;
+    if (k === 'quickInput') return !!v.accountId;
     return true;
   }
   /**

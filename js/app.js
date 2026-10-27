@@ -151,6 +151,12 @@ window.CRM = window.CRM || {};
       onClick: () => CRM.search.open()
     }, CRM.icon('search', { size: 'sm' }), h('span', { class: 'search-label' }, 'Пошук'), h('span', { class: 'kbd' }, isMac() ? '⌘ K' : 'Ctrl K'));
 
+    // ⚡ Швидке введення: той самий вікно, що й Ctrl+K, з підказками (на iPhone Ctrl+K немає)
+    el.quickBtn = CRM.quick && CRM.search && CRM.search.openQuick ? h('button', {
+      type: 'button', class: 'btn btn-ghost btn-icon quick-trigger', title: 'Швидке введення (' + (isMac() ? '⌘K' : 'Ctrl+K') + ')',
+      'aria-label': 'Швидке введення', onClick: () => CRM.search.openQuick()
+    }, CRM.icon('zap')) : null;
+
     el.themeBtn = h('button', {
       type: 'button', id: 'theme-toggle', class: 'btn btn-ghost btn-icon',
       onClick: () => theme.toggle()
@@ -168,7 +174,7 @@ window.CRM = window.CRM || {};
 
     const topbar = h('header', { class: 'topbar' },
       h('div', { class: 'topbar-left' }, el.burger, el.date),
-      h('div', { class: 'topbar-right' }, el.searchBtn, el.themeBtn, el.bellBtn, h('span', { class: 'topbar-divider' }), el.newTaskBtn));
+      h('div', { class: 'topbar-right' }, el.searchBtn, el.quickBtn, el.themeBtn, el.bellBtn, h('span', { class: 'topbar-divider' }), el.newTaskBtn));
 
     el.page = h('main', { class: 'page', id: 'page', tabIndex: -1 });
     el.app = h('div', { class: 'app' }, el.sidebar, el.backdrop, h('div', { class: 'main' }, topbar, el.page));
@@ -284,6 +290,7 @@ window.CRM = window.CRM || {};
     if (!CRM.nutrition) missing.push('js/nutrition.js');
     if (!CRM.programs) missing.push('js/programs.js');
     if (!CRM.calendar) missing.push('js/calendar.js');
+    if (!CRM.quick) missing.push('js/quick.js');
     else if (CRM.tasks && !CRM.tasks.create) missing.push('js/tasks.js (нова версія)');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));

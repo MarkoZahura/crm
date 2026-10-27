@@ -559,13 +559,13 @@ window.CRM = window.CRM || {};
   /**
    * Вікно «Додати їжу»: пошук продукту → кількість → «Додати».
    * Після додавання вікно лишається відкритим (можна додати ще), «Готово» — закрити.
-   * opts: { date, meal, food }
+   * opts: { date, meal, food, grams (з food — кількість у грамах), query (текст пошуку) }
    */
   function openAdd(opts) {
     const o = opts || {};
     const date = o.date || curDate();
     let meal = o.meal || (date === D.today() ? mealByTime() : 'breakfast');
-    let query = '';
+    let query = o.query || '';
     const added = [];
     const body = h('div', { class: 'nut-add' });
     const foot = h('div', { class: 'nut-add-foot' });
@@ -635,6 +635,7 @@ window.CRM = window.CRM || {};
       let value;
       if (last) value = unit === 'portion' && last.portion ? last.portion.count : last.grams;
       if (!value) value = unit === 'portion' ? 1 : 100;
+      if (o.grams > 0 && food === o.food) { unit = 'g'; value = o.grams; }   // зі швидкого введення: «вівсянка 80 г»
       const amountIn = h('input', { class: 'input nut-amount', type: 'text', inputmode: 'decimal', 'aria-label': 'Кількість', value: dec(value) });
       const fAmount = ui.field({ input: amountIn });
       const preview = h('div', { class: 'nut-preview', 'aria-live': 'polite' });

@@ -63,22 +63,76 @@ window.CRM = window.CRM || {};
     return out;
   }
 
-  // ---------- Вікно пошуку ----------
-  function open(initial) {
-    if (dlg && dlg.isOpen) { dlg.body.querySelector('input').focus(); return; }
+  // ---------- Вікно пошуку (і швидкого введення — js/quick.js) ----------
+  /**
+   * initial — текст у полі; opts.quick — відкрито кнопкою ⚡ «Швидке введення».
+   */
+  function open(initial, opts) {
+    const o = opts || {};
+    if (dlg && dlg.isOpen) {
+      const inp = dlg.body.querySelector('input');
+      if (initial != null && initial !== '') { inp.value = initial; inp.dispatchEvent(new Event('input')); }
+      inp.focus();
+      return;
+    }
 
+    const Q = CRM.quick && typeof CRM.quick.plan === 'function' ? CRM.quick : null;
     let selected = 0;
     let flat = [];
+    let plan = null;        // що можна створити з рядка (CRM.quick.plan)
+    let prefer = null;      // вид, вибраний перемикачем «Подія | Задача | …»
+    let cardEl = null;
+    let renderedQ = null;   // для якого рядка показано результати
 
     const input = h('input', {
-      class: 'search-input', type: 'text', enterkeyhint: 'search', placeholder: 'Пошук задач, транзакцій, рахунків, цілей…',
-      'aria-label': 'Пошук', autocomplete: 'off', spellcheck: 'false', value: initial || ''
+      class: 'search-input', type: 'text', enterkeyhint: Q ? 'go' : 'search',
+      placeholder: Q ? (o.quick ? 'Напр.: завтра 15:00 урок · кава 65' : 'Пошук або швидке введення: «кава 65»…') : 'Пошук задач, транзакцій, рахунків, цілей…',
+      'aria-label': Q ? 'Пошук або швидке введення' : 'Пошук', autocomplete: 'off', spellcheck: 'false', value: initial || ''
     });
     const results = h('div', { class: 'search-results', role: 'listbox', 'aria-label': 'Результати пошуку' });
 
-    function choose(i) {
+    async function runQuick(more) {
+      if (!plan) return;
+      const opt = plan.options[plan.index];
+      dlg.close('select');
+      try {
+        if (more || !opt.ok) Q.details(opt);
+        else await Q.create(opt);
+      } catch (e) {
+        console.error(e);
+        CRM.ui.toast('Не вдалося створити запис: ' + (e && e.message ? e.message : e), { type: 'error' });
+      }
+    }
+    function setKind(kind) {
+      if (!plan) return;
+      prefer = kind;
+      plan = Q.plan(input.value, prefer);
+      if (!plan || !cardEl) return;
+      const fresh = renderCard();
+      cardEl.replaceWith(fresh);
+      cardEl = fresh;
+      setSelected(selected);
+      input.focus();
+    }
+    function cycleKind(step) {
+      if (!plan || plan.options.length < 2) return;
+      const i = (plan.index + step + plan.options.length) % plan.options.length;
+      setKind(plan.options[i].kind);
+    }
+    function renderCard() {
+      const idx = flat.findIndex((x) => x.quick);
+      const el = Q.card(plan, { onKind: setKind, onCreate: () => runQuick(false), onDetails: () => runQuick(true) });
+      el.classList.add('search-opt');
+      el.tabIndex = -1;
+      el.addEventListener('mousemove', () => { if (selected !== idx) setSelected(idx); });
+      el.addEventListener('click', (e) => { if (e.target === el || !e.target.closest('button')) { setSelected(idx); input.focus(); } });
+      return el;
+    }
+
+    function choose(i, more) {
       const item = flat[i];
       if (!item) return;
+      if (item.quick) { runQuick(more); return; }
       dlg.close('select');
       CRM.entities.open(item.store, item.rec.id);
     }
@@ -86,30 +140,59 @@ window.CRM = window.CRM || {};
     function setSelected(i) {
       if (!flat.length) return;
       selected = (i + flat.length) % flat.length;
-      results.querySelectorAll('.search-item').forEach((el, idx) => {
+      results.querySelectorAll('.search-opt').forEach((el, idx) => {
         el.classList.toggle('selected', idx === selected);
         el.setAttribute('aria-selected', idx === selected ? 'true' : 'false');
         if (idx === selected) el.scrollIntoView({ block: 'nearest' });
       });
     }
 
-    function render() {
-      const q = input.value;
-      flat = [];
-      selected = 0;
-      if (!q.trim()) {
-        CRM.ui.mount(results, CRM.ui.empty({
+    function emptyState() {
+      if (!Q) {
+        return CRM.ui.empty({
           icon: 'search', small: true, title: 'Що шукаємо?',
           text: 'Задачі (з описами й чеклістами), транзакції, рахунки, категорії, регулярні платежі, фінансові цілі, тренування, програми тренувань, харчування й навчання.'
-        }));
+        });
+      }
+      return h('div', { class: 'quick-empty' },
+        h('div', { class: 'quick-empty-title' }, CRM.icon(o.quick ? 'zap' : 'search', { size: 'sm' }), o.quick ? 'Що додати?' : 'Пошук і швидке введення'),
+        h('p', { class: 'quick-empty-text' }, o.quick
+          ? 'Напиши одним рядком — CRM створить подію, задачу, витрату чи запис їжі. Перед створенням покаже, що саме вийде.'
+          : 'Шукай задачі, події, транзакції, рахунки, тренування, харчування й навчання — або напиши, що створити:'),
+        h('div', { class: 'quick-examples' }, Q.EXAMPLES.map((x) => h('button', {
+          type: 'button', class: 'chip', tabIndex: -1,
+          onMousedown: (e) => e.preventDefault(),
+          onClick: () => { input.value = x; render(); input.focus(); }
+        }, x))),
+        h('p', { class: 'quick-empty-hint' }, 'Час → подія, лише дата → задача в «Плані дня», сума → витрата («+» — дохід), «г» чи «ккал» → їжа. Прості правила, не ШІ.'));
+    }
+
+    function render() {
+      const q = input.value;
+      renderedQ = q;
+      flat = [];
+      selected = 0;
+      cardEl = null;
+      if (!q.trim()) {
+        plan = null;
+        prefer = null;
+        CRM.ui.mount(results, emptyState());
         return;
       }
+      try { plan = Q ? Q.plan(q, prefer) : null; } catch (e) { console.error(e); plan = null; }
       const groups = searchAll(q);
-      if (!groups.length) {
+      if (!groups.length && !plan) {
         CRM.ui.mount(results, CRM.ui.empty({ icon: 'search', small: true, title: 'Нічого не знайдено', text: `За запитом «${q.trim()}» немає збігів.` }));
         return;
       }
       const nodes = [];
+      const pushCard = () => {
+        flat.push({ quick: true });
+        cardEl = renderCard();
+        nodes.push(cardEl);
+      };
+      // Є час, дата, сума чи вага — картка «Буде створено» над результатами пошуку
+      if (plan && plan.strong) pushCard();
       groups.forEach((g) => {
         const t = CRM.entities.types[g.store];
         nodes.push(h('div', { class: 'search-group-title' }, `${t.group} · ${g.items.length}`));
@@ -117,7 +200,7 @@ window.CRM = window.CRM || {};
           const idx = flat.length;
           flat.push(m);
           nodes.push(h('button', {
-            type: 'button', class: 'search-item', role: 'option', tabIndex: -1,
+            type: 'button', class: 'search-item search-opt', role: 'option', tabIndex: -1,
             onClick: () => choose(idx),
             onMousemove: () => { if (selected !== idx) setSelected(idx); }
           },
@@ -131,25 +214,39 @@ window.CRM = window.CRM || {};
           nodes.push(h('div', { class: 'search-more' }, `і ще ${g.items.length - PER_GROUP} — уточни запит`));
         }
       });
+      // Просто слова — спершу пошук, а внизу «Створити задачу «…»»
+      if (plan && !plan.strong) {
+        if (!groups.length) nodes.push(h('div', { class: 'quick-none' }, `Нічого не знайдено за запитом «${q.trim()}».`));
+        nodes.push(h('div', { class: 'search-group-title' }, 'Швидке введення'));
+        pushCard();
+      }
       CRM.ui.mount(results, nodes);
       setSelected(0);
     }
 
+    // Нове введення — перерахувати одразу; перемикач виду лишається, поки рядок не стерто
     input.addEventListener('input', CRM.utils.debounce(render, 80));
     input.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(selected + 1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(selected - 1); }
-      else if (e.key === 'Enter') { e.preventDefault(); choose(selected); }
+      else if (e.key === 'Tab' && plan && plan.options.length > 1) { e.preventDefault(); cycleKind(e.shiftKey ? -1 : 1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        // Рядок щойно змінився, а пошук ще не перерахувався (debounce) — рахуємо зараз
+        if (input.value !== renderedQ) render();
+        choose(selected, e.shiftKey);
+      }
     });
 
     const footer = h('div', { class: 'search-footer' },
       h('span', null, h('span', { class: 'kbd' }, '↑'), h('span', { class: 'kbd' }, '↓'), 'вибір'),
-      h('span', null, h('span', { class: 'kbd' }, 'Enter'), 'відкрити'),
+      h('span', null, h('span', { class: 'kbd' }, 'Enter'), Q ? 'відкрити / створити' : 'відкрити'),
       h('span', null, h('span', { class: 'kbd' }, 'Esc'), 'закрити'));
 
     dlg = CRM.ui.modal({
       hideHeader: true,
-      className: 'search-modal',
+      className: 'search-modal' + (Q ? ' has-quick' : ''),
       size: 'lg',
       body: [
         h('div', { class: 'search-input-wrap' }, CRM.icon('search'), input),
@@ -172,5 +269,8 @@ window.CRM = window.CRM || {};
     });
   }
 
-  CRM.search = { init, open, searchAll };
+  /** Кнопка ⚡ «Швидке введення» (верхня панель). */
+  function openQuick() { open('', { quick: true }); }
+
+  CRM.search = { init, open, openQuick, searchAll };
 })(window.CRM);

@@ -1450,3 +1450,54 @@ body.has-pwa-bar .toast-stack { bottom: calc(var(--pwa-bar-h, 48px) + 28px + env
 .pwa-icon-opt.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--text); font-weight: 600; }
 .pwa-icon-opt:disabled { cursor: default; opacity: .75; }
 .pwa-icon-opt:disabled.active { opacity: 1; }
+
+/* ---------- Швидке введення (js/quick.js у вікні пошуку) ---------- */
+.quick-trigger { color: var(--text-2); }
+.quick-trigger:hover { color: var(--accent-text); }
+.quick-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  width: 100%; margin: 2px 0 6px; padding: 12px; text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+}
+.quick-card.selected { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.quick-card.quick-weak { margin-top: 0; }
+.quick-none { padding: 10px 10px 2px; font-size: 13px; color: var(--text-2); }
+.quick-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.quick-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--accent-text); white-space: nowrap; }
+.quick-badge .icon { width: 15px; height: 15px; }
+.quick-kinds { margin-left: auto; flex-wrap: wrap; }
+.quick-kinds button { height: 26px; padding: 0 10px; font-size: 12.5px; }
+.quick-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.quick-main .list-row-icon { width: 32px; height: 32px; flex-shrink: 0; }
+.quick-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.quick-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.quick-parts { font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.quick-problem { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 12.5px; color: var(--warning); }
+.quick-problem .icon { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+.quick-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.quick-keys { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); flex-wrap: wrap; }
+.quick-keys .kbd:not(:first-child) { margin-left: 6px; }
+.quick-empty { padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.quick-empty-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.quick-empty-title .icon { color: var(--accent-text); }
+.quick-empty-text, .quick-empty-hint { margin: 0; font-size: 13.5px; color: var(--text-2); }
+.quick-empty-hint { font-size: 12.5px; color: var(--text-3); }
+.quick-examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-settings .quick-examples { margin: 10px 0 12px; }
+.quick-account-label { display: block; margin-bottom: 6px; }
+.quick-account { max-width: 420px; }
+.toast-action { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 700px), (hover: none) {
+  .quick-keys { display: none; }
+}
+@media (max-width: 520px) {
+  .quick-kinds { margin-left: 0; width: 100%; }
+  .quick-kinds button { flex: 1; padding: 0 6px; }
+  /* Тост із двома кнопками: текст — у першому рядку, кнопки — під ним */
+  .toast-multi { flex-wrap: wrap; row-gap: 6px; }
+  .toast-multi .toast-msg { flex-basis: calc(100% - 76px); }
+  .toast-multi .toast-close { order: 1; }
+  .toast-multi .toast-action { order: 2; }
+  .toast-multi .toast-msg + .toast-action { margin-left: 28px; }
+}
