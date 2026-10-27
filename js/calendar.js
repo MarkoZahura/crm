@@ -2049,6 +2049,7 @@ window.CRM = window.CRM || {};
     const dl = deadlineNote(t, date);
     const checklist = t.checklist || [];
     const meta = [];
+    if (CRM.tasks.labelsOf && CRM.tasks.labelsOf(t).length) meta.push(h('span', { class: 'task-labels' }, CRM.tasks.labelsOf(t).map(CRM.tasks.labelChip)));
     if (t.priority === 'high' && !t.done) meta.push(h('span', { class: 'kal-dmeta kal-dmeta-prio' }, h('span', { class: 'prio-dot prio-high' }), 'високий пріоритет'));
     if (dl) meta.push(h('span', { class: 'kal-dmeta' + (t.done ? '' : ' kal-dmeta-dl') }, CRM.icon('flag', { size: 'sm' }), dl));
     if (checklist.length) meta.push(h('span', { class: 'kal-dmeta' }, CRM.icon('listChecks', { size: 'sm' }), `${checklist.filter((c) => c.done).length}/${checklist.length}`));

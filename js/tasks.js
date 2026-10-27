@@ -12,6 +12,12 @@
      у «Плані дня» серед задач без часу.
    • Нагадування (з 27.10.2026, ⚡ «нагадай о 18:00 …»): remind — хв до часу в плані
      (planDate + planStart), а якщо його немає — до часу дедлайну; null — без нагадування.
+   • Мітки (з 28.10.2026): labels — ['диплом', 'дім'] (як написано; порівняння без регістру);
+     свій колір мітки — налаштування taskLabels { 'мітка': { color } } (синхронізується),
+     інакше колір за назвою. Фільтр за міткою, «Мітки» — перейменувати / колір / видалити.
+   • «Відкласти» (завтра / понеділок / через тиждень / інша дата): переносить день у плані,
+     а якщо плану немає — дедлайн; без дат — ставить у «План дня». «Дублювати» — копія без дат,
+     чекліст не відмічений.
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -53,8 +59,56 @@ window.CRM = window.CRM || {};
   }
   const view = {
     filter: loadPref('crm.tasks.filter', 'all'),
-    sort: loadPref('crm.tasks.sort', 'deadline')
+    sort: loadPref('crm.tasks.sort', 'deadline'),
+    label: loadPref('crm.tasks.label', '')
   };
+
+  // ---------- Мітки ----------
+  const LABEL_MAX = 40;
+  const AUTO_COLORS = ['blue', 'orange', 'aqua', 'yellow', 'magenta', 'green', 'violet', 'red', 'teal', 'brown', 'olive'];
+  /** Ключ мітки для порівняння: без регістру, без «#». */
+  const labelKey = (s) => CRM.utils.normalize(s).replace(/^#+/, '').trim();
+  function cleanLabel(s) { return String(s || '').replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, LABEL_MAX); }
+  function labelsOf(t) { return Array.isArray(t && t.labels) ? t.labels.filter((x) => typeof x === 'string' && x.trim()) : []; }
+  function labelSettings() { return CRM.store.getSetting('taskLabels', null) || {}; }
+  /** Колір мітки: свій (кабінет «Мітки») або стабільний за назвою. → id палітри. */
+  function labelColorId(name) {
+    const k = labelKey(name);
+    const own = labelSettings()[k];
+    if (own && own.color && CRM.dict.get('categoryColors', own.color)) return own.color;
+    let x = 0;
+    for (const ch of k) x = (x * 31 + ch.codePointAt(0)) >>> 0;
+    return AUTO_COLORS[x % AUTO_COLORS.length];
+  }
+  function labelChip(name) {
+    return h('span', { class: 'task-label', style: { '--lbl': CRM.dict.categoryColor(labelColorId(name)) }, dataset: { label: labelKey(name) } }, name);
+  }
+  /** Усі мітки з задач (активних і архівних): [{ name, key, active, total }] за абеткою. */
+  function allLabels() {
+    const m = new Map();
+    CRM.store.list('tasks').forEach((t) => labelsOf(t).forEach((l) => {
+      const k = labelKey(l);
+      if (!k) return;
+      const e = m.get(k) || { name: l, key: k, active: 0, total: 0 };
+      e.total++;
+      if (!t.done) e.active++;
+      m.set(k, e);
+    }));
+    return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+  }
+  const hasLabel = (t, key) => labelsOf(t).some((l) => labelKey(l) === key);
+  /** Додати мітки до списку без повторів (написання — як у вже наявної мітки). */
+  function mergeLabels(list, more) {
+    const known = new Map(allLabels().map((x) => [x.key, x.name]));
+    const out = labelsOf({ labels: list }).slice();
+    (more || []).forEach((raw) => {
+      const name = cleanLabel(raw);
+      const k = labelKey(name);
+      if (!k || out.some((l) => labelKey(l) === k)) return;
+      out.push(known.get(k) || name);
+    });
+    return out;
+  }
 
   // ---------- Дані ----------
   function activeTasks() { return CRM.store.list('tasks').filter((t) => !t.done); }
@@ -161,6 +215,8 @@ window.CRM = window.CRM || {};
     const doneCount = checklist.filter((c) => c.done).length;
     const files = CRM.store.listAttachments(t.id).length;
     const meta = [];
+    const labels = labelsOf(t);
+    if (labels.length) meta.push(h('span', { class: 'task-labels' }, labels.map(labelChip)));
     if (checklist.length) meta.push(h('span', { class: 'task-meta-item', title: 'Чекліст' }, CRM.icon('listChecks', { size: 'sm' }), `${doneCount}/${checklist.length}`));
     if (files) meta.push(h('span', { class: 'task-meta-item', title: 'Вкладення' }, CRM.icon('paperclip', { size: 'sm' }), String(files)));
     if (t.planDate && !t.done) meta.push(h('span', { class: 'task-meta-item task-plan' + (t.planDate < D.today() ? ' overdue' : ''), title: 'Заплановано в календарі' }, CRM.icon('target', { size: 'sm' }), 'План: ' + planLabel(t)));
@@ -180,6 +236,7 @@ window.CRM = window.CRM || {};
       o.compact ? null : statusBadge(t),
       priorityTag(t.priority),
       h('span', { class: 'task-due ' + (dl ? dl.cls : 'subtle') }, dl ? dl.label : 'Без дедлайну'),
+      !t.done && !o.compact && !o.archive ? snoozeButton(t.id) : null,
       o.archive ? ui.button({
         label: 'Відновити', icon: 'restore', size: 'sm',
         onClick: (e) => { e.stopPropagation(); reopen(t.id); }
@@ -225,6 +282,245 @@ window.CRM = window.CRM || {};
     }, fields || {}));
     CRM.notify.runRules();
     return rec;
+  }
+
+  // ---------- Відкласти ----------
+  function dayShort(d) { return `${CRM.WEEKDAYS_SHORT[D.weekday(d)]}, ${fmt.dateShort(d)}`; }
+  /** Варіанти: завтра, найближчий наступний понеділок (у понеділок — через тиждень), сьогодні + 7. */
+  function snoozeTargets() {
+    const T = D.today();
+    return [
+      { id: 'tomorrow', label: 'Завтра', date: D.addDays(T, 1) },
+      { id: 'monday', label: 'Понеділок', date: D.addDays(T, 7 - D.weekday(T)) },
+      { id: 'week', label: 'Через тиждень', date: D.addDays(T, 7) }
+    ];
+  }
+  /**
+   * Відкласти задачу на date: день у «Плані дня» (час лишається), якщо плану немає — дедлайн,
+   * якщо немає й дедлайну — поставити в «План дня» цього дня. Тост «Скасувати».
+   */
+  async function snooze(id, date) {
+    const t = CRM.store.get('tasks', id);
+    if (!t || t.deletedAt || t.done || !D.isDate(date)) return null;
+    const before = { planDate: t.planDate || null, planStart: t.planStart || null, planOrder: t.planOrder == null ? null : t.planOrder, deadline: t.deadline || null, deadlineTime: t.deadlineTime || null };
+    let changes;
+    let what = 'plan';
+    if (t.planDate) {
+      changes = { planDate: date };
+      if (!t.planStart && date !== t.planDate) changes.planOrder = nextPlanOrder(date, t.id);
+    } else if (t.deadline) {
+      changes = { deadline: date };
+      what = 'deadline';
+    } else {
+      changes = { planDate: date, planStart: null, planOrder: nextPlanOrder(date, t.id) };
+    }
+    await CRM.store.patch('tasks', id, changes);
+    CRM.notify.runRules();
+    ui.toast(`«${t.title}» відкладено на ${dayShort(date)}${what === 'deadline' ? ' (дедлайн)' : ''}`, {
+      type: 'success', duration: 8000,
+      action: {
+        label: 'Скасувати',
+        onClick: async () => {
+          if (!CRM.store.get('tasks', id)) return;
+          await CRM.store.patch('tasks', id, before);
+          CRM.notify.runRules();
+          ui.toast('Повернуто як було');
+        }
+      }
+    });
+    return changes;
+  }
+  /** Меню «Відкласти на…» біля кнопки. */
+  function snoozeMenu(anchor, id, onDone) {
+    const pick = (date) => { pop.close(); snooze(id, date).then((ch) => { if (ch && onDone) onDone(ch); }); };
+    const pop = ui.popover(anchor, h('div', { class: 'snooze-menu', role: 'menu', 'aria-label': 'Відкласти на' },
+      h('div', { class: 'snooze-title' }, 'Відкласти на…'),
+      snoozeTargets().map((x) => h('button', {
+        type: 'button', class: 'snooze-opt', role: 'menuitem', dataset: { when: x.id }, onClick: () => pick(x.date)
+      }, h('span', null, x.label), h('span', { class: 'snooze-date' }, dayShort(x.date)))),
+      h('button', {
+        type: 'button', class: 'snooze-opt', role: 'menuitem', dataset: { when: 'date' },
+        onClick: () => { pop.close(); snoozeToDate(id, onDone); }
+      }, h('span', null, 'Інша дата…'))), { className: 'snooze-pop' });
+    const first = pop.el.querySelector('.snooze-opt');
+    if (first) first.focus();
+    pop.el.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const opts = Array.from(pop.el.querySelectorAll('.snooze-opt'));
+      const i = opts.indexOf(document.activeElement);
+      opts[(i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length].focus();
+    });
+    return pop;
+  }
+  function snoozeToDate(id, onDone) {
+    const t = CRM.store.get('tasks', id);
+    if (!t) return;
+    const di = ui.dateInput({ value: D.addDays(D.today(), 1), ariaLabel: 'Нова дата' });
+    const err = h('div', { class: 'field-error', hidden: true });
+    const ok = ui.button({
+      label: 'Відкласти', variant: 'primary', className: 'snooze-ok',
+      onClick: async () => {
+        const d = di.dateValue;
+        if (!d) { err.textContent = 'Вибери дату'; err.hidden = false; return; }
+        dlg.close('force');
+        const ch = await snooze(id, d);
+        if (ch && onDone) onDone(ch);
+      }
+    });
+    const dlg = ui.modal({
+      title: 'Відкласти на дату', size: 'sm', center: true, className: 'snooze-modal',
+      body: [h('p', { class: 'modal-text' }, t.planDate ? 'Переїде день у «Плані дня» (час лишиться).' : t.deadline ? 'Переїде дедлайн.' : 'Задача зʼявиться в «Плані дня» цього дня.'), di, err],
+      footer: [ui.button({ label: 'Скасувати', onClick: () => dlg.close('cancel') }), ok],
+      initialFocus: ok
+    });
+  }
+  function snoozeButton(id) {
+    const btn = ui.button({
+      icon: 'clock', iconOnly: true, size: 'sm', variant: 'ghost', title: 'Відкласти', className: 'task-snooze',
+      onClick: (e) => { e.stopPropagation(); snoozeMenu(btn, id); }
+    });
+    btn.addEventListener('keydown', (e) => e.stopPropagation());
+    return btn;
+  }
+
+  // ---------- Дублювати ----------
+  /** Копія задачі: назва «… (копія)», опис, пріоритет, мітки, чекліст (усе не відмічене); без дат і вкладень. */
+  async function duplicate(id) {
+    const t = CRM.store.get('tasks', id);
+    if (!t || t.deletedAt) return null;
+    const rec = await create({
+      title: `${t.title || 'Без назви'} (копія)`, description: t.description || '', priority: t.priority || 'medium', status: 'todo',
+      labels: labelsOf(t).slice(),
+      checklist: (t.checklist || []).map((c) => ({ id: CRM.utils.uid(), text: c.text, done: false }))
+    });
+    ui.toast('Створено копію задачі', {
+      type: 'success', duration: 8000,
+      action: { label: 'Скасувати', onClick: async () => { if (CRM.store.get('tasks', rec.id)) await CRM.store.removeForever('tasks', rec.id); ui.toast('Копію прибрано'); } }
+    });
+    return rec;
+  }
+
+  // ---------- Керування мітками ----------
+  async function renameLabel(oldKey, newName) {
+    const name = cleanLabel(newName);
+    const nk = labelKey(name);
+    if (!nk) return false;
+    const changed = [];
+    CRM.store.list('tasks').forEach((t) => {
+      const ls = labelsOf(t);
+      if (!ls.some((l) => labelKey(l) === oldKey)) return;
+      const out = [];
+      ls.forEach((l) => {
+        const v = labelKey(l) === oldKey ? name : l;
+        if (!out.some((x) => labelKey(x) === labelKey(v))) out.push(v);
+      });
+      changed.push(Object.assign({}, t, { labels: out }));
+    });
+    if (changed.length) await CRM.store.saveMany('tasks', changed);
+    if (nk !== oldKey) {
+      const st = Object.assign({}, labelSettings());
+      if (st[oldKey] && !st[nk]) st[nk] = st[oldKey];
+      if (st[oldKey]) { delete st[oldKey]; await CRM.store.setSetting('taskLabels', st); }
+    }
+    if (view.label === oldKey) { view.label = nk; savePref('crm.tasks.label', nk); }
+    ui.toast(`Мітку перейменовано на «${name}» (${fmt.count(changed.length, ['задача', 'задачі', 'задач'])})`, { type: 'success' });
+    return true;
+  }
+  async function deleteLabel(key) {
+    const lb = allLabels().find((x) => x.key === key);
+    if (!lb) return false;
+    const ok = await ui.confirm({
+      title: `Видалити мітку «${lb.name}»?`,
+      message: `Її буде прибрано з ${fmt.count(lb.total, ['задачі', 'задач', 'задач'])}. Самі задачі лишаться.`,
+      confirmText: 'Видалити мітку', danger: true
+    });
+    if (!ok) return false;
+    const snapshot = [];
+    const changed = [];
+    CRM.store.list('tasks').forEach((t) => {
+      if (!hasLabel(t, key)) return;
+      snapshot.push({ id: t.id, labels: labelsOf(t).slice() });
+      changed.push(Object.assign({}, t, { labels: labelsOf(t).filter((l) => labelKey(l) !== key) }));
+    });
+    if (changed.length) await CRM.store.saveMany('tasks', changed);
+    const st = Object.assign({}, labelSettings());
+    const color = st[key];
+    if (color) { delete st[key]; await CRM.store.setSetting('taskLabels', st); }
+    if (view.label === key) { view.label = ''; savePref('crm.tasks.label', ''); }
+    ui.toast(`Мітку «${lb.name}» видалено`, {
+      type: 'success', duration: 8000,
+      action: {
+        label: 'Скасувати',
+        onClick: async () => {
+          const back = snapshot.map((x) => { const t = CRM.store.get('tasks', x.id); return t ? Object.assign({}, t, { labels: x.labels }) : null; }).filter(Boolean);
+          if (back.length) await CRM.store.saveMany('tasks', back);
+          if (color) await CRM.store.setSetting('taskLabels', Object.assign({}, labelSettings(), { [key]: color }));
+          ui.toast('Мітку повернуто');
+        }
+      }
+    });
+    return true;
+  }
+  async function setLabelColor(key, colorId) {
+    const st = Object.assign({}, labelSettings());
+    if (colorId) st[key] = { color: colorId }; else delete st[key];
+    await CRM.store.setSetting('taskLabels', st);
+  }
+  /** Вікно «Мітки задач»: колір, перейменувати, видалити. */
+  function openLabels() {
+    const body = h('div', { class: 'lbl-manage' });
+    let off = null;
+    function render() {
+      const list = allLabels();
+      if (!list.length) {
+        ui.mount(body, ui.empty({ icon: 'tag', small: true, title: 'Міток ще немає', text: 'Додай мітку в задачі (поле «Мітки») або через ⚡: «здати розділ #диплом».' }));
+        return;
+      }
+      ui.mount(body,
+        h('p', { class: 'subtle lbl-hint' }, 'Змінене імʼя застосовується до всіх задач з цією міткою; якщо така мітка вже є — вони обʼєднаються.'),
+        list.map((x) => {
+          const sw = h('button', {
+            type: 'button', class: 'lbl-swatch', style: { '--lbl': CRM.dict.categoryColor(labelColorId(x.name)) },
+            title: 'Колір мітки', 'aria-label': `Колір мітки «${x.name}»`,
+            onClick: () => colorMenu(sw, x)
+          });
+          const nameIn = h('input', { class: 'input input-sm lbl-name', value: x.name, maxlength: LABEL_MAX, 'aria-label': `Назва мітки «${x.name}»` });
+          const save = async () => {
+            const v = cleanLabel(nameIn.value);
+            if (!v) { nameIn.value = x.name; return; }
+            if (v === x.name) return;
+            await renameLabel(x.key, v);
+          };
+          nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); } if (e.key === 'Escape') { nameIn.value = x.name; } });
+          nameIn.addEventListener('change', save);
+          return h('div', { class: 'lbl-row', dataset: { label: x.key } },
+            sw, nameIn,
+            h('span', { class: 'lbl-count subtle' }, x.active === x.total ? fmt.count(x.total, ['задача', 'задачі', 'задач']) : `${x.active} активн. · ${x.total} усього`),
+            ui.button({ icon: 'trash', iconOnly: true, size: 'sm', variant: 'ghost', title: 'Видалити мітку', className: 'lbl-del', onClick: () => deleteLabel(x.key) }));
+        }));
+    }
+    function colorMenu(anchor, x) {
+      const cur = labelSettings()[x.key];
+      const pop = ui.popover(anchor, h('div', { class: 'lbl-colors' },
+        h('div', { class: 'swatches' }, CRM.dict.categoryColors.map((c) => h('button', {
+          type: 'button', class: 'swatch' + (labelColorId(x.name) === c.id ? ' active' : ''), style: { '--sw': CRM.dict.categoryColor(c.id) },
+          title: c.name, 'aria-label': c.name, dataset: { color: c.id },
+          onClick: async () => { pop.close(); await setLabelColor(x.key, c.id); }
+        }))),
+        cur ? h('button', { type: 'button', class: 'link-like lbl-auto', onClick: async () => { pop.close(); await setLabelColor(x.key, null); } }, 'Автоматично (за назвою)') : null), { align: 'start', className: 'lbl-colors-pop' });
+    }
+    render();
+    off = CRM.store.on(['tasks', 'settings'], () => {
+      if (body.contains(document.activeElement) && document.activeElement.classList.contains('lbl-name')) return;
+      render();
+    });
+    const dlg = ui.modal({
+      title: 'Мітки задач', size: 'sm', className: 'lbl-modal', body,
+      footer: [ui.button({ label: 'Готово', variant: 'primary', onClick: () => dlg.close('button') })],
+      onClose: () => { if (off) off(); }
+    });
+    return dlg;
   }
 
   async function reopen(id) {
@@ -412,6 +708,56 @@ window.CRM = window.CRM || {};
     }
     renderPlanQuick();
 
+    // --- Мітки ---
+    const labelsBox = h('div', { class: 'task-labels-edit' });
+    const labelIn = h('input', { class: 'input input-sm task-label-input', type: 'text', maxlength: LABEL_MAX, placeholder: 'Додати мітку…', 'aria-label': 'Нова мітка', autocomplete: 'off', enterkeyhint: 'done' });
+    const labelSugg = h('div', { class: 'task-label-sugg' });
+    function currentLabels() {
+      if (isNew) return labelsOf(task);
+      const cur = CRM.store.get('tasks', task.id);
+      return labelsOf(cur || task);
+    }
+    async function setLabels(list) {
+      await commit({ labels: list });
+      renderLabels();
+    }
+    function addLabel(v) {
+      const list = mergeLabels(currentLabels(), [v]);
+      labelIn.value = '';
+      if (list.length !== currentLabels().length) setLabels(list).then(() => labelIn.focus());
+      else renderSugg();
+    }
+    function renderSugg() {
+      const q = labelKey(labelIn.value);
+      const mine = new Set(currentLabels().map(labelKey));
+      const list = allLabels().filter((x) => !mine.has(x.key) && (!q || x.key.includes(q))).slice(0, 10);
+      const show = document.activeElement === labelIn || !!q;
+      ui.mount(labelSugg, show ? list.map((x) => h('button', {
+        type: 'button', class: 'chip task-label-sug', tabIndex: -1, dataset: { label: x.key },
+        onMousedown: (e) => e.preventDefault(), onClick: () => addLabel(x.name)
+      }, h('span', { class: 'task-label-dot', style: { '--lbl': CRM.dict.categoryColor(labelColorId(x.name)) } }), x.name)) : null);
+    }
+    function renderLabels() {
+      ui.mount(labelsBox, currentLabels().map((l) => h('span', { class: 'task-label task-label-x', style: { '--lbl': CRM.dict.categoryColor(labelColorId(l)) }, dataset: { label: labelKey(l) } },
+        l,
+        h('button', {
+          type: 'button', class: 'task-label-del', 'aria-label': `Прибрати мітку «${l}»`, title: 'Прибрати',
+          onClick: () => setLabels(currentLabels().filter((x) => labelKey(x) !== labelKey(l)))
+        }, CRM.icon('x', { size: 'sm' })))), labelIn);
+      renderSugg();
+    }
+    labelIn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (labelIn.value.trim()) addLabel(labelIn.value); }
+      else if (e.key === 'Backspace' && !labelIn.value) {
+        const list = currentLabels();
+        if (list.length) { e.preventDefault(); setLabels(list.slice(0, -1)).then(() => labelIn.focus()); }
+      }
+    });
+    labelIn.addEventListener('input', renderSugg);
+    labelIn.addEventListener('focus', renderSugg);
+    labelIn.addEventListener('blur', () => setTimeout(() => { if (labelIn.value.trim()) addLabel(labelIn.value); else renderSugg(); }, 150));
+    renderLabels();
+
     // --- Нагадування (до часу в плані або дедлайну) ---
     const remindOpts = remindList().slice();
     if (task.remind != null && !remindOpts.some((r) => r.v === task.remind)) remindOpts.push({ v: task.remind, label: `За ${task.remind} хв` });
@@ -576,6 +922,7 @@ window.CRM = window.CRM || {};
 
     // --- Нижня панель ---
     const footer = h('div', { class: 'drawer-footer-inner' });
+    const taskActions = h('div', { class: 'task-actions' });
     function renderFooter() {
       if (isNew) {
         ui.mount(footer,
@@ -585,6 +932,17 @@ window.CRM = window.CRM || {};
         return;
       }
       const cur = CRM.store.get('tasks', task.id) || task;
+      // «Відкласти» і «Дублювати» — рядком під назвою (у нижній панелі на вузькому екрані тісно)
+      const snoozeBtn = cur.done ? null : ui.button({
+        label: 'Відкласти', icon: 'clock', size: 'sm', className: 'task-act task-snooze-btn',
+        onClick: () => snoozeMenu(snoozeBtn, task.id, () => dlg.close('force'))
+      });
+      ui.mount(taskActions,
+        snoozeBtn,
+        ui.button({
+          label: 'Дублювати', icon: 'copy', size: 'sm', className: 'task-act task-dup', title: 'Копія задачі: без дат, чекліст не відмічений',
+          onClick: async () => { const rec = await duplicate(task.id); if (rec) { dlg.close('force'); setTimeout(() => openTask(rec.id), 0); } }
+        }));
       ui.mount(footer,
         ui.button({ label: 'Видалити', icon: 'trash', variant: 'danger-ghost', onClick: async () => { if (await remove(task.id)) dlg.close('force'); } }),
         h('span', { class: 'grow' }),
@@ -613,6 +971,7 @@ window.CRM = window.CRM || {};
     const doneBadge = !isNew && task.done ? h('span', { class: 'badge badge-success' }, 'В архіві') : null;
     const body = h('div', { class: 'task-editor' },
       titleField,
+      isNew ? null : taskActions,
       descIn,
       h('div', { class: 'editor-grid' },
         h('div', { class: 'editor-label' }, CRM.icon('calendar', { size: 'sm' }), 'Дедлайн'),
@@ -626,6 +985,8 @@ window.CRM = window.CRM || {};
           h('div', { class: 'field-hint' }, 'День, коли збираєшся робити задачу, — вона зʼявиться в «Календарі». Дедлайн — до коли треба встигнути.')),
         h('div', { class: 'editor-label' }, CRM.icon('bell', { size: 'sm' }), 'Нагадати'),
         h('div', { class: 'editor-value' }, remindSel, remindHint),
+        h('div', { class: 'editor-label' }, CRM.icon('tag', { size: 'sm' }), 'Мітки'),
+        h('div', { class: 'editor-value' }, labelsBox, labelSugg),
         h('div', { class: 'editor-label' }, CRM.icon('flag', { size: 'sm' }), 'Пріоритет'),
         h('div', { class: 'editor-value' }, prioSeg),
         h('div', { class: 'editor-label' }, CRM.icon('clock', { size: 'sm' }), 'Статус'),
@@ -673,6 +1034,7 @@ window.CRM = window.CRM || {};
       renderFooter();
       renderFiles();
       if (!checklistBox.contains(document.activeElement)) renderChecklist();
+      if (document.activeElement !== labelIn) renderLabels();
     });
 
     return dlg;
@@ -700,7 +1062,10 @@ window.CRM = window.CRM || {};
     let toolbar = null;
     let content;
     if (tab === 'active') {
-      const filtered = view.filter === 'all' ? active : active.filter((t) => t.status === view.filter);
+      const labels = allLabels();
+      if (view.label && !labels.some((x) => x.key === view.label)) { view.label = ''; savePref('crm.tasks.label', ''); }
+      const byStatus = view.filter === 'all' ? active : active.filter((t) => t.status === view.filter);
+      const filtered = view.label ? byStatus.filter((t) => hasLabel(t, view.label)) : byStatus;
       const sorted = sortTasks(filtered, view.sort);
       const sortSel = ui.select([
         { value: 'deadline', label: 'За дедлайном' },
@@ -716,12 +1081,31 @@ window.CRM = window.CRM || {};
           }, `${f.label} · ${n}`);
         })),
         h('label', { class: 'toolbar-sort' }, CRM.icon('sort', { size: 'sm' }), h('span', { class: 'sr-only' }, 'Сортування'), sortSel));
+      const shown = labels.filter((x) => x.active > 0 || x.key === view.label);
+      const labelBar = labels.length ? h('div', { class: 'toolbar task-label-bar' },
+        h('div', { class: 'chips', role: 'group', 'aria-label': 'Фільтр за міткою' },
+          h('button', {
+            type: 'button', class: 'chip' + (!view.label ? ' active' : ''), 'aria-pressed': !view.label ? 'true' : 'false', dataset: { label: '' },
+            onClick: () => { view.label = ''; savePref('crm.tasks.label', ''); CRM.router.rerender(); }
+          }, 'Усі мітки'),
+          shown.map((x) => h('button', {
+            type: 'button', class: 'chip task-label-chip' + (view.label === x.key ? ' active' : ''), 'aria-pressed': view.label === x.key ? 'true' : 'false', dataset: { label: x.key },
+            onClick: () => { view.label = view.label === x.key ? '' : x.key; savePref('crm.tasks.label', view.label); CRM.router.rerender(); }
+          }, h('span', { class: 'task-label-dot', style: { '--lbl': CRM.dict.categoryColor(labelColorId(x.name)) } }), `${x.name} · ${x.active}`))),
+        ui.button({ label: 'Мітки', icon: 'tag', size: 'sm', variant: 'ghost', className: 'task-labels-manage', onClick: () => openLabels() })) : null;
+      toolbar = [toolbar, labelBar];
 
       if (!active.length) {
         content = h('div', { class: 'card' }, ui.empty({
           icon: 'tasks', title: 'Ще немає задач — додай першу',
           text: 'Задачі з дедлайном потраплять у розклад на Головній і в нагадування.',
           action: { label: 'Додати задачу', icon: 'plus', onClick: () => openNew() }
+        }));
+      } else if (!sorted.length && view.label) {
+        const lb = labels.find((x) => x.key === view.label);
+        content = h('div', { class: 'card' }, ui.empty({
+          icon: 'tag', small: true, title: `Немає активних задач з міткою «${lb ? lb.name : view.label}»` + (view.filter !== 'all' ? ` і статусом «${CRM.dict.label('taskStatuses', view.filter)}»` : ''),
+          action: { label: 'Показати всі', variant: 'secondary', onClick: () => { view.label = ''; view.filter = 'all'; savePref('crm.tasks.label', ''); savePref('crm.tasks.filter', 'all'); CRM.router.rerender(); } }
         }));
       } else if (!sorted.length) {
         content = h('div', { class: 'card' }, ui.empty({
@@ -752,7 +1136,7 @@ window.CRM = window.CRM || {};
     }
   }
 
-  CRM.router.register('tasks', { title: 'Задачі', stores: ['tasks', 'attachments'], render });
+  CRM.router.register('tasks', { title: 'Задачі', stores: ['tasks', 'attachments', 'settings'], render });
 
   // ---------- Нагадування ----------
   CRM.notify.addRule(() => {
@@ -803,6 +1187,8 @@ window.CRM = window.CRM || {};
 
   CRM.tasks = {
     openNew, openTask, create, complete, reopen, remove, sortTasks, deadlineInfo, priorityTag, checkbox, taskRow,
+    labelsOf, labelChip, labelKey, labelColorId, allLabels, mergeLabels, openLabels, renameLabel, deleteLabel, setLabelColor,
+    snooze, snoozeTargets, snoozeMenu, duplicate,
     activeTasks, archivedTasks, nextPlanOrder, planLabel
   };
 })(window.CRM);

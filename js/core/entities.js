@@ -49,7 +49,7 @@ window.CRM = window.CRM || {};
         if (r.deadline) parts.push('дедлайн ' + fmt().relDay(r.deadline).toLowerCase());
         return parts.filter(Boolean).join(' · ');
       },
-      text: (r) => [r.title, r.description, (r.checklist || []).map((c) => c.text).join(' ')],
+      text: (r) => [r.title, r.description, (r.checklist || []).map((c) => c.text).join(' '), (Array.isArray(r.labels) ? r.labels : []).map((l) => l + ' #' + l).join(' ')],
       route: (r) => ['tasks', { tab: r.done ? 'archive' : null, open: r.id }]
     },
     events: {

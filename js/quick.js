@@ -10,6 +10,7 @@
      «переказ 1000 моно → готівка» → переказ між рахунками; «біг 5 км 28 хв», «віджимання 3×20» → журнал тренувань
      «ДР Марти 5 листопада» → день народження в «Людях»; «написав Марті» → «Поспілкувались»
      «кава 65; таксі 120» — кілька записів одним рядком (лише «;», дата переходить на наступні частини)
+     «пт здати розділ #диплом» — задача з міткою «диплом»
    parse(text) — розбір рядка без даних; plan(text) — варіанти з урахуванням рахунків,
    категорій та історії; create(option) / details(option) — створити запис або відкрити форму.
    ========================================================================== */
@@ -717,6 +718,11 @@ window.CRM = window.CRM || {};
     };
     const day = today || D.today();
     P.today = day;
+    // мітки задачі: «#диплом» (до всіх інших правил, щоб не потрапили в назву вправи чи суму)
+    T.forEach((t) => {
+      const lm = /^#([^#\s].*)$/.exec(t.raw.replace(/[,;.!?]+$/, ''));
+      if (lm) { t.tag = 'label'; (P.labels = P.labels || []).push(lm[1]); }
+    });
     passRemind(T, P);
     passTime(T, P);
     passIn(T, P, toMin(o.now) != null ? toMin(o.now) : toMin(D.nowTime()), day);
@@ -836,7 +842,7 @@ window.CRM = window.CRM || {};
     const cats = (CRM.calendar && CRM.calendar.CATEGORIES) || [];
     return cats.some((x) => x.id === c) ? c : 'personal';
   }
-  const TITLE_DROP = ['date', 'time', 'dur', 'prio', 'remind', 'repeat'];
+  const TITLE_DROP = ['date', 'time', 'dur', 'prio', 'remind', 'repeat', 'label'];
   /** «за 45 хв» → найближче з варіантів нагадування (5, 10, 15, 30 хв, 1–2 год, день). */
   function snapRemind(min) {
     if (min == null) return null;
@@ -903,6 +909,7 @@ window.CRM = window.CRM || {};
     if (!title) return null;
     const rec = { title, priority: P.prio ? 'high' : 'medium' };
     const parts = [];
+    if (P.labels && P.labels.length) rec.labels = CRM.tasks.mergeLabels ? CRM.tasks.mergeLabels([], P.labels) : P.labels.slice();
     const start = P.time ? P.time.start : null;
     if (P.deadline && (P.date || P.time)) {
       rec.deadline = dateFor(P, 'task') || P.today;
@@ -922,6 +929,7 @@ window.CRM = window.CRM || {};
       parts.push('без дати');
     }
     if (P.prio) parts.push('високий пріоритет');
+    if (rec.labels && rec.labels.length) parts.push(rec.labels.map((l) => '#' + l).join(' '));
     if (P.remind) {
       if (rec.planStart || rec.deadlineTime) {
         rec.remind = snapRemind(P.remind.before == null ? 0 : P.remind.before);
@@ -1023,7 +1031,7 @@ window.CRM = window.CRM || {};
     if (!P.money || !CRM.budget) return null;
     const accounts = ranked().filter((a) => !a.deletedAt && !a.archived);
     const explicit = accounts.length ? accountByWord(P, accounts) : null;
-    const comment = words(P, ['date', 'money', 'time', 'dur', 'cash', 'prio', 'food', 'remind', 'repeat', 'transfer'], explicit ? [explicit.index] : null);
+    const comment = words(P, ['date', 'money', 'time', 'dur', 'cash', 'prio', 'food', 'remind', 'repeat', 'transfer', 'label'], explicit ? [explicit.index] : null);
     const amount = P.money.amount;
     const hist = comment ? newest(CRM.store.list('transactions').filter((t) => t.type === kind && same(t.comment, comment)), 'date') : null;
     const guess = guessCategory(kind, comment, hist);
@@ -1077,7 +1085,7 @@ window.CRM = window.CRM || {};
     if (!CRM.nutrition) return null;
     const asGrams = !P.food && P.money && !P.money.cur && !P.money.sign;
     if (!P.food && !asGrams) return null;
-    const name = words(P, ['date', 'time', 'dur', 'food', 'meal', 'prio'].concat(asGrams ? ['money'] : []));
+    const name = words(P, ['date', 'time', 'dur', 'food', 'meal', 'prio', 'label'].concat(asGrams ? ['money'] : []));
     const date = dateFor(P, 'meal') || P.today;
     const meal = P.meal || mealByTime();
     const mealName = CRM.dict.label('mealTypes', meal) || 'Перекус';
@@ -1163,7 +1171,7 @@ window.CRM = window.CRM || {};
     if (!from && to) from = defaultAccount(accounts, to.id);
     const extra = [];
     found.forEach((f) => { extra.push(f.i); if (f.prep != null) extra.push(f.prep); });
-    const comment = words(P, ['date', 'money', 'time', 'dur', 'cash', 'prio', 'food', 'remind', 'repeat', 'transfer'], extra);
+    const comment = words(P, ['date', 'money', 'time', 'dur', 'cash', 'prio', 'food', 'remind', 'repeat', 'transfer', 'label'], extra);
     const date = dateFor(P, 'transfer') || P.today;
     let amount = P.money.amount;
     let toAmount = amount;
@@ -1321,6 +1329,7 @@ window.CRM = window.CRM || {};
     const wo = built.workout && built.workout.rec && built.workout.rec.date <= P.today ? built.workout : null;   // майбутнє — це план (подія)
     if (wo && !P.time && (wo.sure || !P.money)) return 'workout';
     if (built.habit) return 'habit';
+    if (P.labels && P.labels.length && !P.time && !P.food && built.task) return 'task';   // «#мітка» буває лише в задач
     if (P.food) return 'meal';
     if (P.repeat) return 'event';
     if (P.deadline && (P.date || P.time)) return 'task';

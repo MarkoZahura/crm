@@ -45,6 +45,54 @@
 .task-due.due-overdue { color: var(--danger); font-weight: 500; }
 .task-due.due-today { color: var(--warning); font-weight: 500; }
 
+/* Мітки задач (з 28.10.2026) */
+.task-labels { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.task-label {
+  display: inline-flex; align-items: center; gap: 2px; max-width: 160px;
+  padding: 0 7px; height: 19px; border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--lbl, var(--accent)) 16%, transparent);
+  color: color-mix(in srgb, var(--lbl, var(--accent)) 82%, var(--text));
+  font-size: 11.5px; font-weight: 600; line-height: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.task-label-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--lbl, var(--accent)); margin-right: 5px; flex-shrink: 0; }
+.task-label-chip { display: inline-flex; align-items: center; }
+.task-label-bar { margin-top: -6px; }
+.task-label-bar .chips { flex: 1; min-width: 0; }
+.task-labels-manage { flex-shrink: 0; }
+.task-labels-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.task-label-x { height: 26px; line-height: 26px; padding: 0 2px 0 9px; font-size: 12.5px; max-width: 220px; }
+.task-label-del { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; opacity: .7; padding: 0; }
+.task-label-del:hover { opacity: 1; background: color-mix(in srgb, var(--lbl, var(--accent)) 20%, transparent); }
+.task-label-del .icon { width: 13px; height: 13px; }
+.task-label-input { flex: 1 1 140px; min-width: 120px; max-width: 240px; }
+.task-label-sugg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.task-label-sugg:empty { display: none; }
+.task-label-sug { display: inline-flex; align-items: center; height: 26px; font-size: 12.5px; }
+.task-snooze { color: var(--text-3); }
+.task-snooze:hover { color: var(--accent-text); }
+.snooze-menu { display: flex; flex-direction: column; min-width: 220px; padding: 4px; }
+.snooze-title { padding: 6px 10px 4px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.snooze-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 8px 10px; border: 0; border-radius: var(--radius); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.snooze-opt:hover, .snooze-opt:focus-visible { background: var(--surface-2); outline: none; }
+.snooze-date { font-size: 12.5px; color: var(--text-3); }
+.lbl-manage { display: flex; flex-direction: column; gap: 6px; }
+.lbl-hint { margin: 0 0 4px; font-size: 12.5px; }
+.lbl-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lbl-swatch { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; background: var(--lbl); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.lbl-name { flex: 1; min-width: 0; }
+.lbl-count { flex-shrink: 0; font-size: 12px; white-space: nowrap; }
+.lbl-colors { padding: 10px; display: flex; flex-direction: column; gap: 8px; max-width: 260px; }
+.lbl-colors .swatch { width: 26px; height: 26px; }
+.lbl-auto { font-size: 13px; }
+.task-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 12px; }
+.task-actions:empty { display: none; }
+@media (max-width: 520px) {
+  .lbl-count { display: none; }
+}
+
 /* Кружечок-чекбокс */
 .task-check {
   display: grid; place-items: center; flex-shrink: 0;
@@ -141,6 +189,7 @@
   .prio { min-width: 0; }
   .badge.status { min-width: 0; }
   .task-row.compact .task-cols { padding-left: 32px; }
+  .task-row .task-snooze { margin-left: auto; }
 }
 
 /* ---------- Головна ---------- */
