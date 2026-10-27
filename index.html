@@ -6,7 +6,13 @@
   <meta name="color-scheme" content="light dark">
   <meta name="robots" content="noindex, nofollow">
   <title>Моя CRM</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='17' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- Застосунок (PWA): іконка й назва на головному екрані, колір рядка стану (змінюється за темою — js/pwa.js) -->
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-title" content="Моя CRM">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
   <!-- Тема й акцент застосовуються ще до малювання сторінки, щоб не було «блимання» -->
   <script>
@@ -21,12 +27,19 @@
         root.setAttribute('data-theme', t);
         if (a) root.setAttribute('data-accent', a);
       } catch (e) { /* localStorage недоступний — лишається світла тема */ }
+      // Опис застосунку (manifest.json) — лише з адреси сайту: з file:// браузер його не прочитає й лає в консолі
+      if (location.protocol !== 'file:') {
+        var m = document.createElement('link');
+        m.rel = 'manifest';
+        m.href = 'manifest.json';
+        document.head.appendChild(m);
+      }
     })();
   </script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" crossorigin>
 
   <!-- Chart.js (діаграми) — з CDN, асинхронно; якщо не завантажиться, сайт працює без діаграм -->
   <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
@@ -90,6 +103,7 @@
   <script src="js/backup.js"></script>
   <script src="js/sync-config.js"></script>
   <script src="js/sync.js"></script>
+  <script src="js/pwa.js"></script>
 
   <!-- Запуск (завжди останній) -->
   <script src="js/app.js"></script>

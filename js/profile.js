@@ -1,7 +1,7 @@
 /* ==========================================================================
    profile.js — «Мій кабінет»: ім'я, пошта, телефон, тема й колір інтерфейсу,
-   службовий блок (сповіщення, Google Календар — див. gcal.js, експорт /
-   імпорт, демо-дані, очищення даних).
+   службовий блок (сповіщення, застосунок — див. pwa.js, синхронізація,
+   Google Календар — див. gcal.js, експорт / імпорт, демо-дані, очищення).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -135,12 +135,13 @@ window.CRM = window.CRM || {};
     }
     renderNotif();
 
+    const pwaBlock = moduleBlock('pwa');
     const syncBlock = moduleBlock('sync');
     const gcalBlock = moduleBlock('gcal');
 
-    const card = h('section', { class: 'card' }, notifRow, syncBlock, gcalBlock);
+    const card = h('section', { class: 'card' }, notifRow, pwaBlock, syncBlock, gcalBlock);
     card._refresh = renderNotif;
-    card._destroy = () => { [syncBlock, gcalBlock].forEach((b) => { if (b && b._destroy) b._destroy(); }); };
+    card._destroy = () => { [pwaBlock, syncBlock, gcalBlock].forEach((b) => { if (b && b._destroy) b._destroy(); }); };
     return card;
   }
 
@@ -311,7 +312,7 @@ window.CRM = window.CRM || {};
     document.addEventListener('crm:themechange', onTheme);
     document.addEventListener('crm:notifpermission', onPerm);
     const focus = route && route.params && route.params.focus;
-    if (focus === 'gcal' || focus === 'backup' || focus === 'sync') {
+    if (focus === 'gcal' || focus === 'backup' || focus === 'sync' || focus === 'pwa') {
       CRM.router.consumeParam('focus');
       requestAnimationFrame(() => {
         const el = document.getElementById(focus);

@@ -50,6 +50,10 @@ window.CRM = window.CRM || {};
   let flushAgain = false;
   let needsReconcile = false;
   let starting = null;
+  let signInTry = 0;         // номер спроби входу (щоб «Скасувати» відкинуло завислу)
+  let signInSlow = false;    // вікно входу Google не повертається довго
+  let signingIn = false;     // вікно входу відкрите (поки чекаємо — «підключення…», навіть якщо Firebase сказав «не ввійшов»)
+  let slowTimer = null;
 
   const pad = (n) => String(n).padStart(2, '0');
   const isFile = () => location.protocol === 'file:';
@@ -150,7 +154,7 @@ window.CRM = window.CRM || {};
     } else {
       stopListener();
       user = null;
-      if (phase !== 'error') phase = 'idle';
+      if (phase !== 'error' && !signingIn) phase = 'idle';
     }
     changed();
   }
@@ -175,22 +179,41 @@ window.CRM = window.CRM || {};
       ui.toast('Синхронізація працює лише на GitHub Pages або через локальний сервер — не при відкритті файлу.', { type: 'error', duration: 7000 });
       return false;
     }
+    const my = ++signInTry;
+    signingIn = true;
     try {
       phase = 'connecting';
       lastError = null;
+      signInSlow = false;
       changed();
       await ensureApp();
       const provider = new fb.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
+      // Вікно входу може «зависнути» (на iPhone у режимі застосунку) — тоді підкажемо й дамо скасувати
+      clearTimeout(slowTimer);
+      slowTimer = setTimeout(() => { if (my === signInTry && !user && phase === 'connecting') { signInSlow = true; changed(); } }, CRM.sync.SLOW_MS);
       await auth.signInWithPopup(provider);
       return true;
     } catch (e) {
+      if (my !== signInTry) return false; // цю спробу вже скасували
       const text = e.code === 'sdk' ? e.message : authErrorText(e);
       phase = user ? phase : 'idle';
       if (text) { lastError = { text, code: e.code }; ui.toast(text, { type: 'error', duration: 9000 }); }
       changed();
       return false;
+    } finally {
+      if (my === signInTry) { clearTimeout(slowTimer); signInSlow = false; signingIn = false; }
     }
+  }
+
+  /** «Скасувати» завислий вхід: кнопка знову активна, результат старої спроби ігнорується. */
+  function cancelSignIn() {
+    signInTry++;
+    clearTimeout(slowTimer);
+    signInSlow = false;
+    signingIn = false;
+    if (!user && phase === 'connecting') phase = 'idle';
+    changed();
   }
 
   async function signOut() {
@@ -615,6 +638,7 @@ window.CRM = window.CRM || {};
         actions.push(btn);
       } else if (s === 'connecting') {
         actions.push(ui.button({ label: 'Підключення…', size: 'sm', disabled: true }));
+        if (signInSlow) actions.push(ui.button({ label: 'Скасувати', size: 'sm', onClick: cancelSignIn }));
       } else {
         actions.push(ui.button({ label: 'Синхронізувати зараз', icon: 'refresh', size: 'sm', disabled: s === 'syncing', onClick: () => syncNow() }));
         actions.push(ui.button({ label: 'Вийти', size: 'sm', onClick: () => signOut() }));
@@ -643,6 +667,16 @@ window.CRM = window.CRM || {};
           h('div', null, 'Вкладені файли не синхронізуються — вони лишаються на пристрої, де їх додали.'),
           h('div', null, 'Налаштування Firebase — у README, розділ «Синхронізація».')));
       }
+      const iosApp = CRM.pwa && CRM.pwa.isStandalone() && CRM.pwa.isIOS();
+      if (signInSlow && s === 'connecting') {
+        parts.push(h('div', { class: 'callout callout-warning sync-slow', role: 'alert' }, CRM.icon('alert'), h('span', null,
+          h('strong', null, 'Вхід не завершився?'), iosApp
+            ? ' На iPhone у режимі застосунку вікно Google іноді не повертається в CRM. Закрий його, натисни «Скасувати» й спробуй ще раз. Якщо не виходить — поки що користуйся CRM у Safari: там твої дані й вхід уже є (README, розділ «Застосунок»).'
+            : ' Якщо вікно Google закрилося чи зависло — натисни «Скасувати» й спробуй ще раз.')));
+      } else if (!user && iosApp && s !== 'file') {
+        parts.unshift(h('div', { class: 'callout callout-info' }, CRM.icon('info'),
+          h('span', null, 'У застосунку на iPhone дані окремі від Safari — увійди, щоб отримати свої.')));
+      }
       if (lastError) parts.push(h('div', { class: 'callout callout-warning svc-error', role: 'alert' }, CRM.icon('alert'), h('span', null, lastError.text)));
       ui.mount(body, parts);
     }
@@ -667,7 +701,8 @@ window.CRM = window.CRM || {};
   }
 
   CRM.sync = {
-    init, status, signIn, signOut, syncNow, flush, settingsBlock,
-    STORES, SETTINGS, get user() { return user; }, pendingCount
+    init, status, signIn, cancelSignIn, signOut, syncNow, flush, settingsBlock,
+    STORES, SETTINGS, get user() { return user; }, pendingCount,
+    SLOW_MS: 20000 // через скільки показати «Вхід не завершився?»
   };
 })(window.CRM);
