@@ -5,6 +5,7 @@
      «пт купити подарунок» → задача в «Плані дня» на пʼятницю
      «кава 65», «+15000 зарплата» → витрата / дохід у Бюджеті
      «вівсянка 80 г», «обід 650 ккал» → запис у щоденнику харчування
+     «вода +2», «медитація», «читання 30 вчора» → відмітка звички (js/habits.js)
    parse(text) — розбір рядка без даних; plan(text) — варіанти з урахуванням рахунків,
    категорій та історії; create(option) / details(option) — створити запис або відкрити форму.
    ========================================================================== */
@@ -668,7 +669,7 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Варіанти ----------
-  const ORDER = ['event', 'task', 'expense', 'income', 'meal'];
+  const ORDER = ['habit', 'event', 'task', 'expense', 'income', 'meal'];
   function primaryKind(P) {
     if (P.food) return 'meal';
     if (P.deadline && (P.date || P.time)) return 'task';
@@ -686,8 +687,13 @@ window.CRM = window.CRM || {};
     if (raw.length < 2) return null;
     const P = parse(raw, today);
     if (!P) return null;
-    const strong = !!(P.time || P.date || P.food || P.money);
+    let strong = !!(P.time || P.date || P.food || P.money);
     const built = {};
+    // Звичка (js/habits.js): рядок = назва звички + число / «пропуск» / дата («вода +2», «медитація», «читання 30 вчора»)
+    if (CRM.habits && CRM.habits.quickOption) {
+      try { built.habit = CRM.habits.quickOption(P, { dateFor }); } catch (e) { console.error(e); }
+      if (built.habit) strong = true;
+    }
     if (CRM.calendar && CRM.calendar.categoryName) built.event = buildEvent(P);
     if (CRM.tasks && CRM.tasks.create) built.task = buildTask(P);
     if (P.money) { built.expense = buildTx(P, 'expense'); built.income = buildTx(P, 'income'); }
@@ -697,7 +703,7 @@ window.CRM = window.CRM || {};
     // «65» без опису — це пошук суми, а не запис
     if (P.money && !P.money.cur && !P.money.sign && !P.food && !P.time && !P.date &&
       !words(P, ['money']).length) return null;
-    const want = prefer && options.some((o) => o.kind === prefer) ? prefer : primaryKind(P);
+    const want = prefer && options.some((o) => o.kind === prefer) ? prefer : built.habit ? 'habit' : primaryKind(P);
     let index = options.findIndex((o) => o.kind === want);
     if (index < 0) index = 0;
     return { text: raw, strong, options, index, parsed: P };
@@ -706,6 +712,7 @@ window.CRM = window.CRM || {};
   // ---------- Створення ----------
   async function create(o) {
     if (!o || !o.ok) return details(o);
+    if (o.kind === 'habit') return CRM.habits.quickApply(o);
     let saved = null;
     let store = null;
     let text = '';
@@ -751,12 +758,14 @@ window.CRM = window.CRM || {};
     if (kind === 'task') return CRM.tasks.openTask(id);
     if (kind === 'expense' || kind === 'income') return CRM.budget.openTxForm({ id });
     if (kind === 'meal') return CRM.nutrition.openEntry(id);
+    if (kind === 'habit') return CRM.habits.openPage(id);
     return null;
   }
   /** «Детальніше»: відкрити звичайну форму, уже заповнену з рядка. */
   function details(o) {
     if (!o) return null;
     const r = o.rec || {};
+    if (o.kind === 'habit') return CRM.habits.openPage(r.habitId);
     if (o.kind === 'event') return CRM.calendar.openEditor(null, r);
     if (o.kind === 'task') {
       const pre = Object.assign({}, r);
@@ -831,7 +840,7 @@ window.CRM = window.CRM || {};
     return h('div', { class: 'setting-row quick-settings', id: 'quick' },
       h('div', { class: 'setting-text' },
         h('div', { class: 'setting-title' }, CRM.icon('zap', { size: 'sm' }), 'Швидке введення'),
-        h('div', { class: 'setting-desc' }, 'Ctrl+K або кнопка ⚡ угорі: напиши рядок — CRM створить подію, задачу, витрату чи запис їжі. Прості правила, не ШІ.'),
+        h('div', { class: 'setting-desc' }, 'Ctrl+K або кнопка ⚡ угорі: напиши рядок — CRM створить подію, задачу, витрату чи запис їжі або відмітить звичку («вода +2»). Прості правила, не ШІ.'),
         h('div', { class: 'quick-examples' }, EXAMPLES.map((x) => h('button', {
           type: 'button', class: 'chip', title: 'Спробувати', onClick: () => CRM.search.open(x, { quick: true })
         }, x))),

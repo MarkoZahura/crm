@@ -1587,3 +1587,155 @@ body.has-pwa-bar .toast-stack { bottom: calc(var(--pwa-bar-h, 48px) + 28px + env
   .ppl-imp-search { width: 100%; }
   .ppl-md .ppl-month { flex: 1; }
 }
+
+/* ---------- Звички (js/habits.js) ---------- */
+.hb-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.hb-head-date { font-size: 13px; font-weight: 400; }
+.hb-progress-text { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.hb-progress-text.all { color: var(--success); }
+.hb-progress { height: 4px; background: var(--surface-2); }
+.hb-progress span { display: block; height: 100%; background: var(--success); border-radius: 0 2px 2px 0; transition: width .3s var(--ease); }
+.hb-group { padding: 14px 20px 4px; font-size: 12px; font-weight: 600; color: var(--text-3); border-top: 1px solid var(--border); }
+.hb-rows-other .hb-row:first-child { border-top: 0; }
+.hb-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "main strip streak ctrl";
+  align-items: center; gap: 16px; padding: 10px 20px; border-top: 1px solid var(--border);
+}
+.hb-rows .hb-row:first-child { border-top: 0; }
+.hb-row-main { grid-area: main; display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none; border-radius: var(--radius-sm); }
+.hb-row-main:hover .hb-row-name { color: var(--accent-text); }
+.hb-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hb-row-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-row-sub { font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-row .hb-strip { grid-area: strip; }
+.hb-row .hb-streak { grid-area: streak; }
+.hb-row-ctrl { grid-area: ctrl; display: flex; justify-content: flex-end; min-width: 92px; }
+/* Смужка 7 днів */
+.hb-strip { display: flex; gap: 4px; }
+.hb-sd { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: var(--text-3); font-size: 10.5px; line-height: 1; }
+.hb-sd.today .hb-sd-wd { color: var(--text); font-weight: 700; }
+.hb-sd-box {
+  display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
+  background: var(--surface-3); color: #fff; font-weight: 700; font-size: 12px;
+}
+.hb-sd-box .icon { width: 13px; height: 13px; stroke-width: 2.6; }
+.hb-sd:hover .hb-sd-box { box-shadow: 0 0 0 2px var(--hb); }
+.hb-sd.done .hb-sd-box { background: var(--hb); }
+.hb-sd.part .hb-sd-box { background: color-mix(in srgb, var(--hb) 40%, var(--surface-3)); }
+.hb-sd.skip .hb-sd-box { background: repeating-linear-gradient(45deg, var(--surface-3) 0 3px, var(--border-strong) 3px 5px); color: var(--text-2); }
+.hb-sd.off .hb-sd-box, .hb-sd.future .hb-sd-box { background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+.hb-sd.todo .hb-sd-box { background: transparent; box-shadow: inset 0 0 0 2px var(--hb); }
+.hb-week-body .hb-strip { gap: 8px; }
+.hb-week-body .hb-sd { font-size: 12px; gap: 5px; }
+.hb-week-body .hb-sd-box { width: 36px; height: 36px; border-radius: 9px; }
+.hb-week-body .hb-sd-box .icon { width: 17px; height: 17px; }
+/* Серія */
+.hb-streak { display: inline-flex; align-items: center; gap: 3px; min-width: 38px; color: var(--text-3); font-size: 13px; }
+.hb-streak .icon { width: 16px; height: 16px; }
+.hb-streak.on { color: #e8590c; }
+:root[data-theme="dark"] .hb-streak.on { color: #ff8a3d; }
+/* Галочка й кількість */
+.hb-check {
+  display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; padding: 0;
+  border: 2px solid var(--hb); border-radius: 50%; background: transparent; color: transparent; transition: background .12s, color .12s;
+}
+.hb-check .icon { width: 16px; height: 16px; stroke-width: 2.8; }
+.hb-check:hover { background: color-mix(in srgb, var(--hb) 14%, transparent); color: var(--hb); }
+.hb-check.checked { background: var(--hb); color: #fff; }
+.hb-check.skip { border-style: dashed; color: var(--text-2); }
+.hb-skip-mark { font-weight: 700; }
+.hb-check.big { width: 42px; height: 42px; }
+.hb-check.big .icon { width: 20px; height: 20px; }
+.hb-count { position: relative; display: inline-flex; align-items: stretch; height: 34px; border: 1px solid var(--border-strong); border-radius: var(--radius-full); overflow: hidden; background: var(--surface); }
+.hb-count.done { border-color: var(--hb); }
+.hb-bar { position: absolute; inset: 0; pointer-events: none; }
+.hb-bar span { display: block; height: 100%; background: color-mix(in srgb, var(--hb) 20%, transparent); transition: width .25s var(--ease); }
+.hb-count.done .hb-bar span { background: color-mix(in srgb, var(--hb) 30%, transparent); }
+.hb-val, .hb-plus { position: relative; border: 0; background: transparent; padding: 0 10px; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.hb-val:hover, .hb-plus:hover { background: color-mix(in srgb, var(--hb) 12%, transparent); }
+.hb-plus { border-left: 1px solid var(--border); color: var(--hb); font-weight: 700; }
+.hb-count.big { height: 42px; }
+.hb-count.big .hb-val, .hb-count.big .hb-plus { padding: 0 14px; font-size: 15px; }
+/* Віконце дня */
+.hb-popover { width: min(290px, calc(100vw - 16px)); }
+.hb-pop { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.hb-pop-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.hb-pop-day, .hb-pop-hint { font-size: 12.5px; }
+.hb-pop-count { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hb-pop-num { width: 72px; text-align: center; }
+.hb-pop-num.invalid { border-color: var(--danger); }
+.hb-pop-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.hb-pop-btns .btn.active { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
+/* Карта року */
+.hb-year-wrap { position: relative; overflow-x: auto; padding-bottom: 4px; }
+.hb-year { display: grid; grid-template-rows: auto repeat(7, auto); gap: 3px; min-width: 640px; }
+.hb-mon { font-size: 11px; color: var(--text-3); white-space: nowrap; padding-bottom: 2px; }
+.hb-wd { position: sticky; left: 0; z-index: 1; align-self: stretch; display: flex; align-items: center; font-size: 10.5px; color: var(--text-3); background: var(--surface); box-shadow: 0 3px 0 var(--surface), 3px 0 0 var(--surface), 3px 3px 0 var(--surface); }
+.hb-c { display: block; width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 3px; background: var(--surface-3); }
+.hb-c.lv1 { background: color-mix(in srgb, var(--hb, var(--accent)) 30%, var(--surface-3)); }
+.hb-c.lv2 { background: color-mix(in srgb, var(--hb, var(--accent)) 52%, var(--surface-3)); }
+.hb-c.lv3 { background: color-mix(in srgb, var(--hb, var(--accent)) 76%, var(--surface-3)); }
+.hb-c.lv4 { background: var(--hb, var(--accent)); }
+.hb-c.off, .hb-c.future { background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+.hb-c.off.lv4, .hb-c.off.lv1, .hb-c.off.lv2, .hb-c.off.lv3 { box-shadow: none; }
+.hb-c.skip { background: repeating-linear-gradient(45deg, var(--surface-3) 0 2px, var(--border-strong) 2px 4px); }
+.hb-c.today { box-shadow: 0 0 0 1.5px var(--text); }
+button.hb-c { cursor: pointer; }
+button.hb-c:hover { box-shadow: 0 0 0 2px var(--hb, var(--accent)); }
+.hb-year-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-top: 12px; }
+.hb-legend { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12px; }
+.hb-legend .hb-c { width: 11px; height: 11px; aspect-ratio: auto; }
+.hb-legend-sep { width: 8px; }
+.hb-year-sum { font-size: 12.5px; }
+.hb-year-hint { font-size: 12.5px; margin: 10px 0 0; }
+.hb-yearsw { display: flex; align-items: center; gap: 4px; }
+.hb-year-num { min-width: 40px; text-align: center; }
+/* Архів */
+.hb-arch summary { display: flex; align-items: center; gap: 8px; padding: 14px 20px; cursor: pointer; font-weight: 500; color: var(--text-2); list-style: none; }
+.hb-arch summary::-webkit-details-marker { display: none; }
+.hb-arch[open] summary { border-bottom: 1px solid var(--border); }
+.hb-arch-row { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--border); }
+.hb-arch-row:first-child { border-top: 0; }
+.hb-arch-row .hb-row-main { flex: 1; }
+/* Сторінка звички */
+.hb-back { margin-bottom: 8px; }
+.hb-head-ctrl { display: flex; align-items: center; gap: 10px; }
+.page-head h1 .hb-dot { width: 14px; height: 14px; margin-right: 10px; vertical-align: 2px; }
+.hb-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.hb-stat-ico { background: var(--surface-3); color: var(--text-2); }
+.hb-stat-sub { font-size: 12px; }
+.hb-note { white-space: pre-wrap; }
+.hb-empty-card .hb-templates { padding: 0 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hb-empty-card .chips { justify-content: center; }
+/* Форма */
+.hb-form .segmented { flex-wrap: wrap; align-self: flex-start; }
+.hb-wdays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hb-wday {
+  width: 40px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-full);
+  background: var(--surface); font-size: 13px; color: var(--text-2);
+}
+.hb-wday:hover { border-color: var(--border-strong); color: var(--text); }
+.hb-wday.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.hb-times { width: auto; margin-top: 8px; align-self: flex-start; }
+.hb-sched-hint { margin-top: 6px; }
+.hb-count-box { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.hb-form .input-time { width: 100px; }
+/* Головна */
+.hb-hlist { display: flex; flex-direction: column; padding: 6px 10px; }
+.hb-hrow { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: var(--radius); }
+.hb-hrow:hover { background: var(--surface-2); }
+.hb-hrow .hb-row-main { flex: 1; }
+.hb-hrow.done .hb-row-name { color: var(--text-2); }
+.tab-count.hb-all { background: var(--success-soft); color: var(--success); }
+.hb-home-none { font-size: 13px; }
+.hb-home-all { display: flex; align-items: center; gap: 6px; padding: 0 20px 14px; font-size: 13px; color: var(--success); font-weight: 500; }
+@media (max-width: 900px) {
+  .hb-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .hb-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main ctrl" "strip streak"; gap: 8px 12px; padding: 12px 16px; }
+  .hb-row-ctrl { min-width: 0; }
+  .hb-count-box { grid-template-columns: minmax(0, 1fr); }
+  .hb-head-ctrl { width: 100%; justify-content: space-between; }
+  .hb-year-foot { flex-direction: column; align-items: flex-start; }
+}

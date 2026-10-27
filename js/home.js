@@ -2,7 +2,7 @@
    home.js — Головна: цитата дня, активні задачі, харчування сьогодні,
    розклад на сьогодні (задачі з дедлайном сьогодні, регулярні платежі,
    дедлайни навчання, власні події з «Календаря», події Google Календаря), доходи й витрати за сьогодні в гривнях,
-   «Сьогоднішнє тренування» за програмами (programs.js).
+   «Сьогоднішнє тренування» за програмами (programs.js), «Звички» сьогодні (habits.js), «Люди» (people.js).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -177,7 +177,7 @@ window.CRM = window.CRM || {};
         quoteCard(),
         h('div', { class: 'home-grid' },
           h('div', { class: 'home-col' }, tasksCard(), CRM.people ? CRM.people.homeCard() : null, CRM.nutrition ? CRM.nutrition.homeCard() : null),
-          h('div', { class: 'home-col' }, moneyCard(), CRM.programs ? CRM.programs.homeCard() : null, scheduleCard()))));
+          h('div', { class: 'home-col' }, moneyCard(), CRM.habits ? CRM.habits.homeCard() : null, CRM.programs ? CRM.programs.homeCard() : null, scheduleCard()))));
     return () => document.removeEventListener('crm:gcalchange', onGcal);
   }
 
@@ -185,7 +185,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'events', 'people', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'events', 'people', 'habits', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

@@ -353,7 +353,32 @@ window.CRM = window.CRM || {};
       }, 90)
     ];
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, notifications };
+    // ---------- Звички (історія 1,5–2,5 місяця; без нагадувань, щоб не змінювати лічильник дзвіночка) ----------
+    const habitLog = (days, fn) => {
+      const log = {};
+      for (let i = days; i >= 0; i--) {
+        const d = D.addDays(T, -i);
+        const v = fn(d, i);
+        if (v) log[d] = v;
+      }
+      return log;
+    };
+    const habit = (o, since) => base(Object.assign({
+      id: uid(), kind: 'check', target: 1, unit: '', step: 1, schedule: { type: 'daily', days: [], times: null }, remind: null,
+      color: 'aqua', note: '', archived: false, archivedAt: null, startDate: D.addDays(T, -since), order: 0, log: {}
+    }, o), D.addDays(T, -since));
+    const habits = [
+      habit({ name: 'Вода', kind: 'count', target: 8, unit: 'склянок', step: 1, color: 'blue', order: 1,
+        log: habitLog(74, (d, i) => (i === 0 ? 3 : Math.round(between(5, 9.4)))) }, 74),
+      habit({ name: 'Читання', kind: 'count', target: 20, unit: 'сторінок', step: 5, color: 'orange', order: 2,
+        log: habitLog(60, (d, i) => (i === 0 ? 0 : rnd() < 0.8 ? 5 * Math.round(between(3, 6)) : 0)) }, 60),
+      habit({ name: 'Медитація', color: 'violet', order: 3, note: '10 хвилин зранку, до телефону.',
+        log: habitLog(45, (d, i) => (i <= 11 ? 1 : i === 12 || i === 13 ? 's' : rnd() < 0.75 ? 1 : 0)) }, 45),
+      habit({ name: 'Спортзал', color: 'red', order: 4, schedule: { type: 'weekly', days: [], times: 3 },
+        log: habitLog(70, (d, i) => (i > 0 && [0, 2, 4].includes(D.weekday(d)) && rnd() < 0.85 ? 1 : 0)) }, 70)
+    ];
+
+    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, habits, notifications };
   }
 
   CRM.demo = { generate };

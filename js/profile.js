@@ -166,7 +166,7 @@ window.CRM = window.CRM || {};
   function summaryNode(obj) {
     const s = CRM.store.summarize(obj);
     const rows = [
-      ['Задачі', s.tasks], ['Події календаря', s.events], ['Люди', s.people], ['Рахунки', s.accounts], ['Транзакції', s.transactions], ['Категорії', s.categories],
+      ['Задачі', s.tasks], ['Події календаря', s.events], ['Люди', s.people], ['Звички', s.habits], ['Рахунки', s.accounts], ['Транзакції', s.transactions], ['Категорії', s.categories],
       ['Регулярні платежі', s.recurring], ['Фінансові цілі', s.goals], ['Тренування', s.workouts], ['Програми тренувань', s.programs],
       ['Навчання', s.courses], ['Харчування', s.meals], ['Продукти', s.foods], ['Вкладення', s.attachments]
     ].filter((r) => r[1] > 0);
@@ -227,7 +227,7 @@ window.CRM = window.CRM || {};
     const ok = await ui.confirm({
       title: 'Очистити всі дані?',
       message: h('div', { class: 'stack', style: { gap: '12px' } },
-        h('p', { class: 'modal-text' }, 'Буде видалено всі задачі, події календаря, людей, рахунки, транзакції, платежі, цілі, тренування, навчання, вкладення, сповіщення, Кошик і профіль. Залишаться тільки тема, колір інтерфейсу та стартовий набір категорій.'),
+        h('p', { class: 'modal-text' }, 'Буде видалено всі задачі, події календаря, людей, звички, рахунки, транзакції, платежі, цілі, тренування, навчання, вкладення, сповіщення, Кошик і профіль. Залишаться тільки тема, колір інтерфейсу та стартовий набір категорій.'),
         h('div', { class: 'callout callout-warning' }, CRM.icon('alert'),
           h('span', null, h('strong', null, 'Це не можна скасувати.'), ' Спершу зроби експорт, якщо дані можуть знадобитися.'))),
       confirmText: 'Видалити все',
