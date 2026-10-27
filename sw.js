@@ -18,18 +18,26 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.10.27-1';
-const BUILD = '058d3f045908';
+const VERSION = '2026.10.27-2';
+const BUILD = '7ead3ebafc82';
 const FILES = {
   'css/base.css': '19e80512c54e49e6',
   'css/components.css': '1f94a2f41c9beef3',
   'css/layout.css': '4d4476a29ada4d90',
-  'css/sections.css': '7b20aab35dade0f8',
+  'css/sections.css': '60ad4189807e886f',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
   'icons/icon-maskable-512.png': 'cac5a3418e880e15',
-  'index.html': '50da956622c5fcc6',
+  'icons/ring-192.png': '3c4eb5adb96499bf',
+  'icons/ring-512.png': 'b1eeb7f14e3f400b',
+  'icons/ring-apple-touch-icon.png': 'b6e90ef50c27270c',
+  'icons/ring-maskable-512.png': '36d6b300b2bb5704',
+  'icons/tiles-192.png': '21c89d5fa7e30fb1',
+  'icons/tiles-512.png': 'e9bb21ac87c5e125',
+  'icons/tiles-apple-touch-icon.png': '9454b72f51288974',
+  'icons/tiles-maskable-512.png': '28ae91bcaf8a45f5',
+  'index.html': '248e06c9d5550a9b',
   'js/app.js': '31a6b5ab265950e8',
   'js/backup.js': 'd63f11891c0a78e0',
   'js/budget/accounts.js': '2df8f4fb9c0059fa',
@@ -63,7 +71,7 @@ const FILES = {
   'js/profile.js': 'd97dd9d8fe8e83b9',
   'js/program.js': '394ed56868fae621',
   'js/programs.js': '17e17a1f639bf04a',
-  'js/pwa.js': '53af8e1cd46367f4',
+  'js/pwa.js': '1eebfc06b75d1b54',
   'js/quotes.js': '57b3b169ce3e9dcb',
   'js/search.js': 'ac6bb1e4cdd6affc',
   'js/sync-config.js': '6e4963577579c35a',
@@ -71,7 +79,9 @@ const FILES = {
   'js/tasks.js': '616b9e0b7120885e',
   'js/training.js': '76b893bb4782e287',
   'js/trash.js': 'fe19887396e48618',
-  'manifest.json': 'c90fc39ee9c56ce8'
+  'manifest-c.json': '6bec32309f09144a',
+  'manifest-tiles.json': 'a5d3ba9581552a4b',
+  'manifest.json': '7f3be59507fe8ac5'
 };
 const CDN = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js',

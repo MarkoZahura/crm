@@ -6,13 +6,13 @@
   <meta name="color-scheme" content="light dark">
   <meta name="robots" content="noindex, nofollow">
   <title>Моя CRM</title>
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/ring-192.png">
 
   <!-- Застосунок (PWA): іконка й назва на головному екрані, колір рядка стану (змінюється за темою — js/pwa.js) -->
   <meta name="theme-color" content="#ffffff">
   <meta name="apple-mobile-web-app-title" content="Моя CRM">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="icons/ring-apple-touch-icon.png">
 
   <!-- Тема й акцент застосовуються ще до малювання сторінки, щоб не було «блимання» -->
   <script>
@@ -27,11 +27,27 @@
         root.setAttribute('data-theme', t);
         if (a) root.setAttribute('data-accent', a);
       } catch (e) { /* localStorage недоступний — лишається світла тема */ }
-      // Опис застосунку (manifest.json) — лише з адреси сайту: з file:// браузер його не прочитає й лає в консолі
+      // Іконка застосунку (вибір — «Мій кабінет» → «Застосунок»): ring (за замовчуванням) | tiles | c.
+      // ?icon=… в адресі — з головного екрана (start_url маніфесту) або збережене iPhone при додаванні.
+      var icon = 'ring';
+      try {
+        var q = /[?&]icon=(ring|tiles|c)(&|$)/.exec(location.search);
+        if (q) localStorage.setItem('crm.icon', q[1]);
+        var saved = localStorage.getItem('crm.icon');
+        if (saved === 'tiles' || saved === 'c') icon = saved;
+      } catch (e) { /* лишається «Кільце» */ }
+      var files = {
+        ring: ['icons/ring-192.png', 'icons/ring-apple-touch-icon.png', 'manifest.json'],
+        tiles: ['icons/tiles-192.png', 'icons/tiles-apple-touch-icon.png', 'manifest-tiles.json'],
+        c: ['icons/icon-192.png', 'icons/apple-touch-icon.png', 'manifest-c.json']
+      }[icon];
+      document.querySelector('link[rel="icon"]').setAttribute('href', files[0]);
+      document.querySelector('link[rel="apple-touch-icon"]').setAttribute('href', files[1]);
+      // Опис застосунку (manifest) — лише з адреси сайту: з file:// браузер його не прочитає й лає в консолі
       if (location.protocol !== 'file:') {
         var m = document.createElement('link');
         m.rel = 'manifest';
-        m.href = 'manifest.json';
+        m.href = files[2];
         document.head.appendChild(m);
       }
     })();

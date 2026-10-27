@@ -17,9 +17,13 @@ window.CRM = window.CRM || {};
 
   // Номер версії — РРРР.ММ.ДД-N. Міняти при КОЖНІЙ доставці коду (і додавати запис у CHANGES),
   // потім запустити tests/make-sw.js — він переносить номер у sw.js і рахує контрольні суми файлів.
-  const VERSION = '2026.10.27-1';
+  const VERSION = '2026.10.27-2';
   // Що нового (найновіше — першим): 1–3 короткі рядки на версію.
   const CHANGES = [
+    { v: '2026.10.27-2', items: [
+      'Нові іконки застосунку: «Кільце» (тепер основна) і «Плитки»; синя «C» теж лишилася.',
+      'Іконку можна вибрати в «Моєму кабінеті» → «Застосунок» → «Іконка».'
+    ] },
     { v: '2026.10.27-1', items: [
       'CRM можна встановити як застосунок — «Мій кабінет» → «Застосунок».',
       'Відкривається миттєво й працює без інтернету.',
@@ -307,6 +311,70 @@ window.CRM = window.CRM || {};
     });
   }
 
+  // ---------- Іконка застосунку ----------
+  // Ті самі шляхи — у скрипті в <head> index.html (він ставить іконку ще до малювання сторінки).
+  const ICONS = [
+    { id: 'ring', name: 'Кільце', icon: 'icons/ring-192.png', apple: 'icons/ring-apple-touch-icon.png', manifest: 'manifest.json' },
+    { id: 'tiles', name: 'Плитки', icon: 'icons/tiles-192.png', apple: 'icons/tiles-apple-touch-icon.png', manifest: 'manifest-tiles.json' },
+    { id: 'c', name: 'Синя «C»', icon: 'icons/icon-192.png', apple: 'icons/apple-touch-icon.png', manifest: 'manifest-c.json' }
+  ];
+  const DEFAULT_ICON = 'ring';
+  function iconId() {
+    let v = null;
+    try { v = localStorage.getItem('crm.icon'); } catch (e) { /* немає сховища */ }
+    return ICONS.some((i) => i.id === v) ? v : DEFAULT_ICON;
+  }
+  const iconOf = (id) => ICONS.find((i) => i.id === id) || ICONS[0];
+
+  /** Іконка вкладки, iPhone, маніфест, значок у меню й ?icon= в адресі — за вибором. */
+  function applyIcon() {
+    const ic = iconOf(iconId());
+    const set = (sel, href) => { const l = document.querySelector(sel); if (l && l.getAttribute('href') !== href) l.setAttribute('href', href); };
+    set('link[rel="icon"]', ic.icon);
+    set('link[rel="apple-touch-icon"]', ic.apple);
+    set('link[rel="manifest"]', ic.manifest);
+    document.querySelectorAll('.brand-mark').forEach((m) => {
+      m.classList.toggle('has-img', ic.id !== 'c');
+      if (ic.id === 'c') m.textContent = 'C';
+      else m.replaceChildren(h('img', { src: ic.icon, alt: '' }));
+    });
+    // iPhone запамʼятовує адресу сторінки, з якої застосунок додали на головний екран, — разом із ?icon=
+    if (isFile()) return;
+    try {
+      const u = new URL(location.href);
+      if (ic.id === DEFAULT_ICON) u.searchParams.delete('icon'); else u.searchParams.set('icon', ic.id);
+      if (u.href !== location.href) history.replaceState(history.state, '', u.href);
+    } catch (e) { /* не критично */ }
+  }
+
+  function setIcon(id) {
+    try { localStorage.setItem('crm.icon', id); } catch (e) { /* немає сховища */ }
+    applyIcon();
+    changed();
+  }
+
+  function iconPicker() {
+    const cur = iconId();
+    const locked = isIOS() && isStandalone(); // у вікні застосунку на iPhone іконку на екрані так не змінити
+    let note;
+    if (locked) {
+      note = 'Тут, у застосунку, іконку на головному екрані не змінити. Як поміняти: у «Синхронізації» перевір, що всі зміни надіслано → видали «Моя CRM» з головного екрана → у Safari відкрий CRM, тут вибери іконку → «Поділитися» → «На початковий екран». Потім у застосунку знову увійди в синхронізацію (дані повернуться) і підключи Google Календар.';
+    } else if (isIOS()) {
+      note = 'Вибери тут, у Safari, і вже потім додавай на початковий екран. Якщо застосунок уже додано — видали його з головного екрана й додай знову (перед цим перевір у «Синхронізації», що всі зміни надіслано; після входу дані повернуться, Google Календар підключи знову).';
+    } else {
+      note = 'Діє на цьому пристрої: вкладка й значок у меню змінюються одразу. Встановлений застосунок (Chrome, Edge) оновить іконку сам, іноді спитавши дозволу. На iPhone іконку вибирай у Safari перед додаванням на початковий екран.';
+    }
+    return h('div', { class: 'pwa-icons' },
+      h('div', { class: 'setting-title' }, 'Іконка'),
+      h('div', { class: 'pwa-icon-opts', role: 'radiogroup', 'aria-label': 'Іконка застосунку' },
+        ICONS.map((ic) => h('button', {
+          type: 'button', role: 'radio', class: 'pwa-icon-opt' + (ic.id === cur ? ' active' : ''),
+          'aria-checked': ic.id === cur ? 'true' : 'false', disabled: locked, dataset: { icon: ic.id },
+          onClick: () => { if (ic.id !== iconId()) setIcon(ic.id); }
+        }, h('img', { src: ic.icon, alt: '' }), h('span', null, ic.name)))),
+      h('div', { class: 'svc-info' }, note));
+  }
+
   // ---------- Колір рядка стану (телефон, вікно застосунку) ----------
   function themeColor() {
     let m = document.querySelector('meta[name="theme-color"]');
@@ -449,7 +517,7 @@ window.CRM = window.CRM || {};
           h('div', { class: 'setting-desc' }, h('span', { 'data-version': VERSION }, 'Версія від ' + versionLabel(VERSION)), h('span', { class: 'pwa-ver' }, ' · ' + VERSION))),
         h('div', { class: 'setting-actions' }, actions));
 
-      const parts = [statusNode()];
+      const parts = [statusNode(), iconPicker()];
       if (sw !== 'file') parts.push(installHelp());
       parts.push(h('div', { class: 'svc-info' },
         h('div', null, 'Без інтернету працює все, крім Google Календаря (показує збережене), курсів НБУ й синхронізації — зміни надішлються, щойно зʼявиться звʼязок.')));
@@ -522,6 +590,7 @@ window.CRM = window.CRM || {};
   }
 
   function init() {
+    applyIcon();
     themeColor();
     document.addEventListener('crm:themechange', themeColor);
     window.addEventListener('beforeinstallprompt', (e) => { installPrompt = e; changed(); });
@@ -531,7 +600,7 @@ window.CRM = window.CRM || {};
   }
 
   CRM.pwa = {
-    VERSION, CHANGES, init, check, applyUpdate, settingsBlock, versionLabel, isStandalone, isIOS,
+    VERSION, CHANGES, ICONS, init, check, applyUpdate, settingsBlock, versionLabel, isStandalone, isIOS, iconId, setIcon,
     get state() { return { sw, installing, update: hasUpdate(), waitingVersion, failure, lastCheck }; }
   };
 })(window.CRM);

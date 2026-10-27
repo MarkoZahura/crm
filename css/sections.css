@@ -1433,3 +1433,20 @@ body.has-pwa-bar .toast-stack { bottom: calc(var(--pwa-bar-h, 48px) + 28px + env
 .pwa-install { gap: 6px; }
 .pwa-reset { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pwa-reset .svc-info { display: inline; }
+
+/* Іконка застосунку: значок у меню й вибір у кабінеті */
+.brand-mark.has-img { background: none; overflow: hidden; }
+.brand-mark img { display: block; width: 100%; height: 100%; }
+.pwa-icons { display: flex; flex-direction: column; gap: 10px; }
+.pwa-icon-opts { display: flex; flex-wrap: wrap; gap: 10px; }
+.pwa-icon-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  width: 96px; padding: 10px 6px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text-2); font-size: 12.5px;
+}
+.pwa-icon-opt img { width: 48px; height: 48px; border-radius: 11px; }
+.pwa-icon-opt:hover:not(:disabled) { border-color: var(--accent); }
+.pwa-icon-opt.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--text); font-weight: 600; }
+.pwa-icon-opt:disabled { cursor: default; opacity: .75; }
+.pwa-icon-opt:disabled.active { opacity: 1; }
