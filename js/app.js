@@ -102,6 +102,7 @@ window.CRM = window.CRM || {};
     { id: 'training', label: 'Тренування', icon: 'dumbbell' },
     { id: 'nutrition', label: 'Харчування', icon: 'apple' },
     { id: 'learning', label: 'Навчання', icon: 'book' },
+    { id: 'people', label: 'Люди', icon: 'users' },
     { sep: true },
     { id: 'trash', label: 'Кошик', icon: 'trash', count: () => CRM.store.trashItems().length }
   ];
@@ -291,6 +292,7 @@ window.CRM = window.CRM || {};
     if (!CRM.programs) missing.push('js/programs.js');
     if (!CRM.calendar) missing.push('js/calendar.js');
     if (!CRM.quick) missing.push('js/quick.js');
+    if (!CRM.people) missing.push('js/people.js');
     else if (CRM.tasks && !CRM.tasks.create) missing.push('js/tasks.js (нова версія)');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));

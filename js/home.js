@@ -176,7 +176,7 @@ window.CRM = window.CRM || {};
       h('div', { class: 'home' },
         quoteCard(),
         h('div', { class: 'home-grid' },
-          h('div', { class: 'home-col' }, tasksCard(), CRM.nutrition ? CRM.nutrition.homeCard() : null),
+          h('div', { class: 'home-col' }, tasksCard(), CRM.people ? CRM.people.homeCard() : null, CRM.nutrition ? CRM.nutrition.homeCard() : null),
           h('div', { class: 'home-col' }, moneyCard(), CRM.programs ? CRM.programs.homeCard() : null, scheduleCard()))));
     return () => document.removeEventListener('crm:gcalchange', onGcal);
   }
@@ -185,7 +185,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'events', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'events', 'people', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

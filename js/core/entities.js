@@ -147,6 +147,19 @@ window.CRM = window.CRM || {};
       text: (r) => [r.title, r.notes, (r.topics || []).map((t) => t.title).join(' ')],
       route: (r) => ['learning', { open: r.id }]
     },
+    people: {
+      label: 'Людина', group: 'Люди', icon: 'users', iconClass: 'ico-goal', section: 'people',
+      title: (r) => r.name || 'Без імені',
+      sub: (r) => {
+        const P = CRM.people;
+        const parts = [P ? P.groupOf(r.group).label : null];
+        if (r.bday && P) parts.push('ДН ' + P.mdText(r.bday, r.bdayYear));
+        if (r.phone) parts.push(r.phone);
+        return parts.filter(Boolean).join(' · ');
+      },
+      text: (r) => [r.name, r.phone, r.telegram, r.instagram, r.email, r.notes, (r.gifts || []).map((g) => g.text).join(' '), (r.dates || []).map((d) => d.title).join(' ')],
+      route: (r) => ['people', { open: r.id }]
+    },
     foods: {
       label: 'Продукт', group: 'Продукти', icon: 'apple', iconClass: 'ico-goal', section: 'nutrition',
       title: (r) => r.name || 'Продукт',
@@ -185,7 +198,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'events', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods'],
+    order: ['tasks', 'events', 'people', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);

@@ -333,7 +333,27 @@ window.CRM = window.CRM || {};
       cat: 'health', remind: null, note: '', repeat: { freq: 'week', every: 1, days: [0, 2, 4], until: null, count: null }
     }, D.addDays(T, -14)));
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, notifications };
+    // ---------- Люди (вигадані; дні народження — не ближче ніж за тиждень, «час написати» ще не настав, тож без нагадувань) ----------
+    const md = (d) => d.slice(5);
+    const person = (o, since) => base(Object.assign({
+      id: uid(), group: 'friends', bday: null, bdayYear: null, phone: '', telegram: '', instagram: '', email: '',
+      notes: '', dates: [], gifts: [], freq: null, lastContact: null
+    }, o), D.addDays(T, -since));
+    const people = [
+      person({
+        name: 'Олена Коваль', group: 'family', bday: md(D.addDays(T, 10)), bdayYear: 1998, phone: '+380 67 000 00 01',
+        notes: 'Любить настільні ігри й каву з корицею.', freq: 14, lastContact: D.addDays(T, -3),
+        gifts: [{ id: uid(), text: 'Настільна гра «Каркасон»', done: false, doneAt: null }, { id: uid(), text: 'Сертифікат у кавʼярню', done: false, doneAt: null }]
+      }, 40),
+      person({ name: 'Максим Бондар', bday: md(D.addDays(T, 21)), bdayYear: 2003, telegram: '@maksym_demo', freq: 30, lastContact: D.addDays(T, -12) }, 60),
+      person({ name: 'Ірина Ткач', group: 'study', bday: md(D.addDays(T, 45)), instagram: '@iryna.demo', notes: 'Одногрупниця, разом пишемо курсову.' }, 20),
+      person({
+        name: 'Тарас Коваль', group: 'family', bday: md(D.addDays(T, 80)), bdayYear: 1970, freq: 7, lastContact: D.addDays(T, -1),
+        dates: [{ id: uid(), title: 'Річниця весілля батьків', md: md(D.addDays(T, 60)), year: 1996 }]
+      }, 90)
+    ];
+
+    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, notifications };
   }
 
   CRM.demo = { generate };

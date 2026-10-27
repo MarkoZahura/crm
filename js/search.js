@@ -158,7 +158,7 @@ window.CRM = window.CRM || {};
         h('div', { class: 'quick-empty-title' }, CRM.icon(o.quick ? 'zap' : 'search', { size: 'sm' }), o.quick ? 'Що додати?' : 'Пошук і швидке введення'),
         h('p', { class: 'quick-empty-text' }, o.quick
           ? 'Напиши одним рядком — CRM створить подію, задачу, витрату чи запис їжі. Перед створенням покаже, що саме вийде.'
-          : 'Шукай задачі, події, транзакції, рахунки, тренування, харчування й навчання — або напиши, що створити:'),
+          : 'Шукай задачі, події, людей, транзакції, рахунки, тренування, харчування й навчання — або напиши, що створити:'),
         h('div', { class: 'quick-examples' }, Q.EXAMPLES.map((x) => h('button', {
           type: 'button', class: 'chip', tabIndex: -1,
           onMousedown: (e) => e.preventDefault(),

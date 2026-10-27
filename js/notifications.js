@@ -16,6 +16,7 @@
      goal:achieved:<id>              event:<id події>:<початок>
      calevent:<id події>:<дата>T<ГГ:ХХ>   (власні події «Календаря»)
      learning:due-today|due-tomorrow|overdue:<курс>:<тема|course>:<дата>
+     people:soon|today:<людина>:<bday|id дати>:<дата>   people:contact:<людина>:<дата, коли настав час>
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -31,6 +32,7 @@ window.CRM = window.CRM || {};
     goal: { icon: 'target', cls: 'ico-goal' },
     event: { icon: 'calendar', cls: 'ico-event' },
     learning: { icon: 'graduation', cls: 'ico-learning' },
+    people: { icon: 'cake', cls: 'ico-goal' },
     system: { icon: 'info', cls: 'ico-event' }
   };
 

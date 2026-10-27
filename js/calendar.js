@@ -76,12 +76,13 @@ window.CRM = window.CRM || {};
   const LAYERS = [
     { id: 'own', label: 'Мої події' },
     { id: 'tasks', label: 'Задачі в плані' },
+    { id: 'people', label: 'Дні народження й дати' },
     { id: 'gcal', label: 'Google Календар' },
     { id: 'training', label: 'Тренування з програм' },
     { id: 'payments', label: 'Регулярні платежі' },
     { id: 'deadlines', label: 'Дедлайни задач' }
   ];
-  const KIND_ORDER = { own: 0, task: 1, gcal: 2, training: 3, payment: 4, deadline: 5 };
+  const KIND_ORDER = { own: 0, people: 1, task: 2, gcal: 3, training: 4, payment: 5, deadline: 6 };
 
   // ---------- Налаштування вигляду (лише в цьому браузері) ----------
   function lsGet(key, def) { try { const v = localStorage.getItem(key); return v == null ? def : v; } catch (e) { return def; } }
@@ -468,6 +469,20 @@ window.CRM = window.CRM || {};
           it.past = d < T || (d === T && it.endMin <= nm);
           put(d, 'timed', it);
         }
+      });
+    }
+
+    // Дні народження й важливі дати людей (js/people.js) — щороку, на весь день
+    if (L.people && CRM.people && CRM.people.datesBetween) {
+      const pColor = CRM.dict.categoryColor('magenta');
+      let ppl = [];
+      try { ppl = CRM.people.datesBetween(from, to); } catch (e) { console.error(e); }
+      ppl.forEach((x) => {
+        put(x.date, 'allDay', {
+          key: 'ppl:' + x.key, kind: 'people', title: x.kind === 'birthday' ? x.person.name : `${x.person.name} — ${x.ann.title}`,
+          sub: [x.kind === 'birthday' ? 'День народження' : x.ann.title, x.yearsText].filter(Boolean).join(' · '),
+          color: pColor, icon: x.kind === 'birthday' ? 'cake' : 'users', date: x.date, onOpen: () => CRM.people.openPerson(x.personId)
+        });
       });
     }
 
@@ -2362,7 +2377,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('calendar', {
     title: 'Календар',
-    stores: ['events', 'tasks', 'recurring', 'transactions', 'programs', 'workouts'],
+    stores: ['events', 'tasks', 'people', 'recurring', 'transactions', 'programs', 'workouts'],
     render
   });
 

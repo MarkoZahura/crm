@@ -14,6 +14,7 @@ window.CRM = window.CRM || {};
     { id: 'all', label: 'Усі', match: () => true },
     { id: 'tasks', label: 'Задачі', match: (s) => s === 'tasks' },
     { id: 'calendar', label: 'Календар', match: (s) => s === 'events' },
+    { id: 'people', label: 'Люди', match: (s) => s === 'people' },
     { id: 'budget', label: 'Бюджет', match: (s) => ['accounts', 'transactions', 'categories', 'recurring', 'goals'].includes(s) },
     { id: 'training', label: 'Тренування', match: (s) => s === 'workouts' || s === 'programs' },
     { id: 'nutrition', label: 'Харчування', match: (s) => s === 'foods' || s === 'meals' },

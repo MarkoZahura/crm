@@ -1501,3 +1501,89 @@ body.has-pwa-bar .toast-stack { bottom: calc(var(--pwa-bar-h, 48px) + 28px + env
   .toast-multi .toast-action { order: 2; }
   .toast-multi .toast-msg + .toast-action { margin-left: 28px; }
 }
+
+/* ---------- Люди (js/people.js) ---------- */
+.ppl-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.ppl-card .card-head h2 .icon { color: var(--text-3); }
+.ppl-up-list { display: flex; flex-direction: column; padding: 6px; }
+.ppl-up-row, .ppl-due-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 8px 10px; border: 0; border-radius: var(--radius); background: transparent; text-align: left; color: inherit; cursor: pointer;
+}
+.ppl-up-row:hover, .ppl-due-row:hover { background: var(--surface-2); }
+.ppl-up-row.today { background: var(--success-soft); }
+.ppl-up-date {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 42px; height: 42px; border-radius: 10px; background: var(--surface-2); line-height: 1.05;
+}
+.ppl-up-date b { font-size: 17px; }
+.ppl-up-date span { font-size: 11px; color: var(--text-2); }
+.ppl-up-row.today .ppl-up-date { background: var(--success); color: #fff; }
+.ppl-up-row.today .ppl-up-date span { color: #fff; }
+.ppl-up-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ppl-up-title { display: flex; align-items: center; gap: 6px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppl-up-title .icon { color: var(--text-3); flex-shrink: 0; }
+.ppl-up-sub { font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppl-gift { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+.ppl-gift .icon { width: 15px; height: 15px; }
+.ppl-due-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ppl-avatar { color: #fff; }
+.ppl-toolbar { margin-bottom: 0; }
+.ppl-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.ppl-search { width: 240px; }
+.ppl-sort { width: auto; }
+.ppl-row { cursor: pointer; }
+.ppl-row:hover { background: var(--surface-2); }
+.ppl-row-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.ppl-home-sub { display: flex; align-items: center; gap: 6px; padding: 12px 20px 0; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.ppl-home-sub .icon { width: 14px; height: 14px; }
+.ppl-home-none { padding-top: 8px; font-size: 13px; }
+.ppl-home .more-link { display: block; padding: 4px 20px 14px; }
+/* Картка людини */
+.ppl-drawer { width: min(540px, 100vw); }
+.ppl-editor .segmented { flex-wrap: wrap; align-self: flex-start; }
+.ppl-sec { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.ppl-sec-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.ppl-sec-title .icon { color: var(--text-3); }
+.ppl-md { display: flex; gap: 8px; flex-wrap: wrap; }
+.ppl-md .ppl-day { width: 92px; }
+.ppl-md .ppl-month { width: 150px; }
+.ppl-md .ppl-year { width: 84px; }
+.ppl-md-err { color: var(--danger); font-size: 12.5px; min-height: 0; }
+.ppl-md-err:empty { display: none; }
+.ppl-bday-info, .ppl-contact-note, .ppl-hint { font-size: 12.5px; margin: 0; }
+.ppl-last { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ppl-last .date-trigger { width: auto; min-width: 200px; }
+.ppl-gifts { display: flex; flex-direction: column; gap: 4px; }
+.ppl-gift-when { font-size: 12px; white-space: nowrap; }
+.ppl-gift-add { margin-top: 4px; }
+.ppl-dates { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.ppl-date-row { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ppl-date-line { display: flex; gap: 6px; align-items: center; }
+.ppl-date-title { flex: 1; }
+.ppl-foot { display: flex; align-items: center; gap: 8px; width: 100%; }
+.ppl-autosave { font-size: 12.5px; }
+/* Імпорт .vcf */
+.ppl-imp-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; align-items: center; }
+.ppl-imp-search { width: 220px; }
+.ppl-imp-list { max-height: min(50vh, 420px); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
+.ppl-imp-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+.ppl-imp-row:hover { background: var(--surface-2); }
+.ppl-imp-row input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--accent); }
+.ppl-imp-row.dup .ppl-up-title { color: var(--text-2); }
+.ppl-imp-none { padding: 12px; }
+.ppl-imp-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ppl-imp-foot .field { min-width: 200px; }
+@media (max-width: 900px) {
+  .ppl-top { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .ppl-tools, .ppl-search { width: 100%; }
+  .ppl-sort { width: 100%; }
+  .ppl-row { flex-wrap: wrap; }
+  .ppl-row-side { width: 100%; justify-content: flex-start; padding-left: 44px; }
+  .ppl-due-row { flex-wrap: wrap; }
+  .ppl-due-actions { width: 100%; padding-left: 44px; }
+  .ppl-imp-search { width: 100%; }
+  .ppl-md .ppl-month { flex: 1; }
+}
