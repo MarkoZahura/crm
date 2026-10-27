@@ -154,7 +154,7 @@ window.CRM = window.CRM || {};
 
     const st = existing ? CRM.utils.deepClone(existing) : {
       type: o.type || 'expense', amount: o.amount || null, accountId: o.accountId || lastAccount(o.type || 'expense') || defaultAccount(),
-      toAccountId: null, toAmount: null, categoryId: o.categoryId || null, subcategoryId: (o.categoryId && o.subcategoryId) || null,
+      toAccountId: o.toAccountId || null, toAmount: null, categoryId: o.categoryId || null, subcategoryId: (o.categoryId && o.subcategoryId) || null,
       date: o.date || D.today(), comment: o.comment || ''
     };
     let toTouched = !isNew && st.type === 'transfer' && st.toAmount != null && st.toAmount !== st.amount;

@@ -843,8 +843,107 @@ window.CRM = window.CRM || {};
     return out;
   });
 
+  // ---------- Імена у відмінках (для ⚡: «ДР Марти 5 листопада», «написав Марті») ----------
+  // Прості правила української відміни + список поширених імен (щоб «Марти» → «Марта», «Андрія» → «Андрій»).
+  const COMMON_NAMES = ('Марта Марія Олена Ольга Оля Анна Аня Ганна Галина Галя Катерина Катя Ірина Іра Наталія Наталя Наташа ' +
+    'Тетяна Таня Юлія Юля Оксана Світлана Софія Соня Анастасія Настя Дарина Дарія Даша Вікторія Віка Христина Соломія Надія Надя ' +
+    'Людмила Люда Валентина Віра Любов Люба Лілія Ліля Алла Яна Діана Аліна Ангеліна Єва Злата Мирослава Ярослава Богдана Зоряна ' +
+    "Уляна Василина Роксолана Марічка Емілія Поліна Олександра Валерія Інна Леся Лариса Маргарита Ніна Зоя Тамара Лідія Мілана Кіра " +
+    "Вероніка Олеся Іванна Марина Карина Кристина Ксенія Майя Мар'яна Устина " +
+    'Андрій Олександр Саша Сашко Іван Петро Павло Микола Михайло Дмитро Сергій Олег Тарас Богдан Василь Юрій Віталій Віктор ' +
+    'Володимир Вова Ярослав Роман Максим Артем Денис Назар Остап Орест Євген Женя Ігор Антон Олексій Степан Григорій Костянтин ' +
+    'Костя Матвій Марко Данило Владислав Влад Станіслав Руслан Анатолій Вадим Валентин Ілля Кирило Лев Мирослав Нестор Святослав ' +
+    'Захар Тимофій Тимур Федір Леонід Борис Філіп Арсен Ростислав Любомир Маркіян Давид ' +
+    'мама тато бабуся дідусь брат сестра дядько тітка хрещена хрещений').split(' ');
+  const ALT = { 'г': 'з', 'к': 'ц', 'х': 'с' };
+  const formsCache = new Map();
+  /** Відмінкові форми слова з імені (нижній регістр): «марта» → марти, марті, марту, мартою… */
+  function nameForms(word) {
+    const w = U.normalize(word);
+    if (formsCache.has(w)) return formsCache.get(w);
+    const f = new Set([w]);
+    const add = (base, ends) => ends.forEach((e) => f.add(base + e));
+    const b = w.slice(0, -1);
+    const last = w.slice(-1);
+    if (w.length >= 2) {
+      if (last === 'а') {
+        add(b, ['и', 'і', 'у', 'ою', 'о']);
+        const pre = b.slice(-1);
+        if (ALT[pre]) f.add(b.slice(0, -1) + ALT[pre] + 'і');          // Ольга → Ользі, Марічка → Марічці
+        if (/[жчшщ]/.test(pre)) add(b, ['ею', 'е']);                   // Даша → Дашею
+      } else if (last === 'я') {
+        add(b, ['і', 'ї', 'ю', 'ею', 'єю', 'є', 'е']);                   // Оля → Олі, Марія → Марії, Ілля → Іллею
+      } else if (last === 'й') {
+        add(b, ['я', 'ю', 'єм', 'ем', 'єві', 'еві', 'ї']);               // Андрій → Андрія, Андрію, Андрієм
+      } else if (last === 'о') {
+        add(b, ['а', 'у', 'ом', 'ові', 'е']);                           // Петро, Марко, тато
+      } else if (last === 'ь') {
+        add(b, ['я', 'ю', 'ем', 'еві']);                                // дідусь → дідуся, дідусем
+      } else if (/[бвгґджзклмнпрстфхцчшщ]/.test(last)) {
+        add(w, ['а', 'у', 'ом', 'ові', 'е', 'я', 'ю', 'ем', 'еві']);     // Іван → Івана, Ігор → Ігоря
+        const m = /^(.*)і([рн])$/.exec(w);                              // Федір → Федора
+        if (m) add(m[1] + 'о' + m[2], ['а', 'у', 'ом', 'ові', 'е']);
+        if (/ов$/.test(w)) add(w, ['і', "'ю"]);                          // Любов → Любові
+      }
+    }
+    formsCache.set(w, f);
+    return f;
+  }
+  const capWord = (s) => s.split('-').map((x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x)).join('-');
+  /** Імʼя в називному відмінку — спроба: «марти» → «Марта», «андрія» → «Андрій». */
+  function guessName(token) {
+    const t = U.normalize(token);
+    if (!t) return '';
+    for (const n of COMMON_NAMES) {
+      const nn = U.normalize(n);
+      if (nn === t || nameForms(nn).has(t)) return capWord(nn);
+    }
+    let g = t;
+    if (/ї$/.test(t)) g = t.slice(0, -1) + 'я';
+    else if (/(ою|ею|єю)$/.test(t)) g = t.replace(/(ою|ею)$/, 'а').replace(/єю$/, 'я');
+    else if (/и$/.test(t)) g = t.slice(0, -1) + 'а';
+    else if (/і$/.test(t)) g = t.slice(0, -1) + (/[жчшщ]$/.test(t.slice(0, -1)) ? 'а' : 'я');
+    return capWord(g);
+  }
+  /**
+   * Люди, чиє імʼя схоже на слова з рядка (будь-який відмінок): [{ person, score, at }], найкращі першими.
+   * words — слова в нижньому регістрі; at — номер слова, з якого почався збіг.
+   */
+  function matchPeople(words) {
+    const ws = (words || []).map((x) => U.normalize(x)).filter(Boolean);
+    if (!ws.length) return [];
+    const out = [];
+    list().forEach((p) => {
+      const pw = U.normalize(p.name).split(/[\s]+/).filter((x) => x.length >= 2);
+      let score = 0;
+      let at = -1;
+      pw.forEach((n, k) => {
+        let best = 0;
+        let bi = -1;
+        ws.forEach((w, i) => {
+          let s = 0;
+          if (w === n) s = 3;
+          else if (w.length >= 3 && nameForms(n).has(w)) s = 2;
+          if (s && k === 0) s += 0.5;
+          if (s > best) { best = s; bi = i; }
+        });
+        if (best) { score += best; if (at < 0 || bi < at) at = bi; }
+      });
+      if (score) out.push({ person: p, score, at });
+    });
+    return out.sort((a, b) => b.score - a.score || (b.person.updatedAt || '').localeCompare(a.person.updatedAt || ''));
+  }
+  /** Порожня картка людини з полями за замовчуванням. */
+  function blank(fields) {
+    return Object.assign({
+      id: U.uid(), name: '', group: 'friends', bday: null, bdayYear: null, phone: '', telegram: '', instagram: '', email: '',
+      notes: '', dates: [], gifts: [], freq: null, lastContact: null
+    }, fields || {});
+  }
+
   CRM.people = {
     GROUPS, FREQS, list, get, annual, datesBetween, upcoming, nextAnnual, nextOf, inYear, contactInfo, dueContacts,
-    markContacted, openPerson, openPage, parseVcf, importFile, openImport, homeCard, groupOf, mdText, writeLink
+    markContacted, openPerson, openPage, parseVcf, importFile, openImport, homeCard, groupOf, mdText, writeLink,
+    nameForms, guessName, matchPeople, blank, save, canSave: () => !!CRM.db.SCHEMA.people
   };
 })(window.CRM);

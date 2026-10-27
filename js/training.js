@@ -221,7 +221,7 @@ window.CRM = window.CRM || {};
   // ---------- Дії ----------
   async function repeatToday(w) {
     const copy = CRM.utils.deepClone(w);
-    ['id', 'createdAt', 'updatedAt', 'deletedAt', 'deleteBatch', 'deleteHead', 'program'].forEach((k) => delete copy[k]);
+    ['id', 'createdAt', 'updatedAt', 'deletedAt', 'deleteBatch', 'deleteHead', 'program', 'quick'].forEach((k) => delete copy[k]);
     copy.date = D.today();
     const saved = await CRM.store.save('workouts', copy);
     ui.toast(`«${title(w)}» скопійовано на сьогодні`, { type: 'success', action: { label: 'Відкрити', onClick: () => openForm(saved.id) } });

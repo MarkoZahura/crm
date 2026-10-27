@@ -80,7 +80,9 @@ window.CRM = window.CRM || {};
     let selected = 0;
     let flat = [];
     let plan = null;        // що можна створити з рядка (CRM.quick.plan)
-    let prefer = null;      // вид, вибраний перемикачем «Подія | Задача | …»
+    let prefer = null;      // вид, вибраний перемикачем «Подія | Задача | …» (для «a; b» — масив видів частин)
+    let histPos = -1;       // ↑ / ↓ у порожньому полі — попередні рядки (CRM.quick.history)
+    let histList = [];
     let cardEl = null;
     let renderedQ = null;   // для якого рядка показано результати
 
@@ -93,19 +95,31 @@ window.CRM = window.CRM || {};
 
     async function runQuick(more) {
       if (!plan) return;
-      const opt = plan.options[plan.index];
+      const text = input.value;
       dlg.close('select');
       try {
+        if (plan.multi) {
+          const done = await Q.createAll(plan);
+          if (done && done.length && Q.history) Q.history.push(text);
+          return;
+        }
+        const opt = plan.options[plan.index];
         if (more || !opt.ok) Q.details(opt);
-        else await Q.create(opt);
+        else {
+          const res = await Q.create(opt);
+          if (res && Q.history) Q.history.push(text);
+        }
       } catch (e) {
         console.error(e);
         CRM.ui.toast('Не вдалося створити запис: ' + (e && e.message ? e.message : e), { type: 'error' });
       }
     }
-    function setKind(kind) {
+    function setKind(kind, part) {
       if (!plan) return;
-      prefer = kind;
+      if (plan.multi) {
+        prefer = Array.isArray(prefer) ? prefer.slice() : [];
+        prefer[part] = kind;
+      } else prefer = kind;
       plan = Q.plan(input.value, prefer);
       if (!plan || !cardEl) return;
       const fresh = renderCard();
@@ -115,7 +129,7 @@ window.CRM = window.CRM || {};
       input.focus();
     }
     function cycleKind(step) {
-      if (!plan || plan.options.length < 2) return;
+      if (!plan || plan.multi || plan.options.length < 2) return;
       const i = (plan.index + step + plan.options.length) % plan.options.length;
       setKind(plan.options[i].kind);
     }
@@ -147,6 +161,31 @@ window.CRM = window.CRM || {};
       });
     }
 
+    /** Підставити рядок у поле (часті рядки, приклади) — курсор у кінці, щоб можна було поправити суму. */
+    function useLine(x) {
+      input.value = x;
+      histPos = -1;
+      render();
+      input.focus();
+      try { input.setSelectionRange(x.length, x.length); } catch (e) { /* не всі поля це вміють */ }
+    }
+    /** Найчастіші рядки на цьому пристрої — кнопки під порожнім полем (× — прибрати з історії). */
+    function frequent() {
+      const top = Q.history ? Q.history.top(6) : [];
+      if (!top.length) return null;
+      return h('div', { class: 'quick-frequent' },
+        h('div', { class: 'quick-frequent-title' }, CRM.icon('clock', { size: 'sm' }), 'Часто пишеш'),
+        h('div', { class: 'quick-frequent-list' }, top.map((x) => h('span', { class: 'chip quick-freq' },
+          h('button', {
+            type: 'button', class: 'quick-freq-use', tabIndex: -1, title: 'Підставити в поле',
+            onMousedown: (e) => e.preventDefault(), onClick: () => useLine(x)
+          }, x),
+          h('button', {
+            type: 'button', class: 'quick-freq-del', tabIndex: -1, 'aria-label': `Прибрати «${x}» з історії`, title: 'Прибрати з історії',
+            onMousedown: (e) => e.preventDefault(),
+            onClick: () => { Q.history.remove(x); render(); input.focus(); }
+          }, CRM.icon('x', { size: 'sm' }))))));
+    }
     function emptyState() {
       if (!Q) {
         return CRM.ui.empty({
@@ -154,17 +193,23 @@ window.CRM = window.CRM || {};
           text: 'Задачі (з описами й чеклістами), транзакції, рахунки, категорії, регулярні платежі, фінансові цілі, тренування, програми тренувань, харчування й навчання.'
         });
       }
+      const freq = frequent();
+      const many = !!freq && Q.history.top(6).length >= 3;
       return h('div', { class: 'quick-empty' },
         h('div', { class: 'quick-empty-title' }, CRM.icon(o.quick ? 'zap' : 'search', { size: 'sm' }), o.quick ? 'Що додати?' : 'Пошук і швидке введення'),
         h('p', { class: 'quick-empty-text' }, o.quick
-          ? 'Напиши одним рядком — CRM створить подію, задачу, витрату чи запис їжі. Перед створенням покаже, що саме вийде.'
+          ? 'Напиши одним рядком — CRM створить подію, задачу, витрату, тренування чи запис їжі. Перед створенням покаже, що саме вийде.'
           : 'Шукай задачі, події, людей, транзакції, рахунки, тренування, харчування й навчання — або напиши, що створити:'),
-        h('div', { class: 'quick-examples' }, Q.EXAMPLES.map((x) => h('button', {
+        freq,
+        // Коли вже є часті рядки (≥3) — приклади не показуємо, щоб на телефоні не було тісно
+        many ? null : h('div', { class: 'quick-examples' }, Q.EXAMPLES.map((x) => h('button', {
           type: 'button', class: 'chip', tabIndex: -1,
           onMousedown: (e) => e.preventDefault(),
-          onClick: () => { input.value = x; render(); input.focus(); }
+          onClick: () => useLine(x)
         }, x))),
-        h('p', { class: 'quick-empty-hint' }, 'Час → подія, лише дата → задача в «Плані дня», сума → витрата («+» — дохід), «г» чи «ккал» → їжа. Прості правила, не ШІ.'));
+        h('p', { class: 'quick-empty-hint' }, many
+          ? 'Підказка: ↑ — попередні рядки (на компʼютері), кілька записів — через «;». Більше прикладів — у кабінеті, «Швидке введення».'
+          : 'Час → подія, лише дата → задача в «Плані дня», сума → витрата («+» — дохід), «г» чи «ккал» → їжа. Ще: «щопонеділка 18:00 …», «нагадай о 18:00 …», «переказ 1000 моно → готівка», «біг 5 км 28 хв», «ДР Марти 5 листопада», «написав Марті», кілька записів — через «;». Прості правила, не ШІ.'));
     }
 
     function render() {
@@ -228,8 +273,26 @@ window.CRM = window.CRM || {};
     input.addEventListener('input', CRM.utils.debounce(render, 80));
     input.addEventListener('keydown', (e) => {
       if (e.isComposing) return;
+      // Історія: ↑ у порожньому полі — попередній рядок, ще ↑ — старіший, ↓ — назад
+      const browsing = histPos >= 0 && input.value === histList[histPos];
+      if (Q && Q.history && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey && !e.ctrlKey && !e.metaKey &&
+        (browsing || (e.key === 'ArrowUp' && !input.value.trim()))) {
+        if (!browsing) { histList = Q.history.list(); histPos = -1; }
+        const next = histPos + (e.key === 'ArrowUp' ? 1 : -1);
+        if (next < histList.length && (next >= 0 || browsing)) {
+          e.preventDefault();
+          histPos = next;
+          input.value = next >= 0 ? histList[next] : '';
+          render();
+          const end = input.value.length;
+          try { input.setSelectionRange(end, end); } catch (err) { /* */ }
+          return;
+        }
+        if (e.key === 'ArrowUp' && !browsing) { e.preventDefault(); return; }
+      }
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(selected + 1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(selected - 1); }
+      else if (e.key === 'Tab' && plan && plan.multi) { e.preventDefault(); }
       else if (e.key === 'Tab' && plan && plan.options.length > 1) { e.preventDefault(); cycleKind(e.shiftKey ? -1 : 1); }
       else if (e.key === 'Enter') {
         e.preventDefault();

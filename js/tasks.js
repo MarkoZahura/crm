@@ -10,6 +10,8 @@
      заплановано (окремо від дедлайну), planStart 'ГГ:ХХ' | null — час у годинній
      сітці, planDur — тривалість у хв (за замовчуванням 30), planOrder — порядок
      у «Плані дня» серед задач без часу.
+   • Нагадування (з 27.10.2026, ⚡ «нагадай о 18:00 …»): remind — хв до часу в плані
+     (planDate + planStart), а якщо його немає — до часу дедлайну; null — без нагадування.
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -18,6 +20,28 @@ window.CRM = window.CRM || {};
 
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const D = CRM.date;
+  const REMIND_FALLBACK = [
+    { v: null, label: 'Без нагадування' }, { v: 0, label: 'У момент початку' }, { v: 5, label: 'За 5 хв' }, { v: 10, label: 'За 10 хв' },
+    { v: 15, label: 'За 15 хв' }, { v: 30, label: 'За 30 хв' }, { v: 60, label: 'За 1 год' }, { v: 120, label: 'За 2 год' }, { v: 1440, label: 'За 1 день' }
+  ];
+  const remindList = () => (CRM.calendar && CRM.calendar.REMINDERS) || REMIND_FALLBACK;
+  /** Мілісекунди моменту «дата + хвилини від 00:00» за київським часом. */
+  function kyivMs(date, min) {
+    const p0 = D.parse(date);
+    const target = Date.UTC(p0.y, p0.m - 1, p0.d, Math.floor(min / 60), min % 60);
+    let t = target;
+    for (let i = 0; i < 2; i++) {
+      const p = D.kyivParts(new Date(t));
+      t += target - Date.UTC(p.y, p.m - 1, p.d, p.hh, p.mm, p.ss);
+    }
+    return t;
+  }
+  /** До якого часу нагадування задачі: план з часом, інакше дедлайн з часом. → { date, time, what } або null. */
+  function remindAnchor(t) {
+    if (t.planDate && t.planStart) return { date: t.planDate, time: t.planStart, what: 'plan' };
+    if (t.deadline && t.deadlineTime) return { date: t.deadline, time: t.deadlineTime, what: 'deadline' };
+    return null;
+  }
   const fmt = CRM.fmt;
 
   // ---------- Налаштування вигляду (запам'ятовуються в цьому браузері) ----------
@@ -355,6 +379,7 @@ window.CRM = window.CRM || {};
       clearBtn.hidden = !date;
       commit({ deadline: date || null, deadlineTime: date && time ? time : null });
       renderQuick();
+      if (typeof renderRemind === 'function') renderRemind();
     }
     // --- План (день у «Календарі») ---
     const planDateIn = ui.dateInput({
@@ -374,6 +399,8 @@ window.CRM = window.CRM || {};
       if (date && !time && (date !== task.planDate || task.planStart)) changes.planOrder = nextPlanOrder(date, task.id);
       commit(changes);
       renderPlanQuick();
+      if (typeof renderRemind === 'function') renderRemind();
+      if ('planStart' in changes) CRM.notify.runRules();
     }
     const planQuick = h('div', { class: 'chips' });
     function renderPlanQuick() {
@@ -384,6 +411,28 @@ window.CRM = window.CRM || {};
       }, label)));
     }
     renderPlanQuick();
+
+    // --- Нагадування (до часу в плані або дедлайну) ---
+    const remindOpts = remindList().slice();
+    if (task.remind != null && !remindOpts.some((r) => r.v === task.remind)) remindOpts.push({ v: task.remind, label: `За ${task.remind} хв` });
+    const remindSel = ui.select(remindOpts.map((r) => ({ value: r.v == null ? '' : String(r.v), label: r.label })),
+      { value: task.remind == null ? '' : String(task.remind), 'aria-label': 'Нагадати' });
+    remindSel.classList.add('task-remind');
+    const remindHint = h('div', { class: 'field-hint task-remind-hint' });
+    function renderRemind() {
+      const a = remindAnchor(task);
+      remindSel.disabled = !a && task.remind == null;
+      remindHint.textContent = a
+        ? (a.what === 'plan' ? `До часу в плані: ${fmt.relDay(a.date).toLowerCase()}, ${a.time}.` : `До дедлайну: ${fmt.relDay(a.date).toLowerCase()}, ${a.time}.`) + ' Приходить, лише коли CRM відкрита.'
+        : 'Потрібен час у «Заплановано» або в дедлайні.';
+    }
+    remindSel.addEventListener('change', () => {
+      const v = remindSel.value === '' ? null : Number(remindSel.value);
+      commit({ remind: v });
+      CRM.notify.runRules();
+      renderRemind();
+    });
+    renderRemind();
 
     const quick = h('div', { class: 'chips' });
     function renderQuick() {
@@ -575,6 +624,8 @@ window.CRM = window.CRM || {};
           h('div', { class: 'deadline-inputs' }, planDateIn, planTimeIn, planClear),
           planQuick,
           h('div', { class: 'field-hint' }, 'День, коли збираєшся робити задачу, — вона зʼявиться в «Календарі». Дедлайн — до коли треба встигнути.')),
+        h('div', { class: 'editor-label' }, CRM.icon('bell', { size: 'sm' }), 'Нагадати'),
+        h('div', { class: 'editor-value' }, remindSel, remindHint),
         h('div', { class: 'editor-label' }, CRM.icon('flag', { size: 'sm' }), 'Пріоритет'),
         h('div', { class: 'editor-value' }, prioSeg),
         h('div', { class: 'editor-label' }, CRM.icon('clock', { size: 'sm' }), 'Статус'),
@@ -719,6 +770,33 @@ window.CRM = window.CRM || {};
       } else if (t.deadline < T) {
         out.push({ key: `task:overdue:${t.id}:${t.deadline}`, kind: 'task', title: 'Задачу прострочено', text: `${t.title} — дедлайн був ${fmt.dateShort(t.deadline)}`, target });
       }
+    });
+    return out;
+  });
+  // Своє нагадування задачі: за N хв до часу в плані (або дедлайну)
+  CRM.notify.addRule(() => {
+    const T = D.today();
+    const now = Date.now();
+    const out = [];
+    activeTasks().forEach((t) => {
+      if (t.remind == null || t.remind === '') return;
+      const a = remindAnchor(t);
+      if (!a || a.date < D.addDays(T, -1) || a.date > D.addDays(T, 2)) return;
+      const m = /^(\d{1,2}):(\d{2})$/.exec(a.time);
+      if (!m) return;
+      const lead = Number(t.remind);
+      const left = kyivMs(a.date, Number(m[1]) * 60 + Number(m[2])) - now;
+      const due = lead === 0 ? left <= 0 && left > -5 * 60000 : left > 0 && left <= lead * 60000;
+      if (!due) return;
+      let title;
+      if (lead === 0) title = `Час: ${t.title}`;
+      else if (left < 60 * 60000) title = `Через ${Math.max(1, Math.round(left / 60000))} хв: ${t.title}`;
+      else title = `${a.date === T ? 'Сьогодні' : 'Завтра'} о ${a.time}: ${t.title}`;
+      out.push({
+        key: `task:remind:${t.id}:${a.date}T${a.time}:${lead}`, kind: 'task', title,
+        text: a.what === 'plan' ? `Задача · План дня · ${a.time}` : `Задача · дедлайн о ${a.time}`,
+        target: { store: 'tasks', id: t.id }
+      });
     });
     return out;
   });

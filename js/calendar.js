@@ -70,6 +70,7 @@ window.CRM = window.CRM || {};
     { v: 15, label: 'За 15 хв' },
     { v: 30, label: 'За 30 хв' },
     { v: 60, label: 'За 1 год' },
+    { v: 120, label: 'За 2 год' },
     { v: 1440, label: 'За 1 день' }
   ];
 
@@ -1539,7 +1540,9 @@ window.CRM = window.CRM || {};
     showDur();
     const timesRow = h('div', { class: 'kal-times-row' }, startIn, h('span', { class: 'subtle' }, '–'), endIn, durEl);
     const fTimes = ui.field({ label: 'Час', input: timesRow });
-    const remindSel = ui.select(REMINDERS.map((r) => ({ value: r.v == null ? '' : String(r.v), label: r.label })),
+    const remindOpts = REMINDERS.slice();
+    if (ev.remind != null && ev.remind !== '' && !remindOpts.some((r) => r.v === Number(ev.remind))) remindOpts.push({ v: Number(ev.remind), label: `За ${ev.remind} хв` });
+    const remindSel = ui.select(remindOpts.map((r) => ({ value: r.v == null ? '' : String(r.v), label: r.label })),
       { value: ev.remind == null ? '' : String(ev.remind), 'aria-label': 'Нагадування' });
     const fRemind = ui.field({ label: 'Нагадування', input: remindSel, hint: 'Приходить, лише коли CRM відкрита (вкладка може бути у фоні).' });
     const allDayBox = check('Весь день', allDay, (on) => {

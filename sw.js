@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.10.27-5';
-const BUILD = '4429b97637ab';
+const VERSION = '2026.10.27-6';
+const BUILD = '05d09dd6e359';
 const FILES = {
   'css/base.css': '19e80512c54e49e6',
   'css/components.css': '1f94a2f41c9beef3',
   'css/layout.css': '4d4476a29ada4d90',
-  'css/sections.css': 'ad4ea5131cfee80d',
+  'css/sections.css': '22bc9587ebadb27e',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -42,7 +42,7 @@ const FILES = {
   'js/backup.js': 'd63f11891c0a78e0',
   'js/budget/accounts.js': '2df8f4fb9c0059fa',
   'js/budget/analytics.js': 'a0130ef8fad27c51',
-  'js/budget/budget.js': '68a771733dbfcae2',
+  'js/budget/budget.js': 'e6dd12ca8c21ee39',
   'js/budget/capital.js': 'deda6c6aefab6213',
   'js/budget/categories.js': '6bdda4efb808434b',
   'js/budget/dashboard.js': 'd3c7d89e86d7a06c',
@@ -50,7 +50,7 @@ const FILES = {
   'js/budget/goals.js': '56c2aee704dec399',
   'js/budget/recurring.js': '5277ce94419c5920',
   'js/budget/transactions.js': '155fb5643ddb3487',
-  'js/calendar.js': 'a5cc36a834c0749b',
+  'js/calendar.js': '9e6fbe3663a0b543',
   'js/core/charts.js': 'b18bc9cd948e68cb',
   'js/core/db.js': 'b05dc80015e15911',
   'js/core/defaults.js': '32223999b81941f4',
@@ -69,18 +69,18 @@ const FILES = {
   'js/learning.js': 'a2f9c718b84dda76',
   'js/notifications.js': 'f194853373c640ea',
   'js/nutrition.js': '92def9b3e17a25a4',
-  'js/people.js': '2169ea2bc270e84b',
+  'js/people.js': '1d3a57a89895f0c6',
   'js/profile.js': '13e2b243875688e3',
   'js/program.js': '394ed56868fae621',
   'js/programs.js': '17e17a1f639bf04a',
-  'js/pwa.js': '5591a03e67b4eb07',
-  'js/quick.js': '4d8c18a85bb59de9',
+  'js/pwa.js': '495463224430e3af',
+  'js/quick.js': '720b23d47ed51cca',
   'js/quotes.js': '57b3b169ce3e9dcb',
-  'js/search.js': 'ebba449b5d411a1c',
+  'js/search.js': 'b077a4cd90016012',
   'js/sync-config.js': '6e4963577579c35a',
-  'js/sync.js': '7cb5cbce14f44e6d',
-  'js/tasks.js': '616b9e0b7120885e',
-  'js/training.js': '76b893bb4782e287',
+  'js/sync.js': '1686180768686b45',
+  'js/tasks.js': '374136f82caa7737',
+  'js/training.js': '057239b930aadc95',
   'js/trash.js': '7ad01ec7851cf561',
   'manifest-c.json': '6bec32309f09144a',
   'manifest-tiles.json': 'a5d3ba9581552a4b',

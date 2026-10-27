@@ -294,7 +294,7 @@ window.CRM = window.CRM || {};
     if (v == null) return false;
     if (k === 'gcal') return !!v.clientId;
     if (k === 'driveBackup') return !!v.enabled;
-    if (k === 'quickInput') return !!v.accountId;
+    if (k === 'quickInput') return !!v.accountId || (Array.isArray(v.words) && v.words.length > 0);
     return true;
   }
   /**

@@ -1488,6 +1488,38 @@ body.has-pwa-bar .toast-stack { bottom: calc(var(--pwa-bar-h, 48px) + 28px + env
 .quick-account-label { display: block; margin-bottom: 6px; }
 .quick-account { max-width: 420px; }
 .toast-action { flex-shrink: 0; white-space: nowrap; }
+/* Кілька записів через «;» */
+.quick-rows { display: flex; flex-direction: column; gap: 2px; }
+.quick-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); min-width: 0; }
+.quick-row:first-child { border-top: 0; padding-top: 0; }
+.quick-row .list-row-icon { width: 30px; height: 30px; flex-shrink: 0; }
+.quick-row .quick-title { font-size: 14px; }
+.quick-row-kind { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.quick-row-kind .icon { width: 13px; height: 13px; color: var(--text-3); }
+.quick-row-kind:disabled { opacity: 1; cursor: default; }
+/* Часті рядки (історія на цьому пристрої) */
+.quick-frequent { display: flex; flex-direction: column; gap: 6px; }
+.quick-frequent-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.quick-frequent-title .icon { width: 15px; height: 15px; color: var(--text-3); }
+.quick-frequent-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-freq { display: inline-flex; align-items: center; padding: 0; gap: 0; max-width: 100%; }
+.quick-freq button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.quick-freq-use { height: 26px; padding: 0 4px 0 11px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-freq-del { display: inline-flex; align-items: center; height: 26px; padding: 0 8px 0 2px; color: var(--text-3); }
+.quick-freq-del:hover { color: var(--danger); }
+.quick-freq-del .icon { width: 13px; height: 13px; }
+/* Мої слова (кабінет) */
+.quick-words { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.quick-word-list { display: flex; flex-direction: column; gap: 2px; max-width: 520px; }
+.quick-word { display: flex; align-items: center; gap: 8px; padding: 2px 0; min-width: 0; }
+.quick-word-key { font-weight: 600; }
+.quick-word-cat { flex: 1; min-width: 0; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-word-empty { font-size: 13px; }
+.quick-word-add { display: flex; gap: 8px; flex-wrap: wrap; max-width: 520px; }
+.quick-word-input { flex: 1 1 140px; min-width: 0; }
+.quick-word-cat-select { flex: 2 1 200px; min-width: 0; }
+.task-remind { max-width: 240px; }
+.task-remind-hint { margin-top: 4px; }
 @media (max-width: 700px), (hover: none) {
   .quick-keys { display: none; }
 }
