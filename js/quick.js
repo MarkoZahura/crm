@@ -11,6 +11,7 @@
      «ДР Марти 5 листопада» → день народження в «Людях»; «написав Марті» → «Поспілкувались»
      «кава 65; таксі 120» — кілька записів одним рядком (лише «;», дата переходить на наступні частини)
      «пт здати розділ #диплом» — задача з міткою «диплом»
+     «відпустка 3–10 листопада», «з 3 по 10 листопада поїздка» — подія на кілька днів (весь день)
    parse(text) — розбір рядка без даних; plan(text) — варіанти з урахуванням рахунків,
    категорій та історії; create(option) / details(option) — створити запис або відкрити форму.
    ========================================================================== */
@@ -334,6 +335,85 @@ window.CRM = window.CRM || {};
       P.date = { value: d.date, noYear: d.noYear };
     }
   }
+  // ---------- Проміжок дат: «3–10 листопада», «з 3 по 10 листопада», «28 жовтня – 2 листопада», «3.11–10.11» ----------
+  /** Частина проміжку з слова j: «3», «3.11», «3.11.2026», «3 листопада [2026]» → { d, m, y, last } або null. */
+  function dayOfRange(T, j) {
+    if (!free(T, j)) return null;
+    const n = T[j].n;
+    let m = /^(\d{1,2})[./](\d{1,2})(?:[./](\d{2}|\d{4}))?$/.exec(n);
+    if (m) {
+      const y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : null;
+      return Number(m[2]) >= 1 && Number(m[2]) <= 12 ? { d: Number(m[1]), m: Number(m[2]), y, last: j } : null;
+    }
+    if (!/^\d{1,2}$/.test(n)) return null;
+    const out = { d: Number(n), m: null, y: null, last: j };
+    if (free(T, j + 1) && monthOf(T[j + 1].n) >= 0) {
+      out.m = monthOf(T[j + 1].n) + 1;
+      out.last = j + 1;
+      if (free(T, j + 2) && /^(19|20)\d\d$/.test(T[j + 2].n)) {
+        out.y = Number(T[j + 2].n);
+        out.last = j + 2;
+        if (free(T, j + 3) && /^(р|року|рік)$/.test(T[j + 3].n)) out.last = j + 3;
+      }
+    }
+    return out;
+  }
+  function passRange(T, P, today) {
+    const ty = D.parse(today).y;
+    for (let i = 0; i < T.length; i++) {
+      if (!free(T, i)) continue;
+      const lead = /^(з|із|від)$/.test(T[i].n);
+      const j = lead ? i + 1 : i;
+      if (!free(T, j)) continue;
+      let A = null;
+      let B = null;
+      // одним словом: «3–10», «3.11–10.11»
+      const g = /^(\d{1,2}(?:[./]\d{1,2}(?:[./]\d{2,4})?)?)[-–—](\d{1,2}(?:[./]\d{1,2}(?:[./]\d{2,4})?)?)$/.exec(T[j].n);
+      if (g) {
+        const fake = (x) => [{ n: x, tag: null }];
+        A = dayOfRange(fake(g[1]), 0);
+        B = dayOfRange(fake(g[2]), 0);
+        // «о 9.05-10.05» — це час, а не дати
+        if (A && B && A.m && B.m && free(T, j - 1) && /^(о|об|з|із|в|у|во)$/.test(T[j - 1].n)) A = null;
+        if (A && B) {
+          A.last = j;
+          B.last = j;
+          // «3–10 листопада»: місяць (і рік) — після
+          if (!B.m && free(T, j + 1) && monthOf(T[j + 1].n) >= 0) {
+            B.m = monthOf(T[j + 1].n) + 1;
+            B.last = j + 1;
+            if (free(T, j + 2) && /^(19|20)\d\d$/.test(T[j + 2].n)) { B.y = Number(T[j + 2].n); B.last = j + 2; }
+          }
+        }
+      } else {
+        // окремими словами: «3 – 10 листопада», «з 3 по 10 листопада», «28 жовтня – 2 листопада»
+        A = dayOfRange(T, j);
+        if (A) {
+          const k = A.last + 1;
+          const sep = free(T, k) && (DASH.test(T[k].n) || (lead && /^(по|до)$/.test(T[k].n)));
+          B = sep ? dayOfRange(T, k + 1) : null;
+        }
+      }
+      if (!A || !B || !B.m) continue;
+      if (!A.m) A.m = B.m;
+      let yB = B.y || ty;
+      let yA = A.y || (A.m > B.m ? yB - 1 : yB);
+      if (!B.y && A.y) { yB = A.m > B.m ? A.y + 1 : A.y; yA = A.y; }
+      if (A.d < 1 || B.d < 1 || A.d > D.daysInMonth(yA, A.m) || B.d > D.daysInMonth(yB, B.m)) continue;
+      let from = D.make(yA, A.m, A.d);
+      let to = D.make(yB, B.m, B.d);
+      const noYear = !A.y && !B.y;
+      if (to < from && noYear) to = D.addYears(to, 1);   // «28 грудня – 3 січня»
+      if (to <= from || D.diffDays(from, to) >= 366) continue;
+      let start = lead ? i : j;
+      if (!lead && free(T, start - 1) && /^(на|у|в)$/.test(T[start - 1].n)) start -= 1;
+      mark(T, start, B.last, 'date');
+      P.range = { from, to, noYear };
+      P.date = { value: from, noYear };
+      return;
+    }
+  }
+
   /** Проміжок часу з слова j: «30 хв», «2 год», «годину», «півгодини», «день», «2 дні» → { min, last, days } або null. */
   function leadAt(T, j) {
     if (!free(T, j)) return null;
@@ -714,7 +794,7 @@ window.CRM = window.CRM || {};
     if (!T.length) return null;
     const P = {
       tokens: T, time: null, dur: null, date: null, food: null, money: null, meal: null, prio: false, cash: false, deadline: false, incomeWord: false,
-      remind: null, repeat: null, workout: null, transfer: null, bday: false, contact: null
+      remind: null, repeat: null, workout: null, transfer: null, bday: false, contact: null, range: null
     };
     const day = today || D.today();
     P.today = day;
@@ -723,6 +803,7 @@ window.CRM = window.CRM || {};
       const lm = /^#([^#\s].*)$/.exec(t.raw.replace(/[,;.!?]+$/, ''));
       if (lm) { t.tag = 'label'; (P.labels = P.labels || []).push(lm[1]); }
     });
+    passRange(T, P, day);
     passRemind(T, P);
     passTime(T, P);
     passIn(T, P, toMin(o.now) != null ? toMin(o.now) : toMin(D.nowTime()), day);
@@ -837,10 +918,15 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Подія ----------
+  function calCats() {
+    const C = CRM.calendar;
+    return (C && (C.categories ? C.categories() : C.CATEGORIES)) || [];
+  }
+  const hasCat = (id) => !!id && calCats().some((x) => x.id === id);
   function lastCat() {
     const c = lsGet('crm.cal.cat', 'personal');
-    const cats = (CRM.calendar && CRM.calendar.CATEGORIES) || [];
-    return cats.some((x) => x.id === c) ? c : 'personal';
+    const cats = calCats();
+    return cats.some((x) => x.id === c) ? c : (cats[0] ? cats[0].id : 'personal');
   }
   const TITLE_DROP = ['date', 'time', 'dur', 'prio', 'remind', 'repeat', 'label'];
   /** «за 45 хв» → найближче з варіантів нагадування (5, 10, 15, 30 хв, 1–2 год, день). */
@@ -863,7 +949,13 @@ window.CRM = window.CRM || {};
     if (!title) return null;
     let date = dateFor(P, 'event') || P.today;
     let repeat = null;
-    if (P.repeat) {
+    let endDate = null;
+    if (P.range) {
+      // «відпустка 3–10 листопада»: без року — найближчий такий проміжок, що ще не скінчився
+      date = P.range.from;
+      endDate = P.range.to;
+      if (P.range.noYear && endDate < P.today) { date = D.addYears(date, 1); endDate = D.addYears(endDate, 1); }
+    } else if (P.repeat) {
       const r = P.repeat;
       let days = null;
       if (r.freq === 'week') {
@@ -875,10 +967,13 @@ window.CRM = window.CRM || {};
     }
     const hist = newest(CRM.store.list('events').filter((e) => same(e.title, title)), 'updatedAt');
     const ws = wordsOf(title);
-    const dictCat = (EVENT_DICT.find(([keys]) => dictHit(keys, ws)) || [])[1];
-    const cat = hist && hist.cat ? hist.cat : dictCat || lastCat();
+    // слова-підказки — лише для категорій, яких не видалили
+    const dictCat = (EVENT_DICT.find(([keys, c]) => dictHit(keys, ws) && hasCat(c)) || [])[1];
+    const cat = hist && hasCat(hist.cat) ? hist.cat : hasCat(dictCat) ? dictCat : lastCat();
     let rec;
-    if (P.time) {
+    if (endDate) {
+      rec = { title, date, endDate, allDay: true, start: null, dur: null, cat, remind: null, note: '' };
+    } else if (P.time) {
       const start = P.time.start;
       let dur = P.time.end != null ? P.time.end - start : P.dur || (hist && !hist.allDay && hist.dur) || 60;
       dur = Math.max(5, Math.min(dur, 1440 - start));
@@ -890,21 +985,26 @@ window.CRM = window.CRM || {};
     }
     let problem = CRM.db.SCHEMA.events ? null : 'Браузер показує стару версію сайту — онови сторінку (Ctrl+F5).';
     const parts = [];
-    if (repeat) {
+    if (endDate) {
+      const n = D.diffDays(date, endDate) + 1;
+      parts.push(`${dayShort(date)} – ${dayShort(endDate)}`, fmt.count(n, ['день', 'дні', 'днів']));
+      if (!CRM.calendar.spanEnd) problem = problem || 'Браузер показує стару версію сайту — онови сторінку (Ctrl+F5).';
+    } else if (repeat) {
       Object.assign(rec, { repeat, skip: [], overrides: {} });
       if (repeat.until && repeat.until < date) problem = problem || 'Дата закінчення раніше за початок — напиши іншу або відкрий форму.';
       parts.push(CRM.calendar.repeatText ? CRM.calendar.repeatText(rec) : 'Повторюється', 'з ' + dayShort(date));
     } else {
       parts.push(dayShort(date));
     }
-    parts.push(rec.allDay ? 'весь день' : `${rec.start}–${hhmm(toMin(rec.start) + rec.dur)}`, CRM.calendar.categoryName(cat));
+    if (!endDate) parts.push(rec.allDay ? 'весь день' : `${rec.start}–${hhmm(toMin(rec.start) + rec.dur)}`);
+    parts.push(CRM.calendar.categoryName(cat));
     if (P.remind) parts.push(rec.allDay ? 'без часу — нагадування не буде' : remindText(rec.remind));
     return { kind: 'event', label: 'Подія', icon: 'calendar', iconClass: 'ico-event', title, parts, rec, ok: !problem, problem };
   }
 
   // ---------- Задача ----------
   function buildTask(P) {
-    if (P.repeat) return null;   // задачі не повторюються — лише подія
+    if (P.repeat || P.range) return null;   // задачі не повторюються й не тривають кілька днів — лише подія
     const title = words(P, TITLE_DROP);
     if (!title) return null;
     const rec = { title, priority: P.prio ? 'high' : 'medium' };
@@ -1329,6 +1429,7 @@ window.CRM = window.CRM || {};
     const wo = built.workout && built.workout.rec && built.workout.rec.date <= P.today ? built.workout : null;   // майбутнє — це план (подія)
     if (wo && !P.time && (wo.sure || !P.money)) return 'workout';
     if (built.habit) return 'habit';
+    if (P.range && built.event && !P.money) return 'event';   // «відпустка 3–10 листопада»
     if (P.labels && P.labels.length && !P.time && !P.food && built.task) return 'task';   // «#мітка» буває лише в задач
     if (P.food) return 'meal';
     if (P.repeat) return 'event';
@@ -1431,7 +1532,9 @@ window.CRM = window.CRM || {};
     }
     if (o.kind === 'event') {
       const saved = await CRM.store.save('events', o.rec);
-      const when = saved.repeat && CRM.calendar.repeatText ? CRM.calendar.repeatText(saved) + ', з ' + dayShort(saved.date) : dayShort(saved.date);
+      const span = saved.endDate && CRM.calendar.spanEnd && CRM.calendar.spanEnd(saved);
+      const when = span ? CRM.calendar.whenText(saved)
+        : saved.repeat && CRM.calendar.repeatText ? CRM.calendar.repeatText(saved) + ', з ' + dayShort(saved.date) : dayShort(saved.date);
       return {
         kind: 'event', store: 'events', id: saved.id, short,
         text: `${saved.repeat ? 'Повторювану подію' : 'Подію'} додано: ${when}${saved.allDay ? '' : ', ' + saved.start + '–' + hhmm(toMin(saved.start) + saved.dur)}`,
@@ -1764,7 +1867,7 @@ window.CRM = window.CRM || {};
 
   const EXAMPLES = ['завтра 15:00 урок', 'кава 65', 'пт купити подарунок', 'вівсянка 80 г', '+15000 зарплата'];
   const MORE_EXAMPLES = ['щопонеділка 18:00 англійська', 'нагадай о 18:00 купити хліб', 'переказ 1000 моно → готівка', 'біг 5 км 28 хв',
-    'віджимання 3×20', 'ДР Марти 5 листопада', 'написав Марті', 'кава 65; таксі 120'];
+    'віджимання 3×20', 'ДР Марти 5 листопада', 'написав Марті', 'кава 65; таксі 120', 'відпустка 3–10 листопада'];
 
   // ---------- Мій кабінет ----------
   function categoryOptions() {

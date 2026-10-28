@@ -366,7 +366,7 @@ window.CRM = window.CRM || {};
   // ---------- Вибір дати (календар з понеділка, українською) ----------
   /**
    * Поле дати: кнопка з датою «26 вересня 2026», що відкриває календар.
-   * opts: { value: 'РРРР-ММ-ДД' | null, onChange(value|null), placeholder, clearable (true), ariaLabel }
+   * opts: { value: 'РРРР-ММ-ДД' | null, onChange(value|null), placeholder, clearable (true), ariaLabel, className, text, title }
    * Поточне значення — властивість .dateValue.
    */
   function dateInput(opts) {
@@ -375,14 +375,15 @@ window.CRM = window.CRM || {};
     let value = D.isDate(o.value) ? o.value : null;
     let pop = null;
     const text = h('span', { class: 'date-trigger-text' });
+    // o.className — свій вигляд кнопки замість поля; o.text — сталий підпис (напр., назва періоду в Календарі)
     const btn = h('button', {
-      type: 'button', class: 'input date-trigger', 'aria-haspopup': 'dialog', 'aria-label': o.ariaLabel || 'Дата'
+      type: 'button', class: o.className ? 'date-trigger ' + o.className : 'input date-trigger', 'aria-haspopup': 'dialog', 'aria-label': o.ariaLabel || 'Дата'
     }, CRM.icon('calendar', { size: 'sm' }), text);
 
     function renderLabel() {
-      text.textContent = value ? CRM.fmt.date(value) : o.placeholder;
+      text.textContent = o.text || (value ? CRM.fmt.date(value) : o.placeholder);
       btn.classList.toggle('is-empty', !value);
-      btn.title = value ? CRM.fmt.dateLong(value) : o.placeholder;
+      btn.title = o.title || (value ? CRM.fmt.dateLong(value) : o.placeholder);
     }
 
     function pick(v) {

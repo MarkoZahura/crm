@@ -16,7 +16,14 @@
      перенести чи змінити «лише цей» (overrides) або скасувати (skip). Перетягування
      переносить лише цей день; у формі — «Лише цю / Цю й наступні / Усі події серії».
 
-   Подія: { id, title, date: 'РРРР-ММ-ДД', allDay, start: 'ГГ:ХХ' | null, dur: хвилини | null,
+   • Дрібні доробки: «Дублювати» / «Копіювати на…» у формі й Ctrl+перетягування (копія замість
+     переносу); свої категорії (налаштування calCategories — назва, колір, нові, видалення з
+     перенесенням подій); події «на кілька днів» (endDate, лише «весь день» і без повторів);
+     «Перейти до дати» (клік на назві періоду), номер тижня; фільтр за категоріями в «Показати»
+     і «Пошук подій».
+
+   Подія: { id, title, date: 'РРРР-ММ-ДД', endDate?: 'РРРР-ММ-ДД' (остання дата, якщо на кілька днів) | null,
+            allDay, start: 'ГГ:ХХ' | null, dur: хвилини | null,
             cat: id категорії, remind: хвилини до початку | null, note,
             repeat?: { freq: 'day'|'week'|'month'|'year', every: 1–99, days: [0–6] (лише week; 0 — пн),
                        until: 'РРРР-ММ-ДД' | null, count: 1–999 | null } | null,
@@ -53,7 +60,8 @@ window.CRM = window.CRM || {};
     { id: 'month', label: 'Місяць' }
   ];
 
-  const CATEGORIES = [
+  // Стартові категорії. Свої (назва, колір, нові, видалені) — у налаштуванні calCategories (синхронізується).
+  const DEFAULT_CATEGORIES = [
     { id: 'personal', label: 'Особисте', color: 'blue' },
     { id: 'work', label: 'Робота', color: 'orange' },
     { id: 'study', label: 'Навчання', color: 'violet' },
@@ -61,6 +69,10 @@ window.CRM = window.CRM || {};
     { id: 'meeting', label: 'Зустрічі', color: 'magenta' },
     { id: 'other', label: 'Інше', color: 'slate' }
   ];
+  const OTHER = 'other';      // «Інше» видалити не можна — сюди потрапляють події з невідомою категорією
+  const CAT_MAX = 30;         // довжина назви категорії
+  const CATS_MAX = 30;        // скільки категорій можна мати
+  const MAX_SPAN = 366;       // найдовша подія «на кілька днів», днів
 
   const REMINDERS = [
     { v: null, label: 'Без нагадування' },
@@ -109,7 +121,17 @@ window.CRM = window.CRM || {};
   }
   function lastCat() {
     const c = lsGet('crm.cal.cat', 'personal');
-    return CATEGORIES.some((x) => x.id === c) ? c : 'personal';
+    const list = categories();
+    return list.some((x) => x.id === c) ? c : list[0].id;
+  }
+  /** Категорії, приховані фільтром у «Показати» (лише в цьому браузері). */
+  function hiddenCats() {
+    try { const v = JSON.parse(lsGet('crm.cal.hiddenCats', '[]')); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []); } catch (e) { return new Set(); }
+  }
+  function setHiddenCat(id, hidden) {
+    const s = hiddenCats();
+    if (hidden) s.add(id); else s.delete(id);
+    lsSet('crm.cal.hiddenCats', JSON.stringify(Array.from(s)));
   }
   /** Що додає швидке вікно: 'event' чи 'task' (запамʼятовується). */
   function lastKind() { return lsGet('crm.cal.kind', 'event') === 'task' ? 'task' : 'event'; }
@@ -149,14 +171,55 @@ window.CRM = window.CRM || {};
   function dayShort(d) { return `${CRM.WEEKDAYS_SHORT[D.weekday(d)]}, ${fmt.dateShort(d)}`; }
   function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-  // ---------- Події ----------
-  function categoryOf(id) { return CATEGORIES.find((c) => c.id === id) || CATEGORIES[0]; }
+  // ---------- Категорії ----------
+  let catsCache = { raw: undefined, list: null };
+  /** Чинний список категорій: [{ id, label, color }]; «Інше» є завжди. */
+  function categories() {
+    const raw = CRM.store.getSetting('calCategories', null);
+    if (catsCache.list && catsCache.raw === raw) return catsCache.list;
+    const seen = new Set();
+    let list = (Array.isArray(raw) ? raw : []).filter((c) => c && typeof c.id === 'string' && c.id && !seen.has(c.id) && seen.add(c.id))
+      .map((c) => ({
+        id: c.id,
+        label: String(c.label || '').replace(/\s+/g, ' ').trim().slice(0, CAT_MAX) || 'Без назви',
+        color: CRM.dict.get('categoryColors', c.color) ? c.color : 'slate'
+      }));
+    if (!list.length) list = DEFAULT_CATEGORIES.map((c) => Object.assign({}, c));
+    if (!list.some((c) => c.id === OTHER)) list.push(Object.assign({}, DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1]));
+    catsCache = { raw, list };
+    return list;
+  }
+  function categoryOf(id) {
+    const list = categories();
+    return list.find((c) => c.id === id) || list.find((c) => c.id === OTHER);
+  }
   function categoryName(id) { return categoryOf(id).label; }
   function catColor(id) { return CRM.dict.categoryColor(categoryOf(id).color); }
+  async function saveCategories(list) {
+    await CRM.store.setSetting('calCategories', list.map((c) => ({ id: c.id, label: c.label, color: c.color })));
+  }
+
+  // ---------- Події ----------
   function evStart(ev) { return toMin(ev.start) || 0; }
   function evEnd(ev) { return Math.min(DAY_MIN, evStart(ev) + (Number(ev.dur) > 0 ? Number(ev.dur) : 60)); }
-  /** «весь день» або «10:00–11:30». */
+  /** Остання дата події «на кілька днів» (лише «весь день» і без повторів) або null. */
+  function spanEnd(ev) {
+    if (!ev || !ev.allDay || ev.repeat || !D.isDate(ev.date) || !D.isDate(ev.endDate) || ev.endDate <= ev.date) return null;
+    return D.diffDays(ev.date, ev.endDate) < MAX_SPAN ? ev.endDate : D.addDays(ev.date, MAX_SPAN - 1);
+  }
+  /** «3–10 листопада» — проміжок дат події на кілька днів. */
+  function spanText(a, b) {
+    const pa = D.parse(a);
+    const pb = D.parse(b);
+    if (pa.y === pb.y && pa.m === pb.m) return `${pa.d}–${pb.d} ${CRM.MONTHS_GEN[pb.m - 1]}`;
+    if (pa.y === pb.y) return `${pa.d} ${CRM.MONTHS_GEN[pa.m - 1]} – ${pb.d} ${CRM.MONTHS_GEN[pb.m - 1]}`;
+    return `${fmt.date(a)} – ${fmt.date(b)}`;
+  }
+  function daysWord(n) { return fmt.count(n, ['день', 'дні', 'днів']); }
+  /** «весь день», «10:00–11:30» або «3–10 листопада (8 днів)». */
   function whenText(ev) {
+    const end = spanEnd(ev);
+    if (end) return `${spanText(ev.date, end)} (${daysWord(D.diffDays(ev.date, end) + 1)})`;
     if (!ev || ev.allDay || !ev.start) return 'весь день';
     return `${ev.start}–${fromMin(evEnd(ev))}`;
   }
@@ -298,12 +361,24 @@ window.CRM = window.CRM || {};
     return out;
   }
 
-  /** Власні події (і повтори серій), що припадають на [from, to]: [{ ev, date, series? }]. */
+  /**
+   * Власні події (і повтори серій), що припадають на [from, to]: [{ ev, date, series?, span? }].
+   * Подія на кілька днів — окремий пункт на кожен день: span = { first, last, day: 1…, days }.
+   */
   function occurrences(from, to) {
     const out = [];
     CRM.store.list('events').forEach((e) => {
       if (!D.isDate(e.date)) return;
       if (isSeries(e)) { seriesInstances(e, from, to).forEach((x) => out.push(x)); return; }
+      const end = spanEnd(e);
+      if (end) {
+        if (end < from || e.date > to) return;
+        const days = D.diffDays(e.date, end) + 1;
+        for (let d = e.date < from ? from : e.date; d <= end && d <= to; d = D.addDays(d, 1)) {
+          out.push({ ev: e, date: d, span: { first: e.date, last: end, day: D.diffDays(e.date, d) + 1, days } });
+        }
+        return;
+      }
       if (e.date >= from && e.date <= to) out.push({ ev: e, date: e.date });
     });
     return out;
@@ -434,12 +509,19 @@ window.CRM = window.CRM || {};
     const nm = nowMin();
 
     if (L.own) {
-      occurrences(from, to).forEach(({ ev, date, series }) => {
+      const hidden = hiddenCats();
+      occurrences(from, to).forEach(({ ev, date, series, span }) => {
+        if (hidden.size && hidden.has(categoryOf(ev.cat).id)) return;
         const it = {
           key: 'own:' + ev.id + ':' + (ev.occ || date), kind: 'own', title: ev.title || 'Без назви', color: catColor(ev.cat),
           icon: 'calendar', ev, date, editable: true, series: !!series, rep: series ? repeatText(series) : ''
         };
-        if (ev.allDay || !ev.start) {
+        if (span) {
+          it.span = span;
+          it.sub = `день ${span.day} з ${span.days} · ${categoryName(ev.cat)}`;
+          it.rep = spanText(span.first, span.last);
+          put(date, 'allDay', it);
+        } else if (ev.allDay || !ev.start) {
           put(date, 'allDay', Object.assign(it, { sub: categoryName(ev.cat) }));
         } else {
           it.startMin = evStart(ev);
@@ -553,8 +635,10 @@ window.CRM = window.CRM || {};
       });
     }
 
+    // Події на кілька днів — першими й в однаковому порядку щодня, щоб смуги йшли рівно
+    const spanKey = (it) => (it.span ? '0' + it.span.first + (99999 - it.span.days) + it.ev.id : '1');
     byDay.forEach((b) => {
-      b.allDay.sort((a, c) => (KIND_ORDER[a.kind] - KIND_ORDER[c.kind]) || ((a.order || 0) - (c.order || 0)) ||
+      b.allDay.sort((a, c) => (KIND_ORDER[a.kind] - KIND_ORDER[c.kind]) || spanKey(a).localeCompare(spanKey(c)) || ((a.order || 0) - (c.order || 0)) ||
         (a.time || '').localeCompare(c.time || '') || a.title.localeCompare(c.title, 'uk'));
       b.timed.sort((a, c) => (a.startMin - c.startMin) || ((c.endMin - c.startMin) - (a.endMin - a.startMin)));
     });
@@ -616,15 +700,75 @@ window.CRM = window.CRM || {};
     if (ev.occ) { await moveOccurrence(ev, changes, kind); return; }
     const cur = CRM.store.get('events', ev.id);
     if (!cur) return;
-    const before = { date: cur.date, start: cur.start, dur: cur.dur, allDay: cur.allDay };
+    const before = { date: cur.date, start: cur.start, dur: cur.dur, allDay: cur.allDay, endDate: cur.endDate || null };
     const saved = await CRM.store.patch('events', ev.id, changes);
+    const end = spanEnd(saved);
     const text = kind === 'resize'
       ? `«${saved.title}»: ${whenText(saved)} (${durText(saved.dur)})`
-      : `«${saved.title}» перенесено: ${dayShort(saved.date)}${saved.allDay ? '' : ', ' + whenText(saved)}`;
+      : end ? `«${saved.title}» перенесено: ${spanText(saved.date, end)}`
+        : `«${saved.title}» перенесено: ${dayShort(saved.date)}${saved.allDay ? '' : ', ' + whenText(saved)}`;
     ui.toast(text, {
       type: 'success',
       action: { label: 'Скасувати', onClick: () => CRM.store.patch('events', ev.id, before) }
     });
+  }
+
+  // ---------- Копії ----------
+  const COPY_F = ['title', 'date', 'allDay', 'start', 'dur', 'cat', 'remind', 'note'];
+  /** Поля події для копії: повтор серії стає звичайною подією (без правила), «на кілька днів» — зберігається. */
+  function copyFields(ev) {
+    const out = {};
+    COPY_F.forEach((f) => { if (ev[f] !== undefined) out[f] = CRM.utils.deepClone(ev[f]); });
+    const end = spanEnd(ev);
+    if (end) out.endDate = end;
+    return out;
+  }
+  /** Скопіювати подію: changes = { date, start? } — куди. Тривалість і «на кілька днів» — як в оригіналу. */
+  async function copyEvent(ev, changes) {
+    if (!canSave()) return null;
+    const rec = Object.assign(copyFields(ev), changes || {});
+    const end = spanEnd(ev);
+    if (end && changes && changes.date && changes.endDate === undefined) rec.endDate = D.addDays(rec.date, D.diffDays(ev.date, end));
+    if (rec.start && !rec.allDay && toMin(rec.start) + (Number(rec.dur) || 60) > DAY_MIN) rec.dur = Math.max(SNAP, DAY_MIN - toMin(rec.start));
+    const saved = await CRM.store.save('events', rec);
+    const se = spanEnd(saved);
+    ui.toast(`«${saved.title}» скопійовано: ${se ? spanText(saved.date, se) : dayShort(saved.date) + (saved.allDay ? '' : ', ' + whenText(saved))}`, {
+      type: 'success', duration: 8000,
+      action: { label: 'Скасувати', onClick: async () => { if (CRM.store.get('events', saved.id)) await CRM.store.removeForever('events', saved.id); } }
+    });
+    return saved;
+  }
+
+  /** Віконце «Копіювати на…»: дата (і час — для події з часом). onDone — після копіювання. */
+  function copyTo(anchor, src, onDone) {
+    const dIn = ui.dateInput({ value: D.addDays(src.date, 1), clearable: false, ariaLabel: 'На яку дату' });
+    const tIn = src.allDay || !src.start ? null : ui.timeInput({ value: src.start, ariaLabel: 'Час початку копії' });
+    const err = h('div', { class: 'kal-quick-err', role: 'alert' });
+    async function run() {
+      const date = dIn.dateValue;
+      if (!date) { err.textContent = 'Вибери дату'; return; }
+      const changes = { date };
+      if (tIn) {
+        const t = tIn.parseTime(tIn.value);
+        if (!t) { err.textContent = 'Час — у форматі ГГ:ХХ, напр., 09:30'; tIn.focus(); return; }
+        changes.start = t;
+      }
+      pop.close('copied');
+      if (onDone) onDone();
+      await copyEvent(src, changes);
+    }
+    if (tIn) tIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tIn.dispatchEvent(new Event('change')); run(); } });
+    const pop = ui.popover(anchor, h('div', { class: 'kal-copy' },
+      h('div', { class: 'kal-pick-head' }, 'Копіювати подію на…'),
+      h('div', { class: 'kal-copy-row' }, h('span', { class: 'kal-copy-lbl' }, 'Дата'), dIn),
+      tIn ? h('div', { class: 'kal-copy-row' }, h('span', { class: 'kal-copy-lbl' }, 'Початок'), tIn) : null,
+      err,
+      h('div', { class: 'kal-quick-actions' },
+        ui.button({ label: 'Скасувати', size: 'sm', variant: 'ghost', onClick: () => pop.close('cancel') }),
+        ui.button({ label: 'Копіювати', size: 'sm', variant: 'primary', className: 'kal-copy-ok', onClick: run }))),
+    { align: 'start', className: 'kal-copy-pop' });
+    dIn.focus({ preventScroll: true });
+    return pop;
   }
 
   async function removeEvent(ev) {
@@ -983,6 +1127,7 @@ window.CRM = window.CRM || {};
         window.removeEventListener('pointerup', up);
         window.removeEventListener('pointercancel', up);
         window.removeEventListener('keydown', key, true);
+        window.removeEventListener('keyup', key, true);
         teardown = null;
       };
       const move = (m) => {
@@ -993,14 +1138,15 @@ window.CRM = window.CRM || {};
           if (!s) { stop(); return; }
         }
         m.preventDefault();
-        s.move(m.clientX, m.clientY);
+        s.move(m.clientX, m.clientY, m);
       };
       const up = (u) => {
         stop();
-        if (s) { suppressUntil = Date.now() + 400; s.end(u.type === 'pointerup'); }
+        if (s) { suppressUntil = Date.now() + 400; s.end(u.type === 'pointerup', u); }
       };
       const key = (k) => {
-        if (k.key !== 'Escape' || !s) return;
+        if (s && s.mod && (k.key === 'Control' || k.key === 'Meta')) { s.mod(k); return; }
+        if (k.type !== 'keydown' || k.key !== 'Escape' || !s) return;
         k.preventDefault();
         k.stopPropagation();
         stop();
@@ -1011,6 +1157,7 @@ window.CRM = window.CRM || {};
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', up);
       window.addEventListener('keydown', key, true);
+      window.addEventListener('keyup', key, true);
       teardown = () => { stop(); if (s) s.end(false); };
     });
 
@@ -1127,8 +1274,13 @@ window.CRM = window.CRM || {};
     const st = { date: it.date, start: it.startMin, end: it.endMin, x: sx, y: sy };
     const timeEl = block.querySelector('.kal-ev-time');
     let out = null;   // задачу несуть із сітки: у «План дня» або на «весь день»
+    let copy = false; // Ctrl (на Mac — Cmd) під час перетягування: копіювати, а не переносити
     block.classList.add('kal-dragging');
     block.setAttribute('aria-grabbed', 'true');
+    function setCopy(e) {
+      copy = !!(e && (e.ctrlKey || e.metaKey)) && it.kind === 'own' && mode === 'move';
+      block.classList.toggle('kal-copying', copy);
+    }
 
     function setOut(o) {
       if (out && (!o || o.el !== out.el)) out.el.classList.remove('kal-drop');
@@ -1173,10 +1325,12 @@ window.CRM = window.CRM || {};
     raf = requestAnimationFrame(tick);
 
     return {
-      move(x, y) { st.x = x; st.y = y; apply(); },
-      end(commit) {
+      move(x, y, e) { st.x = x; st.y = y; if (e) setCopy(e); apply(); },
+      mod: setCopy,
+      end(commit, e) {
         cancelAnimationFrame(raf);
-        block.classList.remove('kal-dragging', 'kal-out');
+        if (e) setCopy(e);
+        block.classList.remove('kal-dragging', 'kal-out', 'kal-copying');
         block.removeAttribute('aria-grabbed');
         const o = out;
         setOut(null);
@@ -1188,6 +1342,7 @@ window.CRM = window.CRM || {};
           else resizeTask(it.task.id, st.end - st.start);
           return;
         }
+        if (mode === 'move' && copy) { copyEvent(it.ev, { date: st.date, start: fromMin(st.start) }); CRM.router.rerender(); return; }
         if (mode === 'move') moveEvent(it.ev, { date: st.date, start: fromMin(st.start) }, 'move');
         else moveEvent(it.ev, { dur: st.end - st.start }, 'resize');
       }
@@ -1305,8 +1460,12 @@ window.CRM = window.CRM || {};
     const offX = sx - r.left;
     const offY = sy - r.top;
     let over = null;
+    let copy = false;
+    const setCopy = (e) => { copy = !!(e && (e.ctrlKey || e.metaKey)); clone.classList.toggle('kal-copying', copy); };
     return {
-      move(x, y) {
+      mod: setCopy,
+      move(x, y, e) {
+        if (e) setCopy(e);
         clone.style.left = (x - offX) + 'px';
         clone.style.top = (y - offY) + 'px';
         const el = document.elementFromPoint(x, y);
@@ -1317,12 +1476,18 @@ window.CRM = window.CRM || {};
           if (over) over.classList.add('kal-drop');
         }
       },
-      end(commit) {
+      end(commit, e) {
+        if (e) setCopy(e);
         clone.remove();
         chip.classList.remove('kal-lifted');
         if (over) over.classList.remove('kal-drop');
         const d = over && over.dataset.dropDate;
-        if (commit && d && d !== it.date) moveEvent(it.ev, { date: d }, 'move');
+        if (!commit || !d) return;
+        // Подія на кілька днів зсувається цілком (за день, за який її взяли)
+        const shift = D.diffDays(it.date, d);
+        const changes = it.span ? { date: D.addDays(it.span.first, shift), endDate: D.addDays(it.span.last, shift) } : { date: d };
+        if (copy) { copyEvent(it.ev, changes); return; }
+        if (d !== it.date) moveEvent(it.ev, changes, 'move');
       }
     };
   }
@@ -1367,15 +1532,221 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Вибір категорії ----------
-  function catPicker(current, onPick, compact) {
+  /** Кнопки категорій; allowNew — ще й «+ Нова» (створити категорію просто з форми). */
+  function catPicker(current, onPick, compact, allowNew) {
     const wrap = h('div', { class: 'kal-cats' + (compact ? ' compact' : ''), role: 'radiogroup', 'aria-label': 'Категорія' });
-    const draw = (val) => ui.mount(wrap, CATEGORIES.map((c) => h('button', {
-      type: 'button', role: 'radio', class: 'kal-cat' + (val === c.id ? ' active' : ''), 'aria-checked': val === c.id ? 'true' : 'false',
-      title: c.label, 'aria-label': c.label, dataset: { cat: c.id }, style: { '--c': CRM.dict.categoryColor(c.color) },
-      onClick: () => { draw(c.id); onPick(c.id); }
-    }, h('span', { class: 'kal-cat-dot' }), compact ? null : h('span', null, c.label))));
-    draw(current);
+    let val = current;
+    const pick = (id) => { val = id; draw(); onPick(id); };
+    function draw() {
+      const list = categories();
+      ui.mount(wrap, list.map((c) => h('button', {
+        type: 'button', role: 'radio', class: 'kal-cat' + (val === c.id ? ' active' : ''), 'aria-checked': val === c.id ? 'true' : 'false',
+        title: c.label, 'aria-label': c.label, dataset: { cat: c.id }, style: { '--c': CRM.dict.categoryColor(c.color) },
+        onClick: () => pick(c.id)
+      }, h('span', { class: 'kal-cat-dot' }), compact ? null : h('span', null, c.label))),
+      allowNew && list.length < CATS_MAX ? h('button', {
+        type: 'button', class: 'kal-cat kal-cat-new', title: 'Нова категорія', 'aria-label': 'Нова категорія',
+        onClick: (e) => newCategory(e.currentTarget, pick)
+      }, CRM.icon('plus', { size: 'sm' }), h('span', null, 'Нова')) : null);
+    }
+    draw();
     return wrap;
+  }
+
+  // ---------- Свої категорії ----------
+  const cleanCat = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, CAT_MAX);
+  const sameName = (a, b) => CRM.utils.normalize(a) === CRM.utils.normalize(b);
+  function nameTaken(label, exceptId) { return categories().some((c) => c.id !== exceptId && sameName(c.label, label)); }
+
+  function swatches(value, onPick) {
+    const wrap = h('div', { class: 'swatches kal-cat-swatches', role: 'radiogroup', 'aria-label': 'Колір' });
+    const draw = () => ui.mount(wrap, CRM.dict.categoryColors.map((c) => h('button', {
+      type: 'button', role: 'radio', class: 'swatch' + (c.id === value ? ' active' : ''), 'aria-checked': c.id === value ? 'true' : 'false',
+      style: { '--sw': CRM.dict.categoryColor(c.id) }, title: c.name, 'aria-label': c.name, dataset: { color: c.id },
+      onClick: () => { value = c.id; draw(); onPick(c.id); }
+    })));
+    draw();
+    return wrap;
+  }
+
+  /** Віконце «Нова категорія»: назва й колір. onDone(id) — після збереження. */
+  function newCategory(anchor, onDone) {
+    const used = new Set(categories().map((c) => c.color));
+    let color = (CRM.dict.categoryColors.find((c) => !used.has(c.id)) || CRM.dict.categoryColors[0]).id;
+    const nameIn = ui.input({ placeholder: 'Наприклад, Подорожі', maxlength: CAT_MAX, 'aria-label': 'Назва нової категорії', class: 'input kal-newcat-name' });
+    const err = h('div', { class: 'kal-quick-err', role: 'alert' });
+    async function add() {
+      const label = cleanCat(nameIn.value);
+      if (!label) { err.textContent = 'Вкажи назву категорії'; nameIn.focus(); return; }
+      if (nameTaken(label)) { err.textContent = 'Така категорія вже є'; nameIn.focus(); return; }
+      if (categories().length >= CATS_MAX) { err.textContent = `Можна мати до ${CATS_MAX} категорій`; return; }
+      const list = categories().slice();
+      const id = 'c-' + CRM.utils.uid();
+      const at = list.findIndex((c) => c.id === OTHER);   // нові — перед «Інше»
+      list.splice(at < 0 ? list.length : at, 0, { id, label, color });
+      pop.close('saved');
+      await saveCategories(list);
+      ui.toast(`Категорію «${label}» додано`, { type: 'success' });
+      if (onDone) onDone(id);
+    }
+    nameIn.addEventListener('input', () => { err.textContent = ''; });
+    nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    const pop = ui.popover(anchor, h('div', { class: 'kal-newcat' },
+      h('div', { class: 'kal-pick-head' }, 'Нова категорія'),
+      nameIn,
+      swatches(color, (v) => { color = v; }),
+      err,
+      h('div', { class: 'kal-quick-actions' },
+        ui.button({ label: 'Скасувати', size: 'sm', variant: 'ghost', onClick: () => pop.close('cancel') }),
+        ui.button({ label: 'Додати', size: 'sm', variant: 'primary', className: 'kal-newcat-add', onClick: add }))),
+    { align: 'start', className: 'kal-newcat-pop' });
+    nameIn.focus({ preventScroll: true });
+    return pop;
+  }
+
+  async function renameCategory(id, value) {
+    const label = cleanCat(value);
+    const c = categories().find((x) => x.id === id);
+    if (!c || !label || label === c.label) return false;
+    if (nameTaken(label, id)) { ui.toast('Така категорія вже є', { type: 'error' }); return false; }
+    await saveCategories(categories().map((x) => (x.id === id ? Object.assign({}, x, { label }) : x)));
+    ui.toast(`Категорію перейменовано: «${label}»`, { type: 'success' });
+    return true;
+  }
+  async function setCategoryColor(id, color) {
+    await saveCategories(categories().map((x) => (x.id === id ? Object.assign({}, x, { color }) : x)));
+  }
+  /** Події, у яких є ця категорія (сама подія або окремий день серії). */
+  function eventsWithCat(id) {
+    return CRM.store.list('events').filter((e) => categoryOf(e.cat).id === id ||
+      Object.keys(e.overrides || {}).some((k) => e.overrides[k] && e.overrides[k].cat !== undefined && categoryOf(e.overrides[k].cat).id === id));
+  }
+  /** Вікно «Куди перенести події?» → id категорії або null (передумали). */
+  function askTarget(c, n) {
+    return new Promise((resolve) => {
+      let result = null;
+      const opts = categories().filter((x) => x.id !== c.id);
+      const sel = ui.select(opts.map((x) => ({ value: x.id, label: x.label })), { value: OTHER, 'aria-label': 'Куди перенести події', class: 'select kcat-target' });
+      const dlg = ui.modal({
+        title: `Видалити категорію «${c.label}»?`, size: 'sm', center: true, className: 'kcat-del-modal',
+        body: h('div', { class: 'form-stack' },
+          h('p', null, `У ній ${fmt.count(n, ['подія', 'події', 'подій'])}. Події лишаться — вибери, у яку категорію їх перенести.`),
+          ui.field({ label: 'Перенести в', input: sel })),
+        footer: [
+          ui.button({ label: 'Скасувати', onClick: () => dlg.close('cancel') }),
+          ui.button({ label: 'Видалити категорію', variant: 'danger', className: 'kcat-del-ok', onClick: () => { result = sel.value; dlg.close('confirm'); } })
+        ],
+        onClose: () => resolve(result)
+      });
+    });
+  }
+  /** Видалити категорію; її події переходять в іншу (з «Скасувати»). */
+  async function deleteCategory(id) {
+    const c = categories().find((x) => x.id === id);
+    if (!c || id === OTHER) return false;
+    const evs = eventsWithCat(id);
+    let target = OTHER;
+    if (evs.length) {
+      target = await askTarget(c, evs.length);
+      if (!target) return false;
+    } else {
+      const ok = await ui.confirm({ title: `Видалити категорію «${c.label}»?`, message: 'Подій у ній немає.', confirmText: 'Видалити', danger: true });
+      if (!ok) return false;
+    }
+    const beforeList = categories().map((x) => Object.assign({}, x));
+    const snap = evs.map((e) => ({ id: e.id, cat: e.cat, overrides: e.overrides ? CRM.utils.deepClone(e.overrides) : undefined }));
+    const changed = evs.map((e) => {
+      const x = CRM.utils.deepClone(e);
+      if (categoryOf(x.cat).id === id) x.cat = target;
+      Object.keys(x.overrides || {}).forEach((k) => {
+        const o = x.overrides[k];
+        if (o && o.cat !== undefined && categoryOf(o.cat).id === id) o.cat = target;
+      });
+      return x;
+    });
+    if (changed.length) await CRM.store.saveMany('events', changed);
+    await saveCategories(beforeList.filter((x) => x.id !== id));
+    const wasHidden = hiddenCats().has(id);
+    if (wasHidden) setHiddenCat(id, false);
+    if (lsGet('crm.cal.cat', '') === id) lsSet('crm.cal.cat', target);
+    ui.toast(`Категорію «${c.label}» видалено${changed.length ? ` · події — в «${categoryName(target)}»` : ''}`, {
+      type: 'success', duration: 8000,
+      action: {
+        label: 'Скасувати',
+        onClick: async () => {
+          const back = snap.map((s) => {
+            const cur = CRM.store.get('events', s.id);
+            if (!cur) return null;
+            const x = Object.assign({}, cur, { cat: s.cat });
+            if (s.overrides !== undefined) x.overrides = s.overrides;
+            return x;
+          }).filter(Boolean);
+          if (back.length) await CRM.store.saveMany('events', back);
+          await saveCategories(beforeList);
+          if (wasHidden) setHiddenCat(id, true);
+          ui.toast('Категорію повернуто');
+        }
+      }
+    });
+    return true;
+  }
+
+  /** Вікно «Категорії подій»: назва, колір, нова, видалити. */
+  function openCategories() {
+    closeQuick();
+    const body = h('div', { class: 'lbl-manage kcat-manage' });
+    function counts() {
+      const m = new Map();
+      CRM.store.list('events').forEach((e) => { const id = categoryOf(e.cat).id; m.set(id, (m.get(id) || 0) + 1); });
+      return m;
+    }
+    function colorMenu(anchor, c) {
+      const pop = ui.popover(anchor, h('div', { class: 'lbl-colors' },
+        swatches(c.color, async (v) => { pop.close(); await setCategoryColor(c.id, v); })),
+      { align: 'start', className: 'lbl-colors-pop' });
+    }
+    function render() {
+      const list = categories();
+      const cnt = counts();
+      const addBtn = list.length < CATS_MAX ? ui.button({ label: 'Нова категорія', icon: 'plus', size: 'sm', variant: 'ghost', className: 'kcat-add' }) : null;
+      if (addBtn) addBtn.addEventListener('click', () => newCategory(addBtn, null));
+      ui.mount(body,
+        h('p', { class: 'subtle lbl-hint' }, 'Назва й колір змінюються одразу для всіх подій цієї категорії. «Інше» видалити не можна — туди потрапляють події без категорії.'),
+        list.map((c) => {
+          const sw = h('button', {
+            type: 'button', class: 'lbl-swatch', style: { '--lbl': CRM.dict.categoryColor(c.color) },
+            title: 'Колір категорії', 'aria-label': `Колір категорії «${c.label}»`, onClick: () => colorMenu(sw, c)
+          });
+          const nameIn = h('input', { class: 'input input-sm lbl-name', value: c.label, maxlength: CAT_MAX, 'aria-label': `Назва категорії «${c.label}»` });
+          nameIn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); }
+            if (e.key === 'Escape') nameIn.value = c.label;
+          });
+          nameIn.addEventListener('change', async () => {
+            const v = cleanCat(nameIn.value);
+            if (!v || !(await renameCategory(c.id, v))) nameIn.value = c.label;
+          });
+          return h('div', { class: 'lbl-row kcat-row', dataset: { cat: c.id } },
+            sw, nameIn,
+            h('span', { class: 'lbl-count subtle' }, fmt.count(cnt.get(c.id) || 0, ['подія', 'події', 'подій'])),
+            c.id === OTHER
+              ? h('span', { class: 'kcat-lock', title: '«Інше» видалити не можна' }, CRM.icon('shield', { size: 'sm' }))
+              : ui.button({ icon: 'trash', iconOnly: true, size: 'sm', variant: 'ghost', title: 'Видалити категорію', className: 'lbl-del', onClick: () => deleteCategory(c.id) }));
+        }),
+        addBtn);
+    }
+    render();
+    const off = CRM.store.on(['events', 'settings'], () => {
+      const a = document.activeElement;
+      if (a && body.contains(a) && a.classList.contains('lbl-name')) return;
+      render();
+    });
+    const dlg = ui.modal({
+      title: 'Категорії подій', size: 'sm', className: 'lbl-modal kcat-modal', body,
+      footer: [ui.button({ label: 'Готово', variant: 'primary', onClick: () => dlg.close('button') })],
+      onClose: () => off()
+    });
+    return dlg;
   }
 
   // ---------- Швидке додавання ----------
@@ -1509,13 +1880,36 @@ window.CRM = window.CRM || {};
     }, preset || {});
     if (!ev.allDay && !ev.start) ev.allDay = true;
     let allDay = !!ev.allDay;
-    let cat = ev.cat || 'personal';
+    // Категорію могли видалити (напр., на іншому пристрої) — тоді «Інше»
+    let cat = ev.cat && categories().some((c) => c.id === ev.cat) ? ev.cat : ev.cat ? OTHER : lastCat();
     const s0 = ev.allDay ? 9 * 60 : evStart(ev);
     let span = ev.allDay ? 60 : evEnd(ev) - s0;
 
     const titleIn = ui.input({ value: ev.title, maxlength: 200, placeholder: 'Наприклад, Заняття з англійської', 'aria-label': 'Назва' });
     const fTitle = ui.field({ label: 'Назва', required: true, input: titleIn });
-    const dateIn = ui.dateInput({ value: ev.date, clearable: false, ariaLabel: 'Дата', onChange: () => repDateChanged() });
+    let prevDate = ev.date;
+    const dateIn = ui.dateInput({ value: ev.date, clearable: false, ariaLabel: 'Дата', onChange: () => { shiftEnd(); repDateChanged(); } });
+    // «По» — остання дата події на кілька днів (лише «весь день» і без повторів)
+    const endDateIn = ui.dateInput({
+      value: spanEnd(ev), clearable: true, placeholder: 'Один день', ariaLabel: 'По яку дату (для події на кілька днів)',
+      onChange: () => { fEnd.setError(null); showSpan(); }
+    });
+    const spanEl = h('span', { class: 'subtle kal-span-len' });
+    const fEnd = ui.field({ label: 'По', input: h('div', { class: 'kal-end-row' }, endDateIn, spanEl) });
+    fEnd.classList.add('kal-end-field');
+    function showSpan() {
+      const a = dateIn.dateValue;
+      const b = endDateIn.dateValue;
+      spanEl.textContent = a && b && b > a ? daysWord(D.diffDays(a, b) + 1) : '';
+    }
+    /** Змінили дату початку — «по» зсувається на стільки ж (тривалість та сама). */
+    function shiftEnd() {
+      const d = dateIn.dateValue;
+      if (endDateIn.dateValue && D.isDate(prevDate) && D.isDate(d)) endDateIn.dateValue = D.addDays(endDateIn.dateValue, D.diffDays(prevDate, d));
+      prevDate = d;
+      showSpan();
+    }
+    function refreshEnd() { fEnd.hidden = !allDay || !!rp.mode; }
     const startIn = ui.timeInput({ value: fromMin(s0), ariaLabel: 'Початок' });
     const endIn = ui.timeInput({ value: fromMin(Math.min(DAY_MIN, s0 + span)), ariaLabel: 'Кінець' });
     const durEl = h('span', { class: 'kal-dur subtle' });
@@ -1549,6 +1943,7 @@ window.CRM = window.CRM || {};
       allDay = on;
       fTimes.hidden = on;
       fRemind.hidden = on;
+      refreshEnd();
     });
     fTimes.hidden = allDay;
     fRemind.hidden = allDay;
@@ -1654,6 +2049,7 @@ window.CRM = window.CRM || {};
       fillUnits();
       drawWdays();
       repSummary();
+      refreshEnd();
     }
     /** Змінили дату у формі: для нової серії підписи (і день тижня, якщо дні не вибирали) — від нової дати. */
     function repDateChanged() {
@@ -1728,6 +2124,14 @@ window.CRM = window.CRM || {};
       const rErr = repError(series0 && inst && sameRule(formRule(), rule0) ? null : V.date);
       if (rErr) { fRepeat.setError(rErr); return; }
       const rule = formRule();
+      // Подія на кілька днів: лише «весь день» і без повторів
+      V.endDate = null;
+      if (allDay && !rule && endDateIn.dateValue && endDateIn.dateValue !== V.date) {
+        const e = endDateIn.dateValue;
+        if (e < V.date) { fEnd.setError('Не раніше за дату початку'); return; }
+        if (D.diffDays(V.date, e) >= MAX_SPAN) { fEnd.setError(`Подія — не довше за ${MAX_SPAN} днів`); return; }
+        V.endDate = e;
+      }
       if (!canSave()) return;
       lsSet('crm.cal.cat', cat);
 
@@ -1755,16 +2159,37 @@ window.CRM = window.CRM || {};
       dlg.close('saved');
       const saved = await CRM.store.save('events', rec);
       if (cur) { ui.toast(rule && !rule0 ? `Подію збережено: ${ruleText(rule, saved.date)}` : 'Подію збережено', { type: 'success' }); return; }
-      ui.toast(`Подію додано: ${dayShort(saved.date)}${allDay ? '' : ', ' + whenText(saved)}${rule ? ' · ' + ruleText(rule, saved.date) : ''}`, { type: 'success' });
+      const se = spanEnd(saved);
+      ui.toast(`Подію додано: ${se ? whenText(saved) : dayShort(saved.date) + (allDay ? '' : ', ' + whenText(saved))}${rule ? ' · ' + ruleText(rule, saved.date) : ''}`, { type: 'success' });
     }
     titleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
 
+    refreshEnd();
+    showSpan();
+
+    // «Дублювати» / «Копіювати на…» — для наявної події (повтор серії копіюється як звичайна подія)
+    const src = inst || cur;
+    let copyRow = null;
+    if (src) {
+      const dupBtn = ui.button({ label: 'Дублювати', icon: 'copy', size: 'sm', variant: 'ghost', className: 'kal-dup', title: 'Копія на той самий день — одразу відкриється, щоб змінити' });
+      dupBtn.addEventListener('click', async () => {
+        dlg.close('dup');
+        const saved = await copyEvent(src, {});
+        if (saved) openEditor(saved.id);
+      });
+      const copyBtn = ui.button({ label: 'Копіювати на…', icon: 'calendar', size: 'sm', variant: 'ghost', className: 'kal-copyto' });
+      copyBtn.setAttribute('aria-haspopup', 'dialog');
+      copyBtn.addEventListener('click', () => copyTo(copyBtn, src, () => dlg.close('copied')));
+      copyRow = h('div', { class: 'kal-ed-actions' }, dupBtn, copyBtn);
+    }
+
     const body = h('div', { class: 'form-stack kal-editor' },
       fTitle,
-      h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), allDayBox),
+      copyRow,
+      h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), fEnd, allDayBox),
       fTimes,
       fRepeat,
-      ui.field({ label: 'Категорія', input: catPicker(cat, (v) => { cat = v; }) }),
+      ui.field({ label: 'Категорія', input: catPicker(cat, (v) => { cat = v; }, false, true) }),
       fRemind,
       ui.field({ label: 'Нотатки', input: noteIn }));
     const footer = [
@@ -1854,6 +2279,12 @@ window.CRM = window.CRM || {};
     if (it.overdue) cls.push('overdue');
     if (it.tentative) cls.push('tentative');
     const label = (it.time ? it.time + ' ' : '') + it.title;
+    if (it.span) {
+      cls.push('kal-span');
+      if (it.date === it.span.first) cls.push('kal-span-first');
+      if (it.date === it.span.last) cls.push('kal-span-last');
+      if (D.weekday(it.date) === 6) cls.push('kal-span-sun');   // кінець рядка в «Місяці»
+    }
     if (it.kind === 'task') return taskChip(it, cls, label, o);
     const el = h('button', {
       type: 'button', class: cls.join(' '), style: { '--c': it.color },
@@ -2218,9 +2649,21 @@ window.CRM = window.CRM || {};
       });
       return cell;
     });
+    // Зліва — номер тижня (клік — відкрити цей тиждень)
+    const rows = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      const mon = r.days[i];
+      const n = isoWeek(mon);
+      rows.push(h('button', {
+        type: 'button', class: 'kal-mwk num', title: `Тиждень ${n} — відкрити`, 'aria-label': `Тиждень ${n}: відкрити тиждень`,
+        onClick: (e) => { e.stopPropagation(); go('week', mon); }
+      }, String(n)));
+      rows.push(...cells.slice(i, i + 7));
+    }
     const grid = h('div', { class: 'kal-mgrid' },
+      h('div', { class: 'kal-mwd kal-mwk-h', title: 'Номер тижня' }, '№'),
       CRM.WEEKDAYS_SHORT.map((w, i) => h('div', { class: 'kal-mwd' + (i >= 5 ? ' weekend' : '') }, w)),
-      cells);
+      rows);
     grid.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; }, true);
     return h('div', { class: 'stack' },
       h('section', { class: 'card kal-card kal-month' }, grid),
@@ -2250,16 +2693,114 @@ window.CRM = window.CRM || {};
   function layersButton() {
     const L = layers();
     const off = LAYERS.filter((l) => !L[l.id]).length;
-    const btn = ui.button({ label: off ? `Показати · ${LAYERS.length - off} з ${LAYERS.length}` : 'Показати', icon: 'eye', size: 'sm', className: 'kal-layers-btn' });
+    const hidden = hiddenCats();
+    const filtered = categories().some((c) => hidden.has(c.id));
+    const label = ['Показати', off ? `${LAYERS.length - off} з ${LAYERS.length}` : null, filtered ? 'фільтр' : null].filter(Boolean).join(' · ');
+    const btn = ui.button({ label, icon: 'eye', size: 'sm', className: 'kal-layers-btn' + (off || filtered ? ' kal-filtered' : '') });
     btn.setAttribute('aria-haspopup', 'dialog');
     btn.addEventListener('click', () => {
       const cur = layers();
-      const pop = ui.popover(btn, h('div', { class: 'menu kal-layers', role: 'group', 'aria-label': 'Що показувати' },
-        LAYERS.map((l) => check(l.label, cur[l.id], (on) => { setLayer(l.id, on); CRM.router.rerender(); }))),
-      { align: 'end' });
+      const hid = hiddenCats();
+      const catRows = categories().map((c) => {
+        const b = check(c.label, !hid.has(c.id), (on) => { setHiddenCat(c.id, !on); CRM.router.rerender(); });
+        b.classList.add('kal-lcat');
+        b.dataset.cat = c.id;
+        b.insertBefore(h('span', { class: 'kal-lcat-dot', style: { '--c': CRM.dict.categoryColor(c.color) }, 'aria-hidden': 'true' }), b.lastChild);
+        return b;
+      });
+      const manage = h('button', { type: 'button', class: 'kal-lcat-manage', onClick: () => { pop.close('manage'); openCategories(); } },
+        CRM.icon('palette', { size: 'sm' }), h('span', null, 'Категорії…'));
+      const pop = ui.popover(btn, h('div', { class: 'kal-show' },
+        h('div', { class: 'menu kal-layers', role: 'group', 'aria-label': 'Що показувати' },
+          LAYERS.map((l) => check(l.label, cur[l.id], (on) => { setLayer(l.id, on); CRM.router.rerender(); }))),
+        h('div', { class: 'kal-lcats', role: 'group', 'aria-label': 'Мої події за категоріями' },
+          h('div', { class: 'kal-lcats-head' }, 'Мої події за категоріями'),
+          catRows,
+          manage)),
+      { align: 'end', className: 'kal-show-pop' });
       return pop;
     });
     return btn;
+  }
+
+  /** Номер тижня за ISO (тиждень з понеділка; перший — той, де 4 січня). */
+  function isoWeek(d) {
+    const th = D.addDays(D.startOfWeek(d), 3);
+    return Math.floor(D.diffDays(D.make(D.parse(th).y, 1, 1), th) / 7) + 1;
+  }
+
+  // ---------- Пошук подій ----------
+  /** Найближчий день, на який припадає подія (для серії — наступний повтор), і чи він уже минув. */
+  function whenOf(e, T) {
+    if (isSeries(e)) {
+      const n = nextOccurrence(e, T);
+      return n ? { date: n.date, occ: n.occ, past: n.date < T } : null;
+    }
+    const end = spanEnd(e) || e.date;
+    return { date: e.date, occ: null, past: end < T };
+  }
+  function openSearch() {
+    closeQuick();
+    const T = D.today();
+    const q0 = lsGet('crm.cal.searchCat', '');
+    const input = ui.input({ placeholder: 'Назва або нотатки…', maxlength: 100, 'aria-label': 'Що шукати', class: 'input kal-search-in', type: 'search' });
+    const catSel = ui.select([{ value: '', label: 'Усі категорії' }].concat(categories().map((c) => ({ value: c.id, label: c.label }))),
+      { value: categories().some((c) => c.id === q0) ? q0 : '', 'aria-label': 'Категорія', class: 'select kal-search-cat' });
+    const out = h('div', { class: 'kal-search-out', 'aria-live': 'polite' });
+    const LIMIT = 50;
+    function row(x) {
+      const e = x.e;
+      const se = spanEnd(e);
+      const when = x.w ? (se ? spanText(e.date, se) : `${dayShort(x.w.date)}${e.allDay || !e.start ? '' : ', ' + whenText(e)}`) : '';
+      return h('button', {
+        type: 'button', class: 'kal-sres' + (x.w && x.w.past ? ' past' : ''), style: { '--c': catColor(e.cat) }, dataset: { id: e.id },
+        onClick: () => { dlg.close('open'); go('day', x.w ? x.w.date : e.date, Object.assign({ open: e.id }, x.w && x.w.occ ? { occ: x.w.occ } : {})); }
+      },
+      h('span', { class: 'kal-sres-bar', 'aria-hidden': 'true' }),
+      h('span', { class: 'kal-sres-main' },
+        h('span', { class: 'kal-sres-title' }, isSeries(e) ? CRM.icon('repeat', { size: 'sm', className: 'kal-rep-ico' }) : null, e.title || 'Без назви'),
+        h('span', { class: 'kal-sres-sub' }, [when, isSeries(e) ? repeatText(e) : null, categoryName(e.cat)].filter(Boolean).join(' · '))));
+    }
+    function run() {
+      const q = CRM.utils.normalize(input.value).trim();
+      const cat = catSel.value;
+      lsSet('crm.cal.searchCat', cat);
+      const words = q ? q.split(/\s+/) : [];
+      const list = CRM.store.list('events').filter((e) => {
+        if (!D.isDate(e.date)) return false;
+        if (cat && categoryOf(e.cat).id !== cat) return false;
+        if (!words.length) return !!cat;
+        const hay = CRM.utils.normalize(`${e.title || ''} ${e.note || ''}`);
+        return words.every((w) => hay.includes(w));
+      }).map((e) => ({ e, w: whenOf(e, T) }));
+      if (!q && !cat) {
+        ui.mount(out, h('div', { class: 'kal-search-empty subtle' }, 'Почни писати назву події або вибери категорію — покажу найближчі й минулі.'));
+        return;
+      }
+      const up = list.filter((x) => x.w && !x.w.past).sort((a, b) => a.w.date.localeCompare(b.w.date) || String(a.e.start || '').localeCompare(String(b.e.start || '')));
+      const past = list.filter((x) => !x.w || x.w.past).sort((a, b) => (b.w ? b.w.date : '').localeCompare(a.w ? a.w.date : ''));
+      if (!up.length && !past.length) {
+        ui.mount(out, ui.empty({ icon: 'search', small: true, title: 'Нічого не знайдено', text: cat && q ? 'Спробуй інше слово або «Усі категорії».' : 'Спробуй інше слово.' }));
+        return;
+      }
+      ui.mount(out,
+        up.length ? h('div', { class: 'kal-sgroup' }, h('div', { class: 'kal-sgroup-head' }, `Найближчі · ${up.length}`), up.slice(0, LIMIT).map(row)) : null,
+        past.length ? h('div', { class: 'kal-sgroup' }, h('div', { class: 'kal-sgroup-head' }, `Минулі · ${past.length}`), past.slice(0, LIMIT).map(row)) : null);
+    }
+    let timer = 0;
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 120); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); const first = out.querySelector('.kal-sres'); if (first) first.click(); }
+    });
+    catSel.addEventListener('change', run);
+    run();
+    const dlg = ui.modal({
+      title: 'Пошук подій', size: 'md', className: 'kal-search-modal',
+      body: h('div', { class: 'kal-search' }, h('div', { class: 'kal-search-bar' }, input, catSel), out),
+      footer: [ui.button({ label: 'Закрити', onClick: () => dlg.close('button') })],
+      initialFocus: input
+    });
+    return dlg;
   }
 
   function viewSwitch(view, anchor) {
@@ -2308,8 +2849,16 @@ window.CRM = window.CRM || {};
         ui.button({ icon: 'chevronLeft', iconOnly: true, size: 'sm', title: 'Назад', ariaLabel: 'Попередній період', onClick: () => go(view, stepDate(view, anchor, -1)) }),
         ui.button({ label: 'Сьогодні', size: 'sm', disabled: isToday && (view === 'week' || anchor === T), onClick: () => go(view, T) }),
         ui.button({ icon: 'chevronRight', iconOnly: true, size: 'sm', title: 'Вперед', ariaLabel: 'Наступний період', onClick: () => go(view, stepDate(view, anchor, 1)) }),
-        h('span', { class: 'kal-range' }, sub)),
-      h('div', { class: 'kal-tools' }, viewSwitch(view, anchor), layersButton()));
+        // Назва періоду — кнопка «Перейти до дати»
+        ui.dateInput({
+          value: anchor, clearable: false, className: 'kal-range', text: sub, title: 'Перейти до дати', ariaLabel: `${sub}. Перейти до дати`,
+          onChange: (v) => { if (D.isDate(v)) go(view, v); }
+        }),
+        view !== 'month' ? h('span', { class: 'kal-weekno num', title: 'Номер тижня' },
+          h('span', { class: 'kal-weekno-long' }, 'Тиждень '), h('span', { class: 'kal-weekno-short' }, 'тиж. '), String(isoWeek(r.from))) : null),
+      h('div', { class: 'kal-tools' }, viewSwitch(view, anchor),
+        ui.button({ icon: 'search', iconOnly: true, size: 'sm', title: 'Пошук подій', ariaLabel: 'Пошук подій', className: 'kal-search-btn', onClick: openSearch }),
+        layersButton()));
 
     let main = view === 'month' ? monthView(r, data, anchor) : gridView(r, data, { noUntimedTasks: withPanel });
     if (withPanel) {
@@ -2319,8 +2868,8 @@ window.CRM = window.CRM || {};
     }
     const hint = h('div', { class: 'kal-hint' },
       h('span', { class: 'kal-hint-mouse' }, view === 'month'
-        ? 'Клікни на день, щоб додати подію чи задачу; перетягни пункт на інший день, щоб перенести.'
-        : 'Клікни на вільний час, щоб додати подію чи задачу (або протягни мишкою для свого проміжку). Перетягни пункт, щоб перенести; потягни за нижній край — щоб змінити тривалість.' +
+        ? 'Клікни на день, щоб додати подію чи задачу; перетягни пункт на інший день, щоб перенести (з затиснутим Ctrl — скопіювати).'
+        : 'Клікни на вільний час, щоб додати подію чи задачу (або протягни мишкою для свого проміжку). Перетягни пункт, щоб перенести (з затиснутим Ctrl — скопіювати); потягни за нижній край — щоб змінити тривалість.' +
           (withPanel ? ' Задачу з «Плану дня» можна перетягнути в сітку (зʼявиться час) і назад.' : '')),
       h('span', { class: 'kal-hint-touch' }, view === 'month'
         ? 'Торкнися дня, щоб побачити його події. Утримуй пункт, щоб перетягнути його на інший день.'
@@ -2363,6 +2912,15 @@ window.CRM = window.CRM || {};
       CRM.router.rerender();
     };
     const onTheme = () => CRM.router.rerender();
+    // Свої категорії змінили (тут, в іншій вкладці чи на іншому пристрої) — перемалювати
+    let catRaw = CRM.store.getSetting('calCategories', null);
+    const offCats = CRM.store.on(['settings'], () => {
+      const now = CRM.store.getSetting('calCategories', null);
+      if (now === catRaw) return;
+      catRaw = now;
+      if (quick && quick.isOpen) { rerenderLater = true; return; }
+      CRM.router.rerender();
+    });
     const onMinute = () => {
       const now = container.querySelector('.kal-now');
       if (now) now.style.top = px(nowMin());
@@ -2374,6 +2932,7 @@ window.CRM = window.CRM || {};
       document.removeEventListener('crm:gcalchange', onGcal);
       document.removeEventListener('crm:themechange', onTheme);
       document.removeEventListener('crm:minute', onMinute);
+      offCats();
       if (teardown) { const t = teardown; teardown = null; try { t(); } catch (e) { console.error(e); } }
       if (location.hash !== quickRoute) closeQuick();
     };
@@ -2386,10 +2945,10 @@ window.CRM = window.CRM || {};
   });
 
   // ---------- Розклад на Головній ----------
-  CRM.home.addScheduleSource((date) => occurrences(date, date).map(({ ev }) => ({
+  CRM.home.addScheduleSource((date) => occurrences(date, date).map(({ ev, span }) => ({
     time: ev.allDay || !ev.start ? null : ev.start, kind: 'calendar', icon: 'calendar', cls: 'ico-event',
     title: ev.title || 'Без назви',
-    sub: ['Календар', whenText(ev), categoryName(ev.cat)].join(' · '),
+    sub: ['Календар', span ? `день ${span.day} з ${span.days} (${spanText(span.first, span.last)})` : whenText(ev), categoryName(ev.cat)].join(' · '),
     onClick: () => go('day', date)
   })));
   // Задачі, заплановані на день, — у порядку «Плану дня» (виконані — з позначкою)
@@ -2430,9 +2989,11 @@ window.CRM = window.CRM || {};
   });
 
   CRM.calendar = {
-    CATEGORIES, VIEWS, LAYERS, REMINDERS, HOUR, TASK_DUR,
-    whenText, categoryName, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
+    get CATEGORIES() { return categories(); },
+    DEFAULT_CATEGORIES, VIEWS, LAYERS, REMINDERS, HOUR, TASK_DUR, MAX_SPAN,
+    whenText, categoryName, categories, categoryOf, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
     plannedTasks, untimedOn, overdueTasks, planTask, rollOver,
-    FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn
+    FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn,
+    spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, hiddenCats
   };
 })(window.CRM);
