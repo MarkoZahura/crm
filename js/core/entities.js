@@ -16,6 +16,17 @@ window.CRM = window.CRM || {};
     const s = c && (c.subcategories || []).find((x) => x.id === subId);
     return s ? s.name : '';
   }
+  /** Частини операції (розділена — кілька категорій). entities.js вантажиться раніше за finance.js — тому без нього. */
+  function txPartsOf(r) {
+    if (r.type !== 'transfer' && Array.isArray(r.splits) && r.splits.length > 1) return r.splits;
+    return [{ categoryId: r.categoryId, subcategoryId: r.subcategoryId }];
+  }
+  /** «Продукти» або «Продукти + Побут» для розділеної. */
+  function txCats(r) {
+    const names = [];
+    txPartsOf(r).forEach((p) => { const n = catName(p.categoryId); if (n && !names.includes(n)) names.push(n); });
+    return names.join(' + ');
+  }
   function accName(id) { const a = S().get('accounts', id); return a ? a.name : 'Рахунок видалено'; }
   function accCurrency(id) { const a = S().get('accounts', id); return a ? a.currency : 'UAH'; }
 
@@ -73,16 +84,18 @@ window.CRM = window.CRM || {};
       title: (r) => {
         if (r.comment) return r.comment;
         if (r.type === 'transfer') return `Переказ: ${accName(r.accountId)} → ${accName(r.toAccountId)}`;
-        return catName(r.categoryId) || CRM.dict.label('txTypes', r.type);
+        return txCats(r) || CRM.dict.label('txTypes', r.type);
       },
-      sub: (r) => [fmt().date(r.date), txSignedAmount(r), catName(r.categoryId) || null, accName(r.accountId)].filter(Boolean).join(' · '),
-      text: (r) => [r.comment, catName(r.categoryId), subName(r.categoryId, r.subcategoryId), accName(r.accountId)],
+      sub: (r) => [fmt().date(r.date), txSignedAmount(r), txCats(r) || null, accName(r.accountId)].filter(Boolean).join(' · '),
+      // Розділена операція шукається за кожною своєю категорією
+      text: (r) => [r.comment, accName(r.accountId)].concat(...txPartsOf(r).map((p) => [catName(p.categoryId), subName(p.categoryId, p.subcategoryId)])),
       amounts: (r) => [r.amount, r.toAmount].filter((x) => typeof x === 'number'),
       route: (r) => ['budget/transactions', { open: r.id }],
       // Від чого залежить запис: якщо рахунок чи категорія теж у Кошику — запропонуємо відновити разом
       deps: (r) => [
-        { store: 'accounts', id: r.accountId }, { store: 'accounts', id: r.toAccountId }, { store: 'categories', id: r.categoryId }
-      ].filter((x) => x.id)
+        { store: 'accounts', id: r.accountId }, { store: 'accounts', id: r.toAccountId }
+      ].concat(txPartsOf(r).map((p) => ({ store: 'categories', id: p.categoryId })))
+        .filter((x, i, arr) => x.id && arr.findIndex((y) => y.store === x.store && y.id === x.id) === i)
     },
     accounts: {
       label: 'Рахунок', group: 'Рахунки', icon: 'bank', iconClass: 'ico-event', section: 'budget',

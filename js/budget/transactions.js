@@ -4,6 +4,8 @@
    «Минулого місяця», «За весь час»), фільтри (тип, категорія, рахунок,
    валюта), пошук за коментарем і сумою, сортування за датою,
    групування по днях із підсумком дня.
+   Рядок: ↻ «Повторити сьогодні»; розділена операція — «Продукти + Побут».
+   Кнопка «Імпорт виписки» (js/budget/import.js).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -54,7 +56,7 @@ window.CRM = window.CRM || {};
 
   function matches(t) {
     if (f.type !== 'all' && t.type !== f.type) return false;
-    if (f.categoryId && t.categoryId !== f.categoryId) return false;
+    if (f.categoryId && !F().hasCategory(t, f.categoryId)) return false;
     if (f.accountId && t.accountId !== f.accountId && t.toAccountId !== f.accountId) return false;
     if (f.currency) {
       const c1 = F().currencyOf(t.accountId);
@@ -83,6 +85,7 @@ window.CRM = window.CRM || {};
   // ---------- Рядок операції ----------
   function txRow(t) {
     const cur = F().txCurrency(t);
+    const split = F().isSplit(t);
     let icon;
     let title;
     let sub;
@@ -90,6 +93,13 @@ window.CRM = window.CRM || {};
       icon = h('span', { class: 'list-row-icon tx-ico transfer' }, CRM.icon('arrows', { size: 'sm' }));
       title = 'Переказ';
       sub = `${CRM.entities.accName(t.accountId)} → ${CRM.entities.accName(t.toAccountId)}`;
+    } else if (split) {
+      // Розділена операція: кілька кольорових крапок
+      const colors = F().txColors(t).slice(0, 3);
+      icon = h('span', { class: 'list-row-icon tx-ico split', style: { '--cat': colors[0] } },
+        colors.map((c) => h('span', { class: 'cat-dot', style: { background: c } })));
+      title = F().txTitle(t);
+      sub = [CRM.entities.accName(t.accountId), fmt.count(t.splits.length, ['частина', 'частини', 'частин'])].join(' · ');
     } else {
       icon = h('span', { class: 'list-row-icon tx-ico', style: { '--cat': F().categoryColor(t.categoryId) } }, h('span', { class: 'cat-dot big' }));
       title = F().categoryName(t.categoryId, t.subcategoryId);
@@ -97,19 +107,29 @@ window.CRM = window.CRM || {};
     }
     const uah = cur !== 'UAH' ? F().txUAH(t) : null;
     const toCur = t.type === 'transfer' && t.toAccountId ? F().currencyOf(t.toAccountId) : null;
-    return h('button', { type: 'button', class: 'tx-row', onClick: () => CRM.budget.openTxForm({ id: t.id }), dataset: { id: t.id } },
+    // Фільтр за категорією й розділена операція — скільки з неї припадає на цю категорію
+    const partSum = split && f.categoryId ? F().categoryAmount(t, f.categoryId) : null;
+    const row = h('button', { type: 'button', class: 'tx-row', onClick: () => CRM.budget.openTxForm({ id: t.id }), dataset: { id: t.id } },
       icon,
       h('span', { class: 'tx-main' },
-        h('span', { class: 'tx-title' }, title, t.recurringId ? h('span', { class: 'tx-tag', title: 'Регулярний платіж' }, CRM.icon('repeat', { size: 'sm' })) : null),
+        h('span', { class: 'tx-title' }, title,
+          t.recurringId ? h('span', { class: 'tx-tag', title: 'Регулярний платіж' }, CRM.icon('repeat', { size: 'sm' })) : null,
+          t.import ? h('span', { class: 'tx-tag', title: 'З виписки банку' }, CRM.icon('upload', { size: 'sm' })) : null),
         h('span', { class: 'tx-sub' }, [t.comment, sub].filter(Boolean).join(' · '))),
       h('span', { class: 'tx-amounts' },
         h('span', { class: 'tx-amount num tx-' + t.type }, F().txAmountLabel(t)),
+        partSum != null ? h('span', { class: 'tx-uah num tx-part' }, `у т. ч. ${F().categoryName(f.categoryId)}: ${fmt.money(partSum, cur)}`) : null,
         toCur && toCur !== cur ? h('span', { class: 'tx-uah num' }, '→ ' + fmt.money(t.toAmount, toCur)) : null,
         uah != null && t.type !== 'transfer' ? h('span', { class: 'tx-uah num' }, '≈ ' + fmt.money(uah, 'UAH')) : null));
+    const rep = h('button', {
+      type: 'button', class: 'btn btn-ghost btn-icon btn-sm tx-rep', title: 'Повторити сьогодні', 'aria-label': 'Повторити сьогодні',
+      onClick: (e) => { e.stopPropagation(); CRM.budget.repeatTx(t.id); }
+    }, CRM.icon('repeat', { size: 'sm' }));
+    return h('div', { class: 'tx-item', dataset: { id: t.id } }, row, rep);
   }
 
   function dayHeader(date, list) {
-    const tot = F().totals(list);
+    const tot = F().totals(list, f.categoryId || null);
     const diff = D.diffDays(D.today(), date);
     const label = diff === 0 ? 'Сьогодні' : diff === -1 ? 'Вчора' : null;
     const long = fmt.dateLong(date);
@@ -172,8 +192,13 @@ window.CRM = window.CRM || {};
       onClick: () => { f.order = f.order === 'desc' ? 'asc' : 'desc'; CRM.router.rerender(); }
     }, CRM.icon('sort', { size: 'sm' }), f.order === 'desc' ? 'Спочатку нові' : 'Спочатку старі');
 
+    const importBtn = CRM.budget.openImport ? h('button', {
+      type: 'button', class: 'btn btn-sm tx-import-btn', title: 'Імпорт виписки банку (файл CSV)',
+      onClick: () => CRM.budget.openImport()
+    }, CRM.icon('upload', { size: 'sm' }), 'Імпорт виписки') : null;
+
     return h('div', { class: 'tx-filters card' },
-      h('div', { class: 'tx-filters-row' }, periodSel, custom, h('span', { class: 'grow' }), orderBtn),
+      h('div', { class: 'tx-filters-row' }, periodSel, custom, h('span', { class: 'grow' }), importBtn, orderBtn),
       h('div', { class: 'tx-filters-row' }, types, catSel, accSel, curSel,
         h('label', { class: 'tx-search' }, CRM.icon('search', { size: 'sm' }), qIn),
         isFiltered() ? h('button', {
@@ -191,7 +216,7 @@ window.CRM = window.CRM || {};
     const hasAny = CRM.store.list('transactions').length > 0;
     const list = filtered();
     F().ensureRatesFor(list);
-    const tot = F().totals(list);
+    const tot = F().totals(list, f.categoryId || null);
 
     const summary = h('div', { class: 'tx-summary' },
       h('span', null, `${fmt.count(list.length, ['операція', 'операції', 'операцій'])} ${rangeLabel()}`),
@@ -206,7 +231,9 @@ window.CRM = window.CRM || {};
         icon: 'receipt', title: 'Ще немає транзакцій — додай першу',
         text: 'Витрати, доходи й перекази між рахунками. Баланс рахунку перераховується автоматично.',
         action: { label: 'Додати транзакцію', icon: 'plus', onClick: () => CRM.budget.openTxForm() }
-      }));
+      }), CRM.budget.openImport ? h('div', { class: 'tx-empty-import' },
+        h('button', { type: 'button', class: 'link-like tx-import-btn', onClick: () => CRM.budget.openImport() },
+          CRM.icon('upload', { size: 'sm' }), 'або імпортуй виписку банку (CSV)')) : null);
     } else if (!list.length) {
       body = h('div', { class: 'card' }, ui.empty({
         icon: 'search', small: true, title: 'Нічого не знайдено', text: 'Спробуй інший період або скинь фільтри.',

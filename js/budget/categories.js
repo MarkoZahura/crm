@@ -13,12 +13,26 @@ window.CRM = window.CRM || {};
   const fmt = CRM.fmt;
   const F = () => CRM.finance;
 
-  function txOfCategory(id) { return CRM.store.list('transactions').filter((t) => t.categoryId === id); }
+  // Розділена операція (чек на кілька категорій) належить кожній зі своїх категорій
+  function txOfCategory(id) { return CRM.store.list('transactions').filter((t) => F().hasCategory(t, id)); }
+
+  /** Замінити категорію (і, за потреби, субкатегорію) в операції та її частинах. fn(part) → нові поля частини або null. */
+  function remapTx(t, fn) {
+    const rec = Object.assign({}, t);
+    if (F().isSplit(t)) {
+      rec.splits = t.splits.map((p) => Object.assign({}, p, fn(p) || {}));
+      return F().normalizeSplits(rec);
+    }
+    return Object.assign(rec, fn({ categoryId: t.categoryId, subcategoryId: t.subcategoryId }) || {});
+  }
 
   function column(kind, title) {
     const cats = F().categories(kind);
     const counts = new Map();
-    CRM.store.list('transactions').forEach((t) => { if (t.categoryId) counts.set(t.categoryId, (counts.get(t.categoryId) || 0) + 1); });
+    CRM.store.list('transactions').forEach((t) => {
+      if (t.type === 'transfer') return;
+      new Set(F().txParts(t).map((p) => p.categoryId).filter(Boolean)).forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
+    });
     return h('section', { class: 'card' },
       h('div', { class: 'card-head' },
         h('h2', null, title, h('span', { class: 'tab-count' }, String(cats.length))),
@@ -115,7 +129,7 @@ window.CRM = window.CRM || {};
       if (existing) {
         const kept = new Set(st.subcategories.map((s) => s.id));
         const removed = (existing.subcategories || []).filter((s) => !kept.has(s.id));
-        const affected = txOfCategory(existing.id).filter((t) => t.subcategoryId && !kept.has(t.subcategoryId));
+        const affected = txOfCategory(existing.id).filter((t) => F().txParts(t).some((p) => p.categoryId === existing.id && p.subcategoryId && !kept.has(p.subcategoryId)));
         if (affected.length) {
           const ok = await ui.confirm({
             title: 'Видалити субкатегорії з операціями?',
@@ -123,7 +137,7 @@ window.CRM = window.CRM || {};
             confirmText: 'Так, зберегти'
           });
           if (!ok) return;
-          await CRM.store.saveMany('transactions', affected.map((t) => Object.assign({}, t, { subcategoryId: null })));
+          await CRM.store.saveMany('transactions', affected.map((t) => remapTx(t, (p) => (p.categoryId === existing.id && p.subcategoryId && !kept.has(p.subcategoryId) ? { subcategoryId: null } : null))));
         }
       }
       const rec = Object.assign(existing ? CRM.utils.deepClone(existing) : {}, {
@@ -194,7 +208,7 @@ window.CRM = window.CRM || {};
           onClick: async () => {
             moveBtn.disabled = true;
             const to = CRM.store.get('categories', target.value);
-            await CRM.store.saveMany('transactions', txs.map((t) => Object.assign({}, t, { categoryId: to.id, subcategoryId: null })));
+            await CRM.store.saveMany('transactions', txs.map((t) => remapTx(t, (p) => (p.categoryId === id ? { categoryId: to.id, subcategoryId: null } : null))));
             await CRM.store.softDelete('categories', id);
             dlg.close('force');
             ui.toast(`Категорію видалено, ${fmt.count(txs.length, ['операцію', 'операції', 'операцій'])} перенесено в «${to.name}»`, { type: 'success' });

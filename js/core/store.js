@@ -156,6 +156,17 @@ window.CRM = window.CRM || {};
     notifySync({ kind: 'del', store: name, ids: [id] });
   }
 
+  /** Остаточно видалити кілька записів одним разом (напр., «Скасувати імпорт»). */
+  async function removeManyForever(name, ids) {
+    const list = (ids || []).filter((id) => cache[name] && cache[name].has(id));
+    if (!list.length) return;
+    await CRM.db.removeMany(name, list);
+    list.forEach((id) => cache[name].delete(id));
+    if (name === 'tasks') { for (const id of list) await removeAttachmentsOfTask(id); }
+    emit(name);
+    notifySync({ kind: 'del', store: name, ids: list });
+  }
+
   // ---------- Кошик (м'яке видалення) ----------
   /**
    * Перенести запис у Кошик разом із пов'язаними.
@@ -518,7 +529,7 @@ window.CRM = window.CRM || {};
 
   CRM.store = {
     APP_ID, SCHEMA_VERSION, MAX_ATTACHMENT, TRASH_DAYS, DATA_STORES,
-    load, on, emit, list, get, count, save, saveMany, patch, removeForever,
+    load, on, emit, list, get, count, save, saveMany, patch, removeForever, removeManyForever,
     softDelete, restoreBatch, purgeBatch, trashItems, purgeExpired,
     listAttachments, addAttachment, getAttachmentBlob, removeAttachment,
     getSetting, setSetting, getRate, allRates, saveRate, saveRates,

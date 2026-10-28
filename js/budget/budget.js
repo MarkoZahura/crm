@@ -133,6 +133,7 @@ window.CRM = window.CRM || {};
   /**
    * Відкрити форму транзакції.
    * opts: { id } — редагування; або { type, accountId, categoryId, subcategoryId, date, amount, comment } — нова.
+   * Витрату чи дохід можна розділити на кілька категорій (поле splits, див. CRM.finance.txParts).
    */
   function openTxForm(opts) {
     const o = opts || {};
@@ -158,6 +159,9 @@ window.CRM = window.CRM || {};
       date: o.date || D.today(), comment: o.comment || ''
     };
     let toTouched = !isNew && st.type === 'transfer' && st.toAmount != null && st.toAmount !== st.amount;
+    // Розділення на кілька категорій: рядки { catKey: 'id|subId', amount: 'текст' }
+    let splitMode = F().isSplit(st);
+    let splitRows = splitMode ? st.splits.map((p) => ({ catKey: p.categoryId + '|' + (p.subcategoryId || ''), amount: String(p.amount).replace('.', ',') })) : [];
 
     // --- Тип ---
     const typeSeg = h('div', { class: 'segmented tx-type', role: 'radiogroup', 'aria-label': 'Тип операції' });
@@ -168,7 +172,10 @@ window.CRM = window.CRM || {};
         onClick: () => {
           if (st.type === t.id) return;
           st.type = t.id;
-          if (t.id !== 'transfer') { const c = st.categoryId && CRM.store.get('categories', st.categoryId); if (!c || c.kind !== t.id) { st.categoryId = null; st.subcategoryId = null; } }
+          if (t.id !== 'transfer') {
+            const c = st.categoryId && CRM.store.get('categories', st.categoryId);
+            if (!c || c.kind !== t.id) { st.categoryId = null; st.subcategoryId = null; splitMode = false; splitRows = []; }
+          }
           renderType(); renderAccounts(); renderCats(); renderTo();
         }
       }, t.label)));
@@ -181,7 +188,7 @@ window.CRM = window.CRM || {};
     });
     const curBadge = h('span', { class: 'amount-cur' });
     const fAmount = ui.field({ label: 'Сума', input: h('div', { class: 'amount-wrap' }, amountIn, curBadge), required: true, className: 'span-2' });
-    amountIn.addEventListener('input', () => { fAmount.setError(null); if (!toTouched) autoTo(); });
+    amountIn.addEventListener('input', () => { fAmount.setError(null); if (!toTouched) autoTo(); if (splitMode) splitStatus(); });
 
     // --- Рахунки ---
     const accSel = h('select', { class: 'select', 'aria-label': 'Рахунок' });
@@ -240,11 +247,25 @@ window.CRM = window.CRM || {};
     // --- Категорія й субкатегорія ---
     const catBox = h('div', { class: 'cat-chips' });
     const subBox = h('div', { class: 'cat-chips sub' });
-    const fCat = ui.field({ label: 'Категорія', input: h('div', null, catBox, subBox), required: true });
+    const splitBox = h('div', { class: 'tx-split' });
+    const splitToggle = h('button', {
+      type: 'button', class: 'link-like tx-split-toggle',
+      onClick: () => startSplit()
+    }, CRM.icon('listChecks', { size: 'sm' }), 'Розділити на кілька категорій');
+    const fCat = ui.field({ label: 'Категорія', input: h('div', null, catBox, subBox, splitBox, splitToggle), required: true });
     function renderCats() {
       fCat.hidden = st.type === 'transfer';
       if (st.type === 'transfer') return;
+      fCat.querySelector('.field-label').firstChild.textContent = splitMode ? 'Категорії' : 'Категорія';
       const cats = F().categories(st.type);
+      splitToggle.hidden = splitMode || !cats.length;
+      if (splitMode) {
+        catBox.replaceChildren();
+        subBox.replaceChildren();
+        renderSplit();
+        return;
+      }
+      splitBox.replaceChildren();
       if (!cats.length) {
         ui.mount(catBox, h('span', { class: 'field-hint' }, 'Немає категорій. Додай їх на вкладці «Категорії».'));
         subBox.replaceChildren();
@@ -265,6 +286,116 @@ window.CRM = window.CRM || {};
         }, s.name)));
     }
 
+    // --- Розділення на кілька категорій (чек із супермаркету) ---
+    const MAX_PARTS = 10;
+    function catChoices() {
+      const out = [];
+      F().categories(st.type).forEach((c) => {
+        out.push({ value: c.id + '|', label: c.name });
+        (c.subcategories || []).forEach((x) => out.push({ value: c.id + '|' + x.id, label: `${c.name} › ${x.name}` }));
+      });
+      return out;
+    }
+    function startSplit() {
+      splitMode = true;
+      splitRows = [{ catKey: st.categoryId ? st.categoryId + '|' + (st.subcategoryId || '') : '', amount: '' }, { catKey: '', amount: '' }];
+      fCat.setError(null);
+      renderCats();
+      const first = splitBox.querySelector(splitRows[0].catKey ? '.tx-split-amt' : '.tx-split-cat');
+      if (first) first.focus();
+    }
+    function stopSplit() {
+      const firstCat = splitRows.find((r) => r.catKey);
+      if (firstCat) { const [c, sub] = firstCat.catKey.split('|'); st.categoryId = c; st.subcategoryId = sub || null; }
+      splitMode = false;
+      splitRows = [];
+      fCat.setError(null);
+      renderCats();
+    }
+    const splitTotal = () => CRM.utils.parseAmount(amountIn.value);
+    const rowAmount = (r) => { const v = CRM.utils.parseAmount(r.amount); return isNaN(v) ? 0 : v; };
+    function splitLeft() {
+      const total = splitTotal();
+      if (isNaN(total)) return null;
+      return CRM.utils.round2(total - splitRows.reduce((sum, r) => sum + rowAmount(r), 0));
+    }
+    let splitStatusEl = null;
+    function splitStatus() {
+      if (!splitStatusEl) return;
+      const left = splitLeft();
+      const cur = CRM.CURRENCIES[F().currencyOf(st.accountId)] ? F().currencyOf(st.accountId) : 'UAH';
+      splitStatusEl.className = 'tx-split-left';
+      if (left == null) ui.mount(splitStatusEl, 'Спершу вкажи суму операції вгорі.');
+      else if (left > 0.004) ui.mount(splitStatusEl, 'Залишилось розподілити: ', h('strong', { class: 'num' }, fmt.money(left, cur)));
+      else if (left < -0.004) { splitStatusEl.classList.add('over'); ui.mount(splitStatusEl, 'Частини більші за суму на ', h('strong', { class: 'num' }, fmt.money(-left, cur))); }
+      else { splitStatusEl.classList.add('done'); ui.mount(splitStatusEl, CRM.icon('check', { size: 'sm' }), 'Усе розподілено'); }
+      splitBox.querySelectorAll('.tx-split-rest').forEach((b) => { b.hidden = !(left > 0.004); });
+    }
+    function renderSplit() {
+      const choices = catChoices();
+      const rows = splitRows.map((r, i) => {
+        const sel = h('select', { class: 'select select-sm tx-split-cat', 'aria-label': `Категорія частини ${i + 1}` },
+          h('option', { value: '' }, 'Оберіть категорію'),
+          choices.map((c) => h('option', { value: c.value, selected: c.value === r.catKey }, c.label)));
+        sel.addEventListener('change', () => { r.catKey = sel.value; fCat.setError(null); });
+        const amt = h('input', {
+          class: 'input input-sm amount-input tx-split-amt', type: 'text', inputmode: 'decimal', autocomplete: 'off',
+          placeholder: '0,00', value: r.amount, 'aria-label': `Сума частини ${i + 1}`
+        });
+        amt.addEventListener('input', () => { r.amount = amt.value; fCat.setError(null); splitStatus(); });
+        const rest = h('button', {
+          type: 'button', class: 'btn btn-ghost btn-sm tx-split-rest', title: 'Дописати сюди все, що залишилось',
+          onClick: () => {
+            const left = splitLeft();
+            if (!(left > 0)) return;
+            r.amount = String(CRM.utils.round2(rowAmount(r) + left)).replace('.', ',');
+            amt.value = r.amount;
+            fCat.setError(null);
+            splitStatus();
+          }
+        }, '+ решта');
+        const del = h('button', {
+          type: 'button', class: 'btn btn-ghost btn-icon btn-sm tx-split-del', 'aria-label': 'Прибрати частину', title: 'Прибрати частину',
+          disabled: splitRows.length <= 2,
+          onClick: () => { splitRows.splice(i, 1); renderSplit(); }
+        }, CRM.icon('x', { size: 'sm' }));
+        return h('div', { class: 'tx-split-row', dataset: { i: String(i) } }, sel, h('div', { class: 'amount-wrap tx-split-amt-wrap' }, amt), rest, del);
+      });
+      splitStatusEl = h('div', { class: 'tx-split-left' });
+      ui.mount(splitBox,
+        h('div', { class: 'tx-split-rows' }, rows),
+        h('div', { class: 'tx-split-foot' },
+          h('button', {
+            type: 'button', class: 'btn btn-sm tx-split-add', disabled: splitRows.length >= MAX_PARTS,
+            onClick: () => { splitRows.push({ catKey: '', amount: '' }); renderSplit(); const s = splitBox.querySelectorAll('.tx-split-cat'); s[s.length - 1].focus(); }
+          }, CRM.icon('plus', { size: 'sm' }), 'Частина'),
+          splitStatusEl,
+          h('span', { class: 'grow' }),
+          h('button', { type: 'button', class: 'link-like tx-split-off', onClick: stopSplit }, 'Не розділяти')));
+      splitStatus();
+    }
+    /** Перевірити частини перед збереженням: { splits } або { error }. */
+    function collectSplits(amount) {
+      const used = splitRows.filter((r) => r.catKey || String(r.amount).trim());
+      if (used.some((r) => !r.catKey)) return { error: 'Обери категорію для кожної частини' };
+      const empty = used.filter((r) => !String(r.amount).trim());
+      const filled = used.filter((r) => String(r.amount).trim());
+      if (filled.some((r) => { const v = CRM.utils.parseAmount(r.amount); return isNaN(v) || v <= 0; })) return { error: 'Суми частин мають бути більші за нуль' };
+      let parts = filled.map((r) => ({ catKey: r.catKey, amount: CRM.utils.round2(CRM.utils.parseAmount(r.amount)) }));
+      const left = CRM.utils.round2(amount - parts.reduce((sum, p) => sum + p.amount, 0));
+      if (empty.length === 1 && left > 0) parts.push({ catKey: empty[0].catKey, amount: left });
+      else if (empty.length) return { error: 'Вкажи суму кожної частини' };
+      if (parts.length < 2) return { error: 'Додай хоча б дві частини або натисни «Не розділяти»' };
+      const rest = CRM.utils.round2(amount - parts.reduce((sum, p) => sum + p.amount, 0));
+      if (Math.abs(rest) > 0.004) {
+        const cur = F().currencyOf(st.accountId);
+        return { error: rest > 0 ? `Частини мають дорівнювати сумі операції — залишилось розподілити ${fmt.money(rest, cur)}` : `Частини більші за суму операції на ${fmt.money(-rest, cur)}` };
+      }
+      return {
+        splits: parts.map((p) => { const [c, sub] = p.catKey.split('|'); return { categoryId: c, subcategoryId: sub || null, amount: p.amount }; })
+      };
+    }
+
     // --- Дата й коментар ---
     const dateIn = ui.dateInput({ value: st.date, clearable: false, ariaLabel: 'Дата операції', onChange: () => renderTo() });
     const fDate = ui.field({ label: 'Дата', input: dateIn });
@@ -275,6 +406,7 @@ window.CRM = window.CRM || {};
     async function submit(e) {
       if (e) e.preventDefault();
       let ok = true;
+      let splitResult = null;
       const amount = CRM.utils.parseAmount(amountIn.value);
       if (isNaN(amount) || amount <= 0) { fAmount.setError('Вкажи суму більшу за нуль, напр., 250 або 1 200,50'); ok = false; }
       else if (amount > 1e12) { fAmount.setError('Занадто велика сума'); ok = false; }
@@ -287,10 +419,15 @@ window.CRM = window.CRM || {};
           toAmount = CRM.utils.parseAmount(toAmountIn.value);
           if (isNaN(toAmount) || toAmount <= 0) { fToAmount.setError('Вкажи суму, що надійде на рахунок'); ok = false; }
         }
+      } else if (splitMode) {
+        if (!isNaN(amount) && amount > 0) {
+          splitResult = collectSplits(CRM.utils.round2(amount));
+          if (splitResult.error) { fCat.setError(splitResult.error); ok = false; }
+        }
       } else if (!st.categoryId) { fCat.setError('Оберіть категорію'); ok = false; }
       if (!ok) { const bad = form.querySelector('.has-error input, .has-error select, .has-error button'); if (bad) bad.focus(); return; }
 
-      const rec = Object.assign(existing ? CRM.utils.deepClone(existing) : {}, {
+      let rec = Object.assign(existing ? CRM.utils.deepClone(existing) : {}, {
         type: st.type,
         amount: CRM.utils.round2(amount),
         accountId: st.accountId,
@@ -299,8 +436,10 @@ window.CRM = window.CRM || {};
         categoryId: st.type === 'transfer' ? null : st.categoryId,
         subcategoryId: st.type === 'transfer' ? null : st.subcategoryId,
         date: dateIn.dateValue || D.today(),
-        comment: commentIn.value.trim()
+        comment: commentIn.value.trim(),
+        splits: st.type !== 'transfer' && splitMode && splitResult ? splitResult.splits : null
       });
+      rec = F().normalizeSplits(rec);
       if (!existing) { rec.recurringId = rec.recurringId || null; rec.recurringDate = rec.recurringDate || null; }
       const saved = await CRM.store.save('transactions', rec);
       rememberAccount(st.type, st.accountId);
@@ -347,6 +486,12 @@ window.CRM = window.CRM || {};
 
     const dlg = ui.modal({
       title: isNew ? 'Нова транзакція' : 'Транзакція',
+      // «Повторити сьогодні» — угорі біля назви (у нижньому рядку кнопок на ПК не вміщалося)
+      headerActions: existing ? ui.button({
+        label: 'Повторити сьогодні', icon: 'repeat', variant: 'ghost', size: 'sm', className: 'tx-repeat',
+        title: 'Створити таку саму операцію на сьогодні',
+        onClick: () => { dlg.close('force'); repeatTx(existing.id); }
+      }) : null,
       size: 'md', className: 'tx-modal',
       body: form,
       footer: h('div', { class: 'drawer-footer-inner' }, footer),
@@ -359,5 +504,42 @@ window.CRM = window.CRM || {};
     return dlg;
   }
 
-  CRM.budget = { registerTab, openTxForm, rateLine, TAB_ORDER };
+  // ---------- «Повторити сьогодні» ----------
+  /**
+   * Копія операції на сьогодні одним кліком: та сама сума, рахунок, категорія (частини), коментар.
+   * Без привʼязки до регулярного платежу й імпорту. Тост «Змінити · Скасувати».
+   */
+  async function repeatTx(id, opts) {
+    const o = opts || {};
+    const src = CRM.store.get('transactions', id);
+    if (!src || src.deletedAt) { ui.toast('Транзакцію не знайдено', { type: 'error' }); return null; }
+    const date = o.date || D.today();
+    const rec = {
+      type: src.type, amount: src.amount, accountId: src.accountId,
+      toAccountId: src.type === 'transfer' ? src.toAccountId : null,
+      toAmount: src.type === 'transfer' ? src.toAmount : null,
+      categoryId: src.type === 'transfer' ? null : src.categoryId || null,
+      subcategoryId: src.type === 'transfer' ? null : src.subcategoryId || null,
+      splits: F().isSplit(src) ? CRM.utils.deepClone(src.splits) : null,
+      date, comment: src.comment || '', recurringId: null, recurringDate: null
+    };
+    // Переказ між різними валютами — сума зарахування за сьогоднішнім курсом (якщо він є)
+    if (rec.type === 'transfer' && rec.toAccountId && F().currencyOf(rec.accountId) !== F().currencyOf(rec.toAccountId)) {
+      const conv = CRM.rates.convert(rec.amount, F().currencyOf(rec.accountId), F().currencyOf(rec.toAccountId), date);
+      if (conv != null) rec.toAmount = CRM.utils.round2(conv);
+    }
+    const saved = await CRM.store.save('transactions', rec);
+    F().ensureRatesFor([saved]);
+    const when = date === D.today() ? 'на сьогодні' : 'на ' + fmt.dateShort(date);
+    ui.toast(`Повторено ${when}: ${F().txTitle(saved)} · ${F().txAmountLabel(saved)}`, {
+      type: 'success',
+      actions: [
+        { label: 'Змінити', onClick: () => openTxForm({ id: saved.id }) },
+        { label: 'Скасувати', onClick: () => CRM.store.removeForever('transactions', saved.id) }
+      ]
+    });
+    return saved;
+  }
+
+  CRM.budget = { registerTab, openTxForm, repeatTx, rateLine, TAB_ORDER };
 })(window.CRM);

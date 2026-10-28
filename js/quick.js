@@ -1947,6 +1947,6 @@ window.CRM = window.CRM || {};
 
   CRM.quick = {
     parse, plan, create, createAll, apply, details, card, settingsBlock, EXAMPLES, MORE_EXAMPLES, words, dateFor, history,
-    addWord, removeWord, ownWords
+    addWord, removeWord, ownWords, guessCategory
   };
 })(window.CRM);

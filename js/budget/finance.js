@@ -141,15 +141,19 @@ window.CRM = window.CRM || {};
     return S().list('transactions').filter((t) => (!from || t.date >= from) && (!to || t.date <= to));
   }
 
-  /** Доходи й витрати за період у гривнях (перекази не враховуються). */
-  function totals(list) {
+  /**
+   * Доходи й витрати за період у гривнях (перекази не враховуються).
+   * categoryId — лише частина операцій цієї категорії (для розділених — частка частин).
+   */
+  function totals(list, categoryId) {
     let income = 0;
     let expense = 0;
     let missing = 0;
     list.forEach((t) => {
       if (t.type === 'transfer') return;
-      const uah = txUAH(t);
+      let uah = txUAH(t);
       if (uah == null) { missing++; return; }
+      if (categoryId) uah *= categoryShare(t, categoryId);
       if (t.type === 'income') income += uah; else expense += uah;
     });
     return { income: CRM.utils.round2(income), expense: CRM.utils.round2(expense), result: CRM.utils.round2(income - expense), missing };
@@ -172,40 +176,107 @@ window.CRM = window.CRM || {};
     return { income: CRM.utils.round2(income), expense: CRM.utils.round2(expense), result: CRM.utils.round2(income - expense), missing };
   }
 
-  /** Суми за категоріями у вибраній валюті. */
+  /** Суми за категоріями у вибраній валюті (розділена операція — кожна частина у своїй категорії). */
   function byCategoryIn(list, kind, currency) {
+    return groupByCategory(list, kind, (t) => txIn(t, currency));
+  }
+
+  /** Суми за категоріями (у гривнях), від більшої до меншої. kind: 'expense' | 'income'. */
+  function byCategory(list, kind) {
+    return groupByCategory(list, kind, txUAH);
+  }
+
+  function groupByCategory(list, kind, valueOf) {
     const map = new Map();
     list.forEach((t) => {
       if (t.type !== kind) return;
-      const v = txIn(t, currency);
+      const v = valueOf(t);
       if (v == null) return;
-      const key = t.categoryId || '—';
-      const cur = map.get(key) || { categoryId: t.categoryId || null, amount: 0, count: 0 };
-      cur.amount += v;
-      cur.count++;
-      map.set(key, cur);
+      const total = Number(t.amount) || 0;
+      // Кожна категорія операції рахується один раз (дві частини однієї категорії — разом)
+      const seen = new Set();
+      txParts(t).forEach((p) => {
+        const share = total ? p.amount / total : 1;
+        const key = p.categoryId || '—';
+        const cur = map.get(key) || { categoryId: p.categoryId || null, amount: 0, count: 0 };
+        cur.amount += v * share;
+        if (!seen.has(key)) { cur.count++; seen.add(key); }
+        map.set(key, cur);
+      });
     });
     return Array.from(map.values())
       .map((x) => Object.assign(x, { amount: CRM.utils.round2(x.amount), category: x.categoryId ? S().get('categories', x.categoryId) : null }))
       .sort((a, b) => b.amount - a.amount);
   }
 
-  /** Суми за категоріями (у гривнях), від більшої до меншої. kind: 'expense' | 'income'. */
-  function byCategory(list, kind) {
-    const map = new Map();
-    list.forEach((t) => {
-      if (t.type !== kind) return;
-      const uah = txUAH(t);
-      if (uah == null) return;
-      const key = t.categoryId || '—';
-      const cur = map.get(key) || { categoryId: t.categoryId || null, amount: 0, count: 0 };
-      cur.amount += uah;
-      cur.count++;
-      map.set(key, cur);
+  // ---------- Розділені операції (чек на кілька категорій) ----------
+  /** Чи розділена операція на кілька категорій. */
+  function isSplit(t) {
+    return !!t && t.type !== 'transfer' && Array.isArray(t.splits) && t.splits.length > 1;
+  }
+  /** Частини операції [{ categoryId, subcategoryId, amount }] (звичайна — одна частина на всю суму). */
+  function txParts(t) {
+    if (isSplit(t)) {
+      return t.splits.map((p) => ({ categoryId: p.categoryId || null, subcategoryId: p.subcategoryId || null, amount: Number(p.amount) || 0 }));
+    }
+    return [{ categoryId: t.categoryId || null, subcategoryId: t.subcategoryId || null, amount: Number(t.amount) || 0 }];
+  }
+  /** Чи є в операції категорія (у будь-якій частині). */
+  function hasCategory(t, id) {
+    if (!id || t.type === 'transfer') return false;
+    return txParts(t).some((p) => p.categoryId === id);
+  }
+  /** Частка суми операції, що припадає на категорію (0…1). */
+  function categoryShare(t, id) {
+    const total = Number(t.amount) || 0;
+    if (!isSplit(t)) return t.categoryId === id ? 1 : 0;
+    if (!total) return 0;
+    return txParts(t).filter((p) => p.categoryId === id).reduce((s, p) => s + p.amount, 0) / total;
+  }
+  /** Сума частин операції в категорії (у валюті рахунку). */
+  function categoryAmount(t, id) {
+    return CRM.utils.round2(txParts(t).filter((p) => p.categoryId === id).reduce((s, p) => s + p.amount, 0));
+  }
+  /** Назва для списку: «Продукти + Побут» (розділена), «Кафе › Кава», «Переказ». */
+  function txTitle(t) {
+    if (t.type === 'transfer') return 'Переказ';
+    if (!isSplit(t)) return categoryName(t.categoryId, t.subcategoryId);
+    const names = [];
+    txParts(t).forEach((p) => { const n = categoryName(p.categoryId); if (!names.includes(n)) names.push(n); });
+    return names.length > 3 ? `${names.slice(0, 3).join(' + ')} + ще ${names.length - 3}` : names.join(' + ');
+  }
+  /** Кольори категорій операції (без повторів). */
+  function txColors(t) {
+    const out = [];
+    txParts(t).forEach((p) => { const c = categoryColor(p.categoryId); if (!out.includes(c)) out.push(c); });
+    return out;
+  }
+  /**
+   * Привести частини до ладу: прибрати порожні, обʼєднати однакові категорії (+ субкатегорії),
+   * 1 частина → звичайна операція. categoryId / subcategoryId — найбільшої частини
+   * (так розділену операцію бачать і старі версії CRM). Повертає новий запис.
+   */
+  function normalizeSplits(rec) {
+    const r = Object.assign({}, rec);
+    if (r.type === 'transfer' || !Array.isArray(r.splits)) { r.splits = null; return r; }
+    const merged = [];
+    r.splits.forEach((p) => {
+      const amount = CRM.utils.round2(Number(p.amount) || 0);
+      if (!p.categoryId || amount <= 0) return;
+      const same = merged.find((m) => m.categoryId === p.categoryId && (m.subcategoryId || null) === (p.subcategoryId || null));
+      if (same) same.amount = CRM.utils.round2(same.amount + amount);
+      else merged.push({ categoryId: p.categoryId, subcategoryId: p.subcategoryId || null, amount });
     });
-    return Array.from(map.values())
-      .map((x) => Object.assign(x, { amount: CRM.utils.round2(x.amount), category: x.categoryId ? S().get('categories', x.categoryId) : null }))
-      .sort((a, b) => b.amount - a.amount);
+    if (merged.length < 2) {
+      if (merged.length === 1) { r.categoryId = merged[0].categoryId; r.subcategoryId = merged[0].subcategoryId; }
+      r.splits = null;
+      return r;
+    }
+    const main = merged.reduce((a, b) => (b.amount > a.amount ? b : a));
+    r.splits = merged;
+    r.categoryId = main.categoryId;
+    r.subcategoryId = main.subcategoryId;
+    return r;
   }
 
   /** Підвантажити курси НБУ на дати операцій в іноземній валюті (у фоні). */
@@ -251,6 +322,7 @@ window.CRM = window.CRM || {};
     accounts, account, currencyOf, balances, balance, rankedAccounts, capital, savings,
     txCurrency, txUAH, txIn, txInRange, totals, totalsIn, byCategory, byCategoryIn, ensureRatesFor, monthRange,
     accountStarts, historyStart, capitalSeries, capitalAt,
-    categoryName, categoryColor, categories, txAmountLabel
+    categoryName, categoryColor, categories, txAmountLabel,
+    isSplit, txParts, hasCategory, categoryShare, categoryAmount, txTitle, txColors, normalizeSplits
   };
 })(window.CRM);

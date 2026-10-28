@@ -119,9 +119,9 @@ window.CRM = window.CRM || {};
     },
     t.type === 'transfer'
       ? h('span', { class: 'cat-dot', style: { background: 'var(--text-3)' } })
-      : h('span', { class: 'cat-dot', style: { background: F().categoryColor(t.categoryId) } }),
+      : h('span', { class: 'cat-dot', style: { background: F().txColors(t)[0] } }),
     h('span', { class: 'recent-main' },
-      h('span', { class: 'recent-title' }, t.type === 'transfer' ? 'Переказ' : F().categoryName(t.categoryId)),
+      h('span', { class: 'recent-title' }, t.type === 'transfer' ? 'Переказ' : F().isSplit(t) ? F().txTitle(t) : F().categoryName(t.categoryId)),
       h('span', { class: 'recent-sub' }, [fmt.relDay(t.date), t.comment].filter(Boolean).join(' · '))),
     h('span', { class: 'num tx-amount tx-' + t.type }, F().txAmountLabel(t))))));
   }

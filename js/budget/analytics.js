@@ -4,7 +4,9 @@
    • 4 картки (сума й різниця з минулим місяцем; найбільша категорія /
      джерело; середні витрати на день / баланс періоду; прогноз витрат /
      витрачено від доходів).
-   • Статистика категорій і кільцева діаграма із сумою в центрі.
+   • Статистика категорій (з «+23 %» до минулого місяця) і кільцева діаграма.
+   • «Найбільші зміни»: що зросло, що зменшилось, чого не було. Поточний місяць
+     порівнюється з тими самими днями минулого (1–28 проти 1–28).
    • Стовпчики за останні 12 місяців.
    Суми в іншій валюті перераховуються за курсом НБУ на дату операції.
    ========================================================================== */
@@ -26,8 +28,8 @@ window.CRM = window.CRM || {};
   const monthName = (m) => CRM.MONTHS_NOM[D.parse(m).m - 1].toLowerCase();
   const inRange = (m) => F().txInRange(m, D.endOfMonth(m));
 
-  function diffNote(now, prev, prevMonth) {
-    if (!prev) return h('span', { class: 'kpi-note' }, `У ${monthLoc(prevMonth)} даних немає`);
+  function diffNote(now, prev, prevMonth, cmp) {
+    if (!prev) { const w = prevWhen(cmp); return h('span', { class: 'kpi-note' }, `${w.charAt(0).toUpperCase() + w.slice(1)} даних немає`); }
     const diff = now - prev;
     const p = diff / prev * 100;
     const up = diff > 0;
@@ -35,11 +37,90 @@ window.CRM = window.CRM || {};
     const good = mode === 'expense' ? !up : up;
     return h('span', { class: 'kpi-note delta ' + (Math.abs(diff) < 0.005 ? '' : good ? 'up' : 'down') },
       Math.abs(diff) < 0.005 ? null : CRM.icon(up ? 'trendUp' : 'trendDown', { size: 'sm' }),
-      `${fmt.money(diff, cur, { sign: true })} · ${p > 0 ? '+' : ''}${fmt.percent(p)} до ${monthLoc(prevMonth)}`);
+      `${fmt.money(diff, cur, { sign: true })} · ${p > 0 ? '+' : ''}${fmt.percent(p)} до ${cmp.label}`);
   }
 
   // «у вересні» → для порівняння коротко: «серпня»
   function monthLoc(m) { return CRM.MONTHS_GEN[D.parse(m).m - 1]; }
+  const MONTHS_IN = ['січні', 'лютому', 'березні', 'квітні', 'травні', 'червні', 'липні', 'серпні', 'вересні', 'жовтні', 'листопаді', 'грудні'];
+  /** «у вересні» (цілий місяць) або «за 1–28 вересня». */
+  function prevWhen(cmp) { return cmp.full ? `у ${MONTHS_IN[D.parse(cmp.from).m - 1]}` : `за ${cmp.label}`; }
+
+  /**
+   * З чим порівнювати: завершений місяць — з цілим попереднім; поточний — з тими самими днями
+   * попереднього (1–28 жовтня проти 1–28 вересня), інакше на початку місяця все було б «−80 %».
+   */
+  function compareRange(month, isCurrent) {
+    const prevMonth = D.addMonths(month, -1);
+    const prevEnd = D.endOfMonth(prevMonth);
+    if (!isCurrent) return { from: prevMonth, to: prevEnd, label: monthLoc(prevMonth), full: true };
+    const day = D.parse(D.today()).d;
+    const to = D.addDays(prevMonth, day - 1);
+    if (to >= prevEnd) return { from: prevMonth, to: prevEnd, label: monthLoc(prevMonth), full: true };
+    return { from: prevMonth, to, label: `${day === 1 ? '1' : '1–' + day} ${monthLoc(prevMonth)}`, full: false };
+  }
+
+  /** Порівняння категорій: [{ categoryId, category, now, prev, diff, pct (null — нова) }]. */
+  function categoryChanges(cats, prevCats) {
+    const map = new Map();
+    cats.forEach((c) => map.set(c.categoryId || '—', { categoryId: c.categoryId, category: c.category, now: c.amount, prev: 0 }));
+    prevCats.forEach((c) => {
+      const key = c.categoryId || '—';
+      const x = map.get(key) || { categoryId: c.categoryId, category: c.category, now: 0, prev: 0 };
+      x.prev = c.amount;
+      map.set(key, x);
+    });
+    return Array.from(map.values()).map((x) => Object.assign(x, {
+      diff: CRM.utils.round2(x.now - x.prev),
+      pct: x.prev ? (x.now - x.prev) / x.prev * 100 : null
+    }));
+  }
+
+  /** «+23 %» / «−10 %» / «нова» біля категорії (колір: для витрат зростання — погано). */
+  function deltaBadge(ch, cmp) {
+    if (!ch) return null;
+    const cls = (good) => 'cstat-delta ' + (good ? 'good' : 'bad');
+    const when = prevWhen(cmp);
+    const title = `${when.charAt(0).toUpperCase() + when.slice(1)}: ${fmt.money(ch.prev, cur)}`;
+    if (ch.pct == null) return h('span', { class: cls(mode !== 'expense'), title }, 'нова');
+    if (Math.abs(ch.diff) < 0.005 || Math.abs(ch.pct) < 0.05) return h('span', { class: 'cstat-delta same', title }, 'без змін');
+    const up = ch.diff > 0;
+    return h('span', { class: cls(mode === 'expense' ? !up : up), title },
+      `${up ? '+' : '−'}${fmt.percent(Math.abs(ch.pct))}`);
+  }
+
+  /** Картка «Найбільші зміни»: 3 найбільше зросли, 3 зменшились, яких цього місяця не було. */
+  function changesCard(changes, cmp, isCurrent, month) {
+    const catLabel = (c) => (c.category ? c.category.name : 'Без категорії');
+    const dot = (c) => h('span', { class: 'legend-key', style: { background: F().categoryColor(c.categoryId) } });
+    const grew = changes.filter((c) => c.now > 0 && c.diff > 0.004).sort((a, b) => b.diff - a.diff).slice(0, 3);
+    const fell = changes.filter((c) => c.now > 0 && c.diff < -0.004).sort((a, b) => a.diff - b.diff).slice(0, 3);
+    const gone = changes.filter((c) => c.now <= 0 && c.prev > 0).sort((a, b) => b.prev - a.prev);
+    const line = (c, kind) => {
+      const up = c.diff > 0;
+      const good = mode === 'expense' ? !up : up;
+      const pct = c.pct == null ? 'нова' : `${up ? '+' : '−'}${fmt.percent(Math.abs(c.pct))}`;
+      return h('div', {
+        class: 'an-ch-row' + (c.categoryId ? ' clickable' : ''), dataset: { kind },
+        onClick: c.categoryId ? () => CRM.router.go('budget/transactions', { category: c.categoryId }) : null
+      },
+      h('span', { class: 'an-ch-name' }, dot(c), catLabel(c)),
+      h('span', { class: 'an-ch-diff num ' + (kind === 'gone' ? '' : good ? 'good' : 'bad') },
+        kind === 'gone' ? fmt.money(c.prev, cur) : `${fmt.money(c.diff, cur, { sign: true })} (${pct})`),
+      h('span', { class: 'an-ch-meta num subtle' },
+        kind === 'gone' ? prevWhen(cmp) : c.prev ? `${fmt.money(c.now, cur)} проти ${fmt.money(c.prev, cur)}` : `${prevWhen(cmp)} не було`));
+    };
+    const block = (title, list, kind, emptyText) => h('div', { class: 'an-ch-block an-ch-' + kind },
+      h('div', { class: 'an-ch-title' }, title),
+      list.length ? list.map((c) => line(c, kind)) : h('div', { class: 'an-ch-empty subtle' }, emptyText));
+    const noun = mode === 'expense' ? 'Витрати' : 'Доходи';
+    return h('section', { class: 'card an-changes' },
+      h('div', { class: 'card-head' }, h('h2', null, 'Найбільші зміни'), h('span', { class: 'subtle' }, `до ${cmp.label}`)),
+      h('div', { class: 'an-ch-grid' },
+        block('Найбільше зросли', grew, 'grew', `${noun} у жодній категорії не зросли`),
+        block('Зменшились', fell, 'fell', 'Жодна категорія не зменшилась'),
+        gone.length ? block(isCurrent ? 'Цього місяця ще не було' : `Не було в ${MONTHS_IN[D.parse(month).m - 1]}`, gone.slice(0, 5), 'gone', '') : null));
+  }
 
   /** Прогноз витрат до кінця поточного місяця (у валюті відображення). */
   function forecast(list) {
@@ -82,8 +163,10 @@ window.CRM = window.CRM || {};
     if (month < firstMonth) month = firstMonth;
 
     const prevMonth = D.addMonths(month, -1);
+    const isCurrent = month === thisMonth;
+    const cmp = compareRange(month, isCurrent);
     const list = inRange(month);
-    const prevList = inRange(prevMonth);
+    const prevList = F().txInRange(cmp.from, cmp.to);
     // Курси: для гривні — лише на дати валютних операцій; для $/€ — на всі дні місяця
     if (cur === 'UAH') F().ensureRatesFor(list.concat(prevList));
     else {
@@ -95,9 +178,10 @@ window.CRM = window.CRM || {};
     const tot = F().totalsIn(list, cur);
     const prevTot = F().totalsIn(prevList, cur);
     const cats = F().byCategoryIn(list, mode, cur);
+    const prevCats = F().byCategoryIn(prevList, mode, cur);
+    const changes = categoryChanges(cats, prevCats);
+    const changeOf = (id) => changes.find((c) => (c.categoryId || null) === (id || null));
     const total = mode === 'expense' ? tot.expense : tot.income;
-    const prevTotal = mode === 'expense' ? prevTot.expense : prevTot.income;
-    const isCurrent = month === thisMonth;
     const mName = monthName(month);
 
     // --- Панель керування ---
@@ -125,7 +209,7 @@ window.CRM = window.CRM || {};
       const days = isCurrent ? D.parse(T).d : D.daysInMonth(D.parse(month).y, D.parse(month).m);
       const fc = isCurrent ? forecast(list) : null;
       cards = [
-        kpi(`Витрати за ${mName}`, fmt.money(-tot.expense, cur), diffNote(tot.expense, prevTot.expense, prevMonth)),
+        kpi(`Витрати за ${mName}`, fmt.money(-tot.expense, cur), diffNote(tot.expense, prevTot.expense, prevMonth, cmp)),
         kpi('Найбільша категорія', topName, h('span', { class: 'kpi-note' }, top ? `${fmt.money(top.amount, cur)} · ${fmt.percent(total ? top.amount / total * 100 : 0)} витрат` : 'Витрат немає')),
         kpi('Середні витрати на день', fmt.money(total / days, cur), h('span', { class: 'kpi-note' }, isCurrent ? `за ${fmt.count(days, ['день', 'дні', 'днів'])} місяця` : `за ${fmt.count(days, ['день', 'дні', 'днів'])}`)),
         isCurrent
@@ -135,7 +219,7 @@ window.CRM = window.CRM || {};
     } else {
       const spentShare = tot.income ? tot.expense / tot.income * 100 : null;
       cards = [
-        kpi(`Доходи за ${mName}`, fmt.money(tot.income, cur, { sign: true }), diffNote(tot.income, prevTot.income, prevMonth)),
+        kpi(`Доходи за ${mName}`, fmt.money(tot.income, cur, { sign: true }), diffNote(tot.income, prevTot.income, prevMonth, cmp)),
         kpi('Найбільше джерело', topName, h('span', { class: 'kpi-note' }, top ? `${fmt.money(top.amount, cur)} · ${fmt.percent(total ? top.amount / total * 100 : 0)} доходів` : 'Доходів немає')),
         kpi('Баланс періоду', fmt.money(tot.result, cur, { sign: true }), h('span', { class: 'kpi-note' }, 'доходи − витрати')),
         kpi('Витрачено від доходів', spentShare == null ? '—' : fmt.percent(spentShare), h('span', { class: 'kpi-note' }, spentShare == null ? 'Доходів немає' : `${fmt.money(tot.expense, cur)} з ${fmt.money(tot.income, cur)}`))
@@ -155,7 +239,9 @@ window.CRM = window.CRM || {};
           onClick: c.categoryId ? () => CRM.router.go('budget/transactions', { category: c.categoryId }) : null },
         h('div', { class: 'cstat-top' },
           h('span', { class: 'cstat-name' }, h('span', { class: 'legend-key', style: { background: color } }), c.category ? c.category.name : 'Без категорії'),
-          h('span', { class: 'num cstat-sum' }, fmt.money(c.amount, cur))),
+          h('span', { class: 'cstat-right' },
+            prevTot.income || prevTot.expense ? deltaBadge(changeOf(c.categoryId), cmp) : null,
+            h('span', { class: 'num cstat-sum' }, fmt.money(c.amount, cur)))),
         h('div', { class: 'cstat-bottom' },
           h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: { width: share + '%', background: color } })),
           h('span', { class: 'num subtle cstat-meta' }, `${fmt.percent(share)} · ${fmt.count(c.count, ['операція', 'операції', 'операцій'])}`)));
@@ -211,9 +297,13 @@ window.CRM = window.CRM || {};
           : ui.empty({ icon: 'trendUp', small: true, title: 'Даних за останні 12 місяців ще немає' }),
         h('div', { class: 'card-note' }, CRM.icon('info', { size: 'sm' }), 'Клацни стовпчик, щоб переглянути місяць. Суми в іншій валюті — за курсом НБУ на дату операції.')));
 
+    // Найбільші зміни — лише коли є з чим порівнювати
+    const prevTotal = mode === 'expense' ? prevTot.expense : prevTot.income;
+    const changes2 = prevTotal > 0 && (cats.length || prevCats.length) ? changesCard(changes, cmp, isCurrent, month) : null;
+
     ui.mount(container, controls, h('div', { class: 'stack' },
       tot.missing ? h('div', { class: 'callout callout-warning' }, CRM.icon('alert'), h('span', null, `${tot.missing} ${fmt.plural(tot.missing, ['операцію', 'операції', 'операцій'])} не перераховано — немає курсу НБУ.`)) : null,
-      h('div', { class: 'kpi-row an-kpis' }, cards), middle, bars));
+      h('div', { class: 'kpi-row an-kpis' }, cards), middle, changes2, bars));
   }
 
   CRM.budget.registerTab('analytics', { render });

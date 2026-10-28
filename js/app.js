@@ -296,6 +296,8 @@ window.CRM = window.CRM || {};
     if (!CRM.people) missing.push('js/people.js');
     if (!CRM.habits) missing.push('js/habits.js');
     else if (CRM.tasks && !CRM.tasks.create) missing.push('js/tasks.js (нова версія)');
+    if (!CRM.bankImport) missing.push('js/budget/import.js');
+    if (CRM.finance && !CRM.finance.isSplit) missing.push('js/budget/finance.js (нова версія)');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));
       setTimeout(() => CRM.ui.toast('Сайт оновлено не повністю: не підключено ' + missing.join(', ') +
