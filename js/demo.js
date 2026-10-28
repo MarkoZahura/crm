@@ -233,22 +233,28 @@ window.CRM = window.CRM || {};
     }
 
     // ---------- Навчання ----------
-    const topics = (list) => list.map(([title, done, deadline]) => ({ id: uid(), title, done: !!done, deadline: deadline || null }));
+    const topics = (list) => list.map(([title, done, deadline, extra]) => Object.assign({ id: uid(), title, done: !!done, deadline: deadline || null }, extra || {}));
     const courses = [
-      base({ id: uid(), title: 'Англійська B2', kind: 'course', status: 'active', link: 'https://example.com', deadline: D.addDays(T, 90),
+      base({ id: uid(), title: 'Англійська B2', kind: 'course', status: 'active', color: 'orange', link: 'https://example.com', deadline: D.addDays(T, 90),
         notes: 'Заняття щовівторка й щочетверга. Повторювати слова в застосунку щодня.',
         topics: topics([
           ['Present Perfect і Past Simple', true], ['Умовні речення', true], ['Пасивний стан', true], ['Фразові дієслова', true],
           ['Непряма мова', false], ['Модальні дієслова', false], ['Лексика: робота', false], ['Лексика: подорожі', false],
-          ['Есе: аргументація', false, tomorrow], ['Пробний тест', false, D.addDays(T, 30)]
+          ['Есе: аргументація', false, tomorrow, {
+            notes: 'Вступ — теза, 2 абзаци з аргументами й прикладами, висновок. 250–300 слів.',
+            links: [{ id: uid(), url: 'https://example.com/essay-template', title: 'Шаблон есе' }]
+          }], ['Пробний тест', false, D.addDays(T, 30)]
         ]) }),
-      base({ id: uid(), title: 'Статистика для початківців', kind: 'course', status: 'active', link: '', deadline: D.addDays(T, 45),
+      base({ id: uid(), title: 'Статистика для початківців', kind: 'course', status: 'active', color: 'violet', link: '', deadline: D.addDays(T, 45),
         notes: 'Практику робити в Excel або Google Таблицях.',
         topics: topics([
-          ['Описова статистика', true], ['Нормальний розподіл', true], ['t-критерій', false, D.addDays(T, 2)],
+          ['Описова статистика', true], ['Нормальний розподіл', true], ['t-критерій', false, D.addDays(T, 2), {
+            notes: 'Порівняти дві групи: незалежні чи парні вибірки? Перевірити нормальність.',
+            links: [{ id: uid(), url: 'https://example.com/t-test', title: '' }]
+          }],
           ['Кореляція', false], ['Регресія', false], ['Підсумковий проєкт', false, D.addDays(T, 40)]
         ]) }),
-      base({ id: uid(), title: 'Академічне письмо', kind: 'subject', status: 'done', link: '', deadline: D.addDays(T, -20),
+      base({ id: uid(), title: 'Академічне письмо', kind: 'subject', status: 'done', color: 'teal', link: '', deadline: D.addDays(T, -20),
         notes: '', topics: topics([['Структура тексту', true], ['Цитування', true], ['Анотація', true], ['Рецензія', true], ['Підсумкова робота', true]]) })
     ];
 

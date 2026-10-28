@@ -22,6 +22,11 @@
      «Перейти до дати» (клік на назві періоду), номер тижня; фільтр за категоріями в «Показати»
      і «Пошук подій».
 
+   • Шар «Дедлайни навчання» (дрібні доробки, етап 5): дедлайни тем і курсів «Навчання»
+     (CRM.learning.calendarItems) — колір курсу, вивчені теми закреслені; галочка — тема
+     вивчена (setTopicDone), перетягування на інший день — новий дедлайн (moveDeadline),
+     клік — курс із розгорнутою темою.
+
    Подія: { id, title, date: 'РРРР-ММ-ДД', endDate?: 'РРРР-ММ-ДД' (остання дата, якщо на кілька днів) | null,
             allDay, start: 'ГГ:ХХ' | null, dur: хвилини | null,
             cat: id категорії, remind: хвилини до початку | null, note,
@@ -93,9 +98,10 @@ window.CRM = window.CRM || {};
     { id: 'gcal', label: 'Google Календар' },
     { id: 'training', label: 'Тренування з програм' },
     { id: 'payments', label: 'Регулярні платежі' },
-    { id: 'deadlines', label: 'Дедлайни задач' }
+    { id: 'deadlines', label: 'Дедлайни задач' },
+    { id: 'learning', label: 'Дедлайни навчання' }
   ];
-  const KIND_ORDER = { own: 0, people: 1, task: 2, gcal: 3, training: 4, payment: 5, deadline: 6 };
+  const KIND_ORDER = { own: 0, people: 1, task: 2, gcal: 3, training: 4, payment: 5, deadline: 6, learning: 7 };
 
   // ---------- Налаштування вигляду (лише в цьому браузері) ----------
   function lsGet(key, def) { try { const v = localStorage.getItem(key); return v == null ? def : v; } catch (e) { return def; } }
@@ -631,6 +637,22 @@ window.CRM = window.CRM || {};
           sub: 'Дедлайн задачі' + (t.deadlineTime ? ' о ' + t.deadlineTime : ''),
           color: CRM.dict.categoryColor('red'), icon: 'flag', date: t.deadline, overdue: t.deadline < T,
           onOpen: () => CRM.tasks.openTask(t.id)
+        });
+      });
+    }
+
+    // Дедлайни тем і курсів «Навчання» (js/learning.js): колір курсу, вивчені — закреслені
+    if (L.learning && CRM.learning && CRM.learning.calendarItems) {
+      let list = [];
+      try { list = CRM.learning.calendarItems(from, to); } catch (e) { console.error(e); }
+      list.forEach((x) => {
+        const topicId = x.topic ? x.topic.id : null;
+        put(x.date, 'allDay', {
+          key: 'learn:' + x.key, kind: 'learning', title: x.topic ? x.topic.title : x.course.title,
+          sub: x.topic ? `${x.course.title} · дедлайн теми` : 'Дедлайн курсу',
+          color: x.color, icon: 'graduation', date: x.date, done: !!x.done, overdue: !!x.overdue,
+          learn: { courseId: x.course.id, topicId },
+          onOpen: () => CRM.learning.openCourse(x.course.id, { topic: topicId })
         });
       });
     }
@@ -1461,7 +1483,7 @@ window.CRM = window.CRM || {};
     const offY = sy - r.top;
     let over = null;
     let copy = false;
-    const setCopy = (e) => { copy = !!(e && (e.ctrlKey || e.metaKey)); clone.classList.toggle('kal-copying', copy); };
+    const setCopy = (e) => { copy = it.kind === 'own' && !!(e && (e.ctrlKey || e.metaKey)); clone.classList.toggle('kal-copying', copy); };
     return {
       mod: setCopy,
       move(x, y, e) {
@@ -1483,6 +1505,11 @@ window.CRM = window.CRM || {};
         if (over) over.classList.remove('kal-drop');
         const d = over && over.dataset.dropDate;
         if (!commit || !d) return;
+        // Дедлайн теми чи курсу «Навчання» — на інший день
+        if (it.kind === 'learning') {
+          if (d !== it.date) CRM.learning.moveDeadline(it.learn.courseId, it.learn.topicId, d);
+          return;
+        }
         // Подія на кілька днів зсувається цілком (за день, за який її взяли)
         const shift = D.diffDays(it.date, d);
         const changes = it.span ? { date: D.addDays(it.span.first, shift), endDate: D.addDays(it.span.last, shift) } : { date: d };
@@ -2272,6 +2299,33 @@ window.CRM = window.CRM || {};
     return el;
   }
 
+  /** Галочка «вивчено» для дедлайну теми «Навчання». */
+  function learnCheck(it) {
+    const done = !!it.done;
+    return h('button', {
+      type: 'button', class: 'task-check kal-tcheck' + (done ? ' checked' : ''), role: 'checkbox',
+      'aria-checked': done ? 'true' : 'false',
+      'aria-label': done ? `Зняти позначку «вивчено» з «${it.title}»` : `Позначити тему «${it.title}» вивченою`,
+      title: done ? 'Вивчено — натисни, щоб зняти позначку' : 'Позначити тему вивченою',
+      onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; CRM.learning.setTopicDone(it.learn.courseId, it.learn.topicId, !done); }
+    }, CRM.icon('check', { size: 'sm' }));
+  }
+
+  /** Дедлайн «Навчання»: тема — з галочкою, курс — зі значком; перетягується на інший день. */
+  function learnChip(it, cls, label, o) {
+    const el = h('div', {
+      class: cls.join(' '), role: 'button', tabIndex: 0, style: { '--c': it.color },
+      title: [label, it.sub].filter(Boolean).join(' · '), dataset: { key: it.key },
+      onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; openItem(it); },
+      onKeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openItem(it); } }
+    },
+    it.learn.topicId ? learnCheck(it) : CRM.icon('graduation', { size: 'sm' }),
+    h('span', { class: 'kal-chip-title' }, label),
+    o.withSub && it.sub ? h('span', { class: 'kal-chip-sub' }, it.sub) : null);
+    attachDrag(el, (sx, sy) => daySession(el, it, sx, sy));
+    return el;
+  }
+
   function chip(it, opts) {
     const o = opts || {};
     const cls = ['kal-chip', 'k-' + it.kind];
@@ -2286,6 +2340,7 @@ window.CRM = window.CRM || {};
       if (D.weekday(it.date) === 6) cls.push('kal-span-sun');   // кінець рядка в «Місяці»
     }
     if (it.kind === 'task') return taskChip(it, cls, label, o);
+    if (it.kind === 'learning' && CRM.learning) return learnChip(it, cls, label, o);
     const el = h('button', {
       type: 'button', class: cls.join(' '), style: { '--c': it.color },
       title: [label, it.sub, it.rep].filter(Boolean).join(' · '), dataset: { key: it.key },
@@ -2940,7 +2995,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('calendar', {
     title: 'Календар',
-    stores: ['events', 'tasks', 'people', 'recurring', 'transactions', 'programs', 'workouts'],
+    stores: ['events', 'tasks', 'people', 'recurring', 'transactions', 'programs', 'workouts', 'courses'],
     render
   });
 

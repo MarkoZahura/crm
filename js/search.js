@@ -34,7 +34,10 @@ window.CRM = window.CRM || {};
         if (!ok) return;
         const title = CRM.utils.normalize(t.title(rec));
         const score = title.startsWith(q) ? 3 : title.includes(q) ? 2 : 1;
-        matches.push({ store, rec, score });
+        // Тип може сказати, що саме знайдено всередині запису (напр., тема курсу)
+        let hit = null;
+        if (t.hit) { try { hit = t.hit(rec, terms); } catch (e) { hit = null; } }
+        matches.push({ store, rec, score, hit });
       });
       if (!matches.length) return;
       matches.sort((a, b) => b.score - a.score || (b.rec.updatedAt || '').localeCompare(a.rec.updatedAt || ''));
@@ -148,7 +151,7 @@ window.CRM = window.CRM || {};
       if (!item) return;
       if (item.quick) { runQuick(more); return; }
       dlg.close('select');
-      CRM.entities.open(item.store, item.rec.id);
+      CRM.entities.open(item.store, item.rec.id, item.hit);
     }
 
     function setSelected(i) {
@@ -252,7 +255,7 @@ window.CRM = window.CRM || {};
           h('span', { class: 'list-row-icon ' + t.iconClass }, CRM.icon(t.icon, { size: 'sm' })),
           h('span', { class: 'search-item-main' },
             h('span', { class: 'search-item-title' }, highlight(t.title(m.rec), q)),
-            h('span', { class: 'search-item-sub' }, t.sub(m.rec))),
+            h('span', { class: 'search-item-sub' }, m.hit && m.hit.sub ? [m.hit.sub, t.sub(m.rec)].filter(Boolean).join(' · ') : t.sub(m.rec))),
           CRM.icon('chevronRight', { size: 'sm', className: 'subtle' })));
         });
         if (g.items.length > PER_GROUP) {

@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.10.28-3';
-const BUILD = '25f864462c8c';
+const VERSION = '2026.10.29-1';
+const BUILD = 'b597b92202b4';
 const FILES = {
   'css/base.css': '19e80512c54e49e6',
   'css/components.css': '1f94a2f41c9beef3',
   'css/layout.css': '4d4476a29ada4d90',
-  'css/sections.css': '42f0b6c4f04572f0',
+  'css/sections.css': 'e07ac468e9048b35',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -51,11 +51,11 @@ const FILES = {
   'js/budget/import.js': 'fa75950e41c6a6d1',
   'js/budget/recurring.js': '5277ce94419c5920',
   'js/budget/transactions.js': '2b26af9572534556',
-  'js/calendar.js': '9601362d2f08a28a',
+  'js/calendar.js': '6537f76d6aa7bb25',
   'js/core/charts.js': 'b18bc9cd948e68cb',
   'js/core/db.js': 'b05dc80015e15911',
   'js/core/defaults.js': '32223999b81941f4',
-  'js/core/entities.js': '7c7ee7776860e30a',
+  'js/core/entities.js': 'bdf7866d952bd8a0',
   'js/core/icons.js': '70d6a48224255bd0',
   'js/core/rates.js': 'ab9f062afb6292f6',
   'js/core/router.js': '3b4260417c6530e1',
@@ -63,21 +63,21 @@ const FILES = {
   'js/core/store.js': '055384d023d8916e',
   'js/core/ui.js': '0b4af79cb3746b18',
   'js/core/utils.js': '92718eb6f9b9d30e',
-  'js/demo.js': '80fa534a84b0f35d',
+  'js/demo.js': '308e44393ef85dc8',
   'js/gcal.js': 'b9312ba466c12e4d',
   'js/habits.js': 'e21f72a841eef3de',
   'js/home.js': 'addf96bb9e1af42e',
-  'js/learning.js': 'a2f9c718b84dda76',
+  'js/learning.js': 'f032d633405e9aff',
   'js/notifications.js': 'f194853373c640ea',
   'js/nutrition.js': '92def9b3e17a25a4',
   'js/people.js': '1d3a57a89895f0c6',
   'js/profile.js': '13e2b243875688e3',
   'js/program.js': '394ed56868fae621',
   'js/programs.js': '17e17a1f639bf04a',
-  'js/pwa.js': '7365f11b0f78c307',
+  'js/pwa.js': '82473852164dd045',
   'js/quick.js': 'd3701fda55522fc9',
   'js/quotes.js': '57b3b169ce3e9dcb',
-  'js/search.js': 'b077a4cd90016012',
+  'js/search.js': 'b6d692ed7659fc8a',
   'js/sync-config.js': '6e4963577579c35a',
   'js/sync.js': 'deb110e8db3b7008',
   'js/tasks.js': 'c6509552bf4f3474',

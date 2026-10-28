@@ -693,6 +693,54 @@
 .topic-date.due-today .icon { color: var(--warning); }
 @media (hover: none) { .topic-date.date-trigger.is-empty { opacity: 1; } }
 
+/* Навчання — колір курсу, нотатки й посилання тем (29.10) */
+.course-card .goal-title h3 { display: flex; align-items: center; gap: 8px; }
+.course-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cc, var(--accent)); flex-shrink: 0; }
+.course-card:not(.st-done) .goal-progress .progress-bar { background: var(--cc, var(--accent)); }
+.course-swatches { gap: 8px; }
+.course-swatches .swatch { width: 24px; height: 24px; }
+.topic-wrap { border-radius: var(--radius-sm); transition: background-color .3s, box-shadow .3s; }
+.topic-wrap.open { background: var(--surface-2); margin: 2px 0; }
+.topic-wrap.open > .topic-item:hover { background: transparent; }
+.topic-wrap.topic-hl { box-shadow: 0 0 0 2px var(--accent); }
+.topic-more { width: 26px; height: 26px; flex-shrink: 0; color: var(--text-3); }
+.topic-more .icon { transition: transform .15s; }
+.topic-more[aria-expanded="true"] .icon { transform: rotate(90deg); }
+.topic-item .task-check.small { margin-left: -2px; }
+.topic-badges {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; border: 0; background: transparent;
+  padding: 0 2px; color: var(--text-3); font-size: 12px; cursor: pointer; height: 26px;
+}
+.topic-badges:empty { display: none; }
+.topic-meta { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 0; }
+.topic-badge { display: inline-flex; align-items: center; gap: 2px; }
+.topic-badge .icon { width: 13px; height: 13px; }
+.topic-extra { display: flex; flex-direction: column; gap: 8px; padding: 2px 8px 10px 36px; }
+.topic-notes { min-height: 64px; font-size: 13.5px; background: var(--surface); }
+.topic-links { display: flex; flex-direction: column; gap: 4px; }
+.topic-link { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13.5px; }
+.topic-link > .icon { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; }
+.topic-link-a { color: var(--accent); text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-link-a:hover { text-decoration: underline; }
+.topic-link-host { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.topic-link-del { width: 24px; height: 24px; margin-left: auto; flex-shrink: 0; }
+.topic-link-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.topic-link-add .input { height: 32px; font-size: 13px; background: var(--surface); }
+.topic-link-url { flex: 2 1 180px; min-width: 0; }
+.topic-link-title { flex: 1 1 120px; min-width: 0; }
+.topic-link-err { font-size: 12.5px; color: var(--danger); }
+.topic-link-err[hidden] { display: none; }
+@media (max-width: 520px) {
+  /* Назва теми — на весь рядок, значки й дедлайн — під нею */
+  .topic-wrap.has-meta > .topic-item { flex-wrap: wrap; row-gap: 0; }
+  .topic-wrap.has-meta .topic-meta { order: 5; flex: 1 0 100%; padding-left: 56px; margin-top: -4px; }
+  .topic-wrap.has-meta .check-del { order: 4; }
+  .topic-extra { padding-left: 8px; }
+  .topic-link-add .topic-link-btn { flex: 1 0 100%; }
+  .course-swatches { gap: 6px; }
+  .course-swatches .swatch { width: 22px; height: 22px; }
+}
+
 /* ---------- Google Календар (Мій кабінет) ---------- */
 .gcal-block { border-top: 1px solid var(--border); }
 .gcal-block > .setting-row { border-top: 0; }
@@ -1413,6 +1461,8 @@
 .kal-chip .kal-tcheck { width: 14px; height: 14px; }
 .kal-chip .kal-tcheck .icon { width: 10px; height: 10px; color: inherit; }
 .kal-chip.k-task:focus-visible { box-shadow: inset 3px 0 0 var(--c), var(--focus-ring); }
+.kal-chip.k-learning { cursor: pointer; }
+.kal-chip.k-learning:focus-visible { box-shadow: inset 3px 0 0 var(--c), var(--focus-ring); }
 .kal-ev.k-task { padding-left: 25px; }
 .kal-ev.k-task .kal-tcheck { position: absolute; left: 6px; top: 4px; }
 .kal-ev.k-task.short .kal-tcheck { top: 50%; transform: translateY(-50%); }

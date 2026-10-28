@@ -157,8 +157,19 @@ window.CRM = window.CRM || {};
         const done = topics.filter((t) => t.done).length;
         return [CRM.dict.label('courseKinds', r.kind), topics.length ? `${done}/${topics.length} тем` : null].filter(Boolean).join(' · ');
       },
-      text: (r) => [r.title, r.notes, (r.topics || []).map((t) => t.title).join(' ')],
-      route: (r) => ['learning', { open: r.id }]
+      text: (r) => [r.title, r.notes, (r.topics || []).map(topicText).join(' ')],
+      // Слова знайшлися в темі (назва, нотатки, посилання), а не в самому курсі — відкрити саме цю тему
+      hit: (r, terms) => {
+        const N = CRM.utils.normalize;
+        const base = N([r.title, r.notes].filter(Boolean).join(' '));
+        if (terms.every((x) => base.includes(x))) return null;
+        const t = (r.topics || []).find((tp) => {
+          const s = N([r.title, topicText(tp)].join(' '));
+          return terms.every((x) => s.includes(x));
+        });
+        return t ? { topic: t.id, sub: `Тема «${t.title}»` } : null;
+      },
+      route: (r, hit) => ['learning', hit && hit.topic ? { open: r.id, topic: hit.topic } : { open: r.id }]
     },
     people: {
       label: 'Людина', group: 'Люди', icon: 'users', iconClass: 'ico-goal', section: 'people',
@@ -204,8 +215,14 @@ window.CRM = window.CRM || {};
     }
   };
 
-  /** Відкрити запис: перехід до розділу з параметром open. */
-  function open(store, id) {
+  /** Текст теми курсу для пошуку: назва, нотатки, назви й адреси посилань. */
+  function topicText(t) {
+    return [t.title, t.notes, (Array.isArray(t.links) ? t.links : []).map((l) => [l && l.title, l && l.url].filter(Boolean).join(' ')).join(' ')]
+      .filter(Boolean).join(' ');
+  }
+
+  /** Відкрити запис: перехід до розділу з параметром open (hit — що саме знайшов пошук, якщо тип це вміє). */
+  function open(store, id, hit) {
     const t = types[store];
     const rec = S().get(store, id);
     if (!t || !rec) {
@@ -217,7 +234,7 @@ window.CRM = window.CRM || {};
       CRM.router.go('trash');
       return;
     }
-    const [path, params] = t.route(rec);
+    const [path, params] = t.route(rec, hit || null);
     CRM.router.go(path, params);
   }
 
