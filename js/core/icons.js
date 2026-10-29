@@ -78,6 +78,8 @@ window.CRM = window.CRM || {};
     utensils: '<path d="M7 3.5v17"/><path d="M4.5 3.5V8a2.5 2.5 0 0 0 5 0V3.5"/><path d="M17.5 20.5V3.5c-2.2.9-3.5 3.3-3.5 6.8v3.2h3.5"/>',
     habits: '<rect x="3" y="3" width="4" height="4" rx="1"/><rect x="10" y="3" width="4" height="4" rx="1"/><rect x="17" y="3" width="4" height="4" rx="1"/><rect x="3" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="17" y="10" width="4" height="4" rx="1"/><rect x="3" y="17" width="4" height="4" rx="1"/><rect x="10" y="17" width="4" height="4" rx="1"/><path d="m16.6 19.2 1.6 1.6 3.2-3.4"/>',
     piggy: '<path d="M18.5 10.5c.8.3 1.6 1 2 2l-.1 2.5h-1.6c-.5 1.2-1.4 2.2-2.6 2.8v2.2h-2.4v-1.5h-3.6v1.5H7.8v-2.3A6 6 0 0 1 5.5 9.5c1.3-2.7 4.2-3.8 7-3.8 2.6 0 4.3.9 5.3 2.2z"/><path d="M14.5 10.2h.1"/><path d="M4.5 9.5c-.8-.3-1.2-1-1-2"/>',
+    library: '<rect x="3.5" y="4" width="4" height="16" rx="1"/><rect x="9.5" y="4" width="4" height="16" rx="1"/><path d="m15.7 5.4 3.4-.9 3.4 14.6-3.4.9z"/><path d="M3.5 8h4M9.5 8h4M3.5 16h4M9.5 16h4"/>',
+    star: '<path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
     keyboard: '<rect x="2.5" y="6" width="19" height="12.5" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M6.5 13.5h.01M17.5 13.5h.01M9.5 15h5"/>'
   };
 

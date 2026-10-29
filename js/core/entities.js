@@ -196,6 +196,23 @@ window.CRM = window.CRM || {};
       text: (r) => [r.name, r.unit, r.note],
       route: (r) => ['habits/' + r.id, null]
     },
+    books: {
+      label: 'Книга', group: 'Книги', icon: 'library', iconClass: 'ico-learning', section: 'books',
+      title: (r) => r.title || 'Книга',
+      sub: (r) => (CRM.books ? CRM.books.subText(r) : r.author || ''),
+      text: (r) => [r.title, r.author, r.notes, (Array.isArray(r.quotes) ? r.quotes : []).map((q) => q && q.text).join(' ')],
+      // Слова знайшлися в цитаті, а не в назві чи нотатках — відкрити книгу з цією цитатою
+      hit: (r, terms) => {
+        const N = CRM.utils.normalize;
+        const base = N([r.title, r.author, r.notes].filter(Boolean).join(' '));
+        if (terms.every((x) => base.includes(x))) return null;
+        const q = (Array.isArray(r.quotes) ? r.quotes : []).find((x) => x && x.text && terms.every((t) => N([r.title, r.author, x.text].join(' ')).includes(t)));
+        if (!q) return null;
+        const t = q.text.length > 60 ? q.text.slice(0, 58) + '…' : q.text;
+        return { quote: q.id, sub: `Цитата «${t}»${q.page ? ', с. ' + q.page : ''}` };
+      },
+      route: (r, hit) => ['books/' + r.id, hit && hit.quote ? { quote: hit.quote } : null]
+    },
     foods: {
       label: 'Продукт', group: 'Продукти', icon: 'apple', iconClass: 'ico-goal', section: 'nutrition',
       title: (r) => r.name || 'Продукт',
@@ -240,7 +257,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'events', 'people', 'habits', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods'],
+    order: ['tasks', 'events', 'people', 'habits', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'books', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);

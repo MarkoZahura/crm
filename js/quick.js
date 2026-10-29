@@ -12,6 +12,7 @@
      «кава 65; таксі 120» — кілька записів одним рядком (лише «;», дата переходить на наступні частини)
      «пт здати розділ #диплом» — задача з міткою «диплом»
      «відпустка 3–10 листопада», «з 3 по 10 листопада поїздка» — подія на кілька днів (весь день)
+     «читав 30 сторінок», «Кобзар 20», «я на 120-й сторінці» → журнал читання в «Книгах» (js/books.js)
    parse(text) — розбір рядка без даних; plan(text) — варіанти з урахуванням рахунків,
    категорій та історії; create(option) / details(option) — створити запис або відкрити форму.
    ========================================================================== */
@@ -1421,13 +1422,15 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Варіанти ----------
-  const ORDER = ['habit', 'contact', 'birthday', 'workout', 'event', 'task', 'transfer', 'expense', 'income', 'meal'];
+  const ORDER = ['habit', 'book', 'contact', 'birthday', 'workout', 'event', 'task', 'transfer', 'expense', 'income', 'meal'];
   function primaryKind(P, built) {
     if (built.contact && built.contact.ok) return 'contact';
     if (built.birthday) return 'birthday';
     if (built.transfer) return 'transfer';
     const wo = built.workout && built.workout.rec && built.workout.rec.date <= P.today ? built.workout : null;   // майбутнє — це план (подія)
     if (wo && !P.time && (wo.sure || !P.money)) return 'workout';
+    // Книга (books.js): за назвою книги — завжди; «читання 30» — книга, якщо до її звички й зараховуються сторінки
+    if (built.book && (built.book.titleMatch || !built.habit || built.habit.rec.habitId === built.book.linkedHabit)) return 'book';
     if (built.habit) return 'habit';
     if (P.range && built.event && !P.money) return 'event';   // «відпустка 3–10 листопада»
     if (P.labels && P.labels.length && !P.time && !P.food && built.task) return 'task';   // «#мітка» буває лише в задач
@@ -1463,6 +1466,11 @@ window.CRM = window.CRM || {};
     if (CRM.habits && CRM.habits.quickOption && !P.repeat) {
       try { built.habit = CRM.habits.quickOption(P, { dateFor }); } catch (e) { console.error(e); }
       if (built.habit) strong = true;
+    }
+    // Книга (js/books.js): «читав 30 сторінок», «Кобзар 20», «я на 120-й»
+    if (CRM.books && CRM.books.quickOption && !P.repeat) {
+      try { built.book = CRM.books.quickOption(P, { dateFor }); } catch (e) { console.error(e); }
+      if (built.book) strong = true;
     }
     built.contact = buildContact(P);
     built.birthday = buildBirthday(P);
@@ -1529,6 +1537,12 @@ window.CRM = window.CRM || {};
         kind: 'habit', store: 'habits', id: r.habitId, short, text: `${o.title}: ${o.parts[0]}`,
         undo: () => CRM.habits.restoreDay(r.habitId, r.date, res.before, res.startBefore)
       };
+    }
+    if (o.kind === 'book') {
+      const r = o.rec;
+      const res = await CRM.books.addEntry(r.bookId, { date: r.date, pages: r.pages });
+      if (!res) return null;
+      return { kind: 'book', store: 'books', id: r.bookId, short, text: `${o.title}: ${o.parts[0]}`, undo: res.undo };
     }
     if (o.kind === 'event') {
       const saved = await CRM.store.save('events', o.rec);
@@ -1626,6 +1640,7 @@ window.CRM = window.CRM || {};
   async function create(o) {
     if (!o || !o.ok) return details(o);
     if (o.kind === 'habit') return CRM.habits.quickApply(o);
+    if (o.kind === 'book') return CRM.books.quickApply(o);
     const res = await apply(o);
     if (!res) return null;
     CRM.ui.toast(res.text, {
@@ -1680,6 +1695,7 @@ window.CRM = window.CRM || {};
     if (kind === 'expense' || kind === 'income' || kind === 'transfer') return CRM.budget.openTxForm({ id });
     if (kind === 'meal') return CRM.nutrition.openEntry(id);
     if (kind === 'habit') return CRM.habits.openPage(id);
+    if (kind === 'book') return CRM.books.openBook(id);
     if (kind === 'workout') return CRM.training.openForm(id);
     if (kind === 'birthday' || kind === 'contact') return CRM.people.openPerson(id);
     return null;
@@ -1689,6 +1705,7 @@ window.CRM = window.CRM || {};
     if (!o) return null;
     const r = o.rec || {};
     if (o.kind === 'habit') return CRM.habits.openPage(r.habitId);
+    if (o.kind === 'book') return CRM.books.openBook(r.bookId);
     if (o.kind === 'event') return CRM.calendar.openEditor(null, r);
     if (o.kind === 'task') {
       const pre = Object.assign({}, r);
@@ -1867,7 +1884,7 @@ window.CRM = window.CRM || {};
 
   const EXAMPLES = ['завтра 15:00 урок', 'кава 65', 'пт купити подарунок', 'вівсянка 80 г', '+15000 зарплата'];
   const MORE_EXAMPLES = ['щопонеділка 18:00 англійська', 'нагадай о 18:00 купити хліб', 'переказ 1000 моно → готівка', 'біг 5 км 28 хв',
-    'віджимання 3×20', 'ДР Марти 5 листопада', 'написав Марті', 'кава 65; таксі 120', 'відпустка 3–10 листопада'];
+    'віджимання 3×20', 'ДР Марти 5 листопада', 'написав Марті', 'кава 65; таксі 120', 'відпустка 3–10 листопада', 'читав 30 сторінок'];
 
   // ---------- Мій кабінет ----------
   function categoryOptions() {

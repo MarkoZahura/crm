@@ -89,6 +89,10 @@ window.CRM = window.CRM || {};
   /** Цитата на дату 'РРРР-ММ-ДД' (за замовчуванням — сьогодні). */
   function forDate(date) {
     const d = date || CRM.date.today();
+    // Свої цитати з «Книг» — приблизно через день (books.js вирішує, чи сьогодні «свій» день)
+    if (CRM.books && CRM.books.quoteFor) {
+      try { const own = CRM.books.quoteFor(d); if (own) return own; } catch (e) { console.error(e); }
+    }
     const day = Math.floor(CRM.date.toUTC(d) / 86400000);
     return QUOTES[((day % QUOTES.length) + QUOTES.length) % QUOTES.length];
   }

@@ -384,7 +384,28 @@ window.CRM = window.CRM || {};
         log: habitLog(70, (d, i) => (i > 0 && [0, 2, 4].includes(D.weekday(d)) && rnd() < 0.85 ? 1 : 0)) }, 70)
     ];
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, habits, notifications };
+    // ---------- Книги (класика з відкритим доступом; журнал без звички, щоб не змінювати історію «Читання») ----------
+    const bookLog = (list) => list.map(([d, n], k) => ({ id: uid(), date: D.addDays(T, d), pages: n, at: iso(D.addDays(T, d), '21:' + D.pad(10 + k)), hb: null }));
+    const quote = (text, page, d) => ({ id: uid(), text, page, at: iso(D.addDays(T, d), '21:40') });
+    const book = (o, since) => base(Object.assign({
+      id: uid(), title: '', author: '', pages: null, shelf: 'want', startPage: 0, startDate: null, endDate: null,
+      rating: null, notes: '', color: 'orange', log: [], quotes: []
+    }, o), D.addDays(T, -since));
+    const books = [
+      book({ title: 'Лісова пісня', author: 'Леся Українка', pages: 224, shelf: 'reading', startDate: D.addDays(T, -12), color: 'teal',
+        log: bookLog([[-12, 18], [-11, 22], [-9, 15], [-8, 20], [-6, 12], [-5, 25], [-3, 18], [-2, 10], [-1, 20]]),
+        quotes: [quote('Я в серці маю те, що не вмирає.', 120, -5)] }, 14),
+      book({ title: 'Кобзар', author: 'Тарас Шевченко', pages: 640, shelf: 'reading', startDate: D.addDays(T, -30), color: 'orange',
+        log: bookLog([[-30, 25], [-26, 30], [-20, 15], [-4, 12]]),
+        quotes: [quote('Борітеся — поборете!', 61, -26), quote('І чужому научайтесь, й свого не цурайтесь.', 95, -20)] }, 31),
+      book({ title: 'Захар Беркут', author: 'Іван Франко', pages: 256, shelf: 'done', startDate: D.addDays(T, -60), endDate: D.addDays(T, -38), rating: 5, color: 'violet',
+        notes: 'Перечитати розділ про громаду.' }, 62),
+      book({ title: 'Тіні забутих предків', author: 'Михайло Коцюбинський', pages: 128, shelf: 'want', color: 'red' }, 5),
+      book({ title: 'Хіба ревуть воли, як ясла повні?', author: 'Панас Мирний', pages: 400, shelf: 'dropped', startDate: D.addDays(T, -90), endDate: D.addDays(T, -70), color: 'blue',
+        log: bookLog([[-90, 30], [-85, 30]]) }, 92)
+    ];
+
+    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, habits, books, notifications };
   }
 
   CRM.demo = { generate };

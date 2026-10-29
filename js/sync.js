@@ -24,7 +24,7 @@ window.CRM = window.CRM || {};
 
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const CFG = CRM.SYNC_CONFIG;
-  const STORES = ['tasks', 'events', 'people', 'habits', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'];
+  const STORES = ['tasks', 'events', 'people', 'habits', 'books', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'];
   // Сховища, що синхронізувалися до появи «Харчування» (для пристроїв, які ввійшли ще тоді)
   const STORES_V1 = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій

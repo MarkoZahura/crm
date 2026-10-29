@@ -2421,3 +2421,152 @@ button.hb-c:hover { box-shadow: 0 0 0 2px var(--hb, var(--accent)); }
 @media (max-width: 640px) {
   body.has-pwa-bar .toast-stack { bottom: auto; }
 }
+
+/* ---------- Книги (books.js, 29.10.2026) ---------- */
+.bk-cover {
+  --w: 56px;
+  position: relative; display: grid; place-items: center; flex-shrink: 0;
+  width: var(--w); aspect-ratio: 2 / 3; border-radius: 3px 7px 7px 3px;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--bk) 88%, white), color-mix(in srgb, var(--bk) 72%, black));
+  color: #fff; font-weight: 700; font-size: calc(var(--w) * 0.42); line-height: 1;
+  box-shadow: inset 3px 0 0 rgba(0, 0, 0, .18), 0 2px 6px rgba(0, 0, 0, .12);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+.bk-cover::after { content: ''; position: absolute; left: 6px; right: 6px; bottom: 10%; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, .45); }
+.bk-cover-xs { --w: 18px; border-radius: 2px 4px 4px 2px; }
+.bk-cover-xs::after, .bk-cover-sm::after { display: none; }
+.bk-cover-sm { --w: 30px; border-radius: 2px 5px 5px 2px; }
+.bk-cover-lg { --w: 96px; }
+.bk-bar { display: block; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bk-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--bk, var(--accent)); }
+
+.bk-stars-view { display: inline-flex; gap: 1px; color: var(--text-3); }
+.bk-star .icon, .bk-star-btn .icon { fill: none; }
+.bk-star.on, .bk-star-btn.on { color: var(--soon); }
+.bk-star.on .icon, .bk-star-btn.on .icon { fill: currentColor; }
+.bk-stars { display: inline-flex; gap: 2px; }
+.bk-star-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-3); }
+.bk-star-btn:hover { background: var(--surface-2); color: var(--soon); }
+
+/* Вкладки й картки книг */
+.bk-tabs { margin-bottom: 16px; }
+.bk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.bk-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px;
+  border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-card);
+}
+.bk-card-main { display: flex; gap: 14px; min-width: 0; color: inherit; text-decoration: none; }
+.bk-card-main:hover .bk-card-title { color: var(--accent-text); }
+.bk-card-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.bk-card-title { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.bk-card-author, .bk-card-dates { font-size: 13px; }
+.bk-card-meta { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; font-size: 13px; }
+.bk-card-prog { font-weight: 500; }
+.bk-card-eta { font-size: 12px; }
+.bk-card-act { display: flex; justify-content: flex-end; }
+.bk-card[data-shelf="dropped"] .bk-cover { filter: grayscale(.6); opacity: .8; }
+.bk-year-head { font-size: 15px; font-weight: 600; margin: 4px 2px 10px; }
+.bk-empty-shelf .bk-start-from-want { display: flex; flex-direction: column; gap: 8px; align-items: center; padding: 0 16px 20px; }
+
+/* Підсумок угорі */
+.bk-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.bk-stat .stat-ico { background: var(--surface-3); color: var(--text-2); }
+.bk-stat-sub { font-size: 12px; }
+.bk-week-bars { display: flex; align-items: flex-end; gap: 3px; height: 22px; margin-top: 2px; }
+.bk-week-bars i { flex: 1; min-width: 4px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.bk-week-bars i.today { background: var(--accent); }
+.bk-habit-note { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 14px; font-size: 13px; }
+.bk-habit-note .icon { flex-shrink: 0; }
+
+/* Цитати */
+.bk-qlist { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.bk-quote { margin: 0; padding: 12px 14px; border-left: 3px solid var(--bk, var(--accent)); border-radius: 0 var(--radius) var(--radius) 0; background: var(--surface-2); transition: background .3s; }
+.bk-quote.bk-hl { background: var(--accent-soft-2); }
+.bk-quote-text { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bk-quote-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 13px; }
+.bk-quote-src { color: var(--text-2); text-decoration: none; }
+a.bk-quote-src:hover { color: var(--accent-text); }
+.bk-quote-btns { display: inline-flex; gap: 2px; }
+.bk-q-search { width: 100%; }
+.bk-q-none { padding: 8px 2px; }
+.bk-qform { display: flex; flex-direction: column; gap: 8px; }
+.bk-qform-row { display: flex; gap: 8px; align-items: center; }
+.bk-q-page { width: 84px; }
+.bk-q-text { resize: vertical; }
+
+/* Сторінка книги */
+.bk-back { margin-bottom: 8px; }
+.bk-hero-body { display: flex; gap: 20px; align-items: flex-start; }
+.bk-hero-main { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
+.bk-shelf-seg, .bk-shelves { display: flex; flex-wrap: wrap; align-self: flex-start; max-width: 100%; }
+.bk-shelf-seg button, .bk-shelves button { flex: 1 1 auto; }
+.bk-hero-dates { font-size: 13px; }
+.bk-hero-prog { display: flex; flex-direction: column; gap: 6px; max-width: 520px; }
+.bk-hero-prog .bk-bar { height: 8px; }
+.bk-hero-stats { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.bk-hs { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.bk-hs b { font-size: 15px; font-weight: 600; }
+.bk-hero-rate { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.bk-log-mode { align-self: flex-start; }
+.bk-log { display: flex; flex-direction: column; gap: 8px; padding-bottom: 14px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.bk-log-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bk-log-num { width: 96px; }
+.bk-log-date { width: auto; min-width: 150px; }
+.bk-log-err { color: var(--danger); font-size: 13px; min-height: 0; }
+.bk-log-err:empty { display: none; }
+.bk-entries { display: flex; flex-direction: column; }
+.bk-entry { display: grid; grid-template-columns: minmax(130px, 190px) 96px minmax(0, 1fr) 20px auto; align-items: center; gap: 10px; padding: 6px 4px; border-radius: var(--radius-sm); font-size: 14px; }
+.bk-entry:hover { background: var(--surface-2); }
+.bk-entry-pages { color: var(--success); }
+.bk-entry.neg .bk-entry-pages { color: var(--text-2); }
+.bk-entry-to { font-size: 13px; }
+.bk-entry-hb { display: inline-grid; place-items: center; color: var(--text-3); }
+.bk-entry-btns { display: inline-flex; gap: 2px; }
+.bk-no-log { padding: 6px 2px; }
+.bk-log-more { margin-top: 6px; }
+.bk-notes { width: 100%; resize: vertical; }
+.bk-notes-state { font-size: 12px; }
+.bk-form .bk-shelves { align-self: stretch; }
+.bk-form-rate .bk-stars { margin-left: -6px; }
+
+/* Віконце «Записати прочитане» */
+.bk-popover { width: min(320px, calc(100vw - 16px)); }
+.bk-pop { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.bk-pop-title { display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; }
+.bk-pop-title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-pop-mode { display: flex; }
+.bk-pop-mode button { flex: 1; }
+.bk-pop-row { display: flex; gap: 8px; align-items: center; }
+.bk-pop-num { flex: 1; min-width: 0; }
+.bk-pop-hint { font-size: 12px; }
+.bk-edit-pop .field-label { margin-bottom: -4px; }
+
+/* Головна: «Читаю зараз» */
+.bk-hlist { display: flex; flex-direction: column; gap: 2px; padding: 4px 10px 10px; }
+.bk-hrow { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius); }
+.bk-hrow:hover { background: var(--surface-2); }
+.bk-hrow-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.bk-hrow-main:hover .bk-hrow-title { color: var(--accent-text); }
+.bk-hrow-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.bk-hrow-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-hrow-sub { font-size: 12px; }
+.bk-hrow .bk-bar { height: 4px; max-width: 220px; }
+.bk-hplus { flex-shrink: 0; gap: 2px; padding: 0 8px; }
+.bk-home-none { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.bk-home-more { font-size: 13px; padding-top: 0; }
+.bk-home-week { display: flex; align-items: center; gap: 6px; }
+.home-quote .quote-own { color: inherit; text-decoration: none; }
+.home-quote .quote-own:hover { color: var(--accent-text); text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .bk-grid { grid-template-columns: minmax(0, 1fr); }
+  .bk-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bk-hero-body { gap: 14px; }
+  .bk-cover-lg { --w: 64px; }
+  .bk-entry { grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 0; }
+  .bk-entry-to { grid-column: 1; grid-row: 2; }
+  .bk-entry-hb { grid-column: 2; grid-row: 2; justify-self: end; }
+  .bk-entry-btns { grid-column: 3; grid-row: 1 / span 2; }
+  .bk-log-num { flex: 1; min-width: 80px; }
+  .bk-log-add { width: 100%; justify-content: center; }
+}

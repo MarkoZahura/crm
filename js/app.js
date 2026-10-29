@@ -110,6 +110,7 @@ window.CRM = window.CRM || {};
     { group: 'Люди й навчання' },
     { id: 'people', label: 'Люди', icon: 'users' },
     { id: 'learning', label: 'Навчання', icon: 'book' },
+    { id: 'books', label: 'Книги', icon: 'library' },
     { group: 'Інше' },
     { id: 'trash', label: 'Кошик', icon: 'trash', count: () => CRM.store.trashItems().length }
   ];
@@ -486,6 +487,7 @@ window.CRM = window.CRM || {};
     if (!CRM.quick) missing.push('js/quick.js');
     if (!CRM.people) missing.push('js/people.js');
     if (!CRM.habits) missing.push('js/habits.js');
+    if (!CRM.books) missing.push('js/books.js');
     else if (CRM.tasks && !CRM.tasks.create) missing.push('js/tasks.js (нова версія)');
     if (!CRM.bankImport) missing.push('js/budget/import.js');
     if (CRM.finance && !CRM.finance.isSplit) missing.push('js/budget/finance.js (нова версія)');

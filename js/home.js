@@ -31,11 +31,15 @@ window.CRM = window.CRM || {};
   // ---------- Цитата дня (праворуч від привітання) ----------
   function quoteFigure() {
     const q = CRM.quotes.forDate(D.today());
-    return h('figure', { class: 'home-quote' },
+    // Своя цитата з книги (books.js) — підпис веде на книгу
+    const author = q.own && q.bookId
+      ? h('a', { class: 'quote-author quote-own', href: CRM.router.href('books/' + q.bookId, q.quoteId ? { quote: q.quoteId } : null), title: 'Моя цитата — відкрити книгу' }, '— ' + q.author)
+      : h('span', { class: 'quote-author' }, '— ' + q.author);
+    return h('figure', { class: 'home-quote' + (q.own ? ' is-own' : '') },
       h('blockquote', { class: 'quote-text' }, q.text),
       h('figcaption', { class: 'quote-meta' },
-        h('span', { class: 'quote-author' }, '— ' + q.author),
-        h('span', { class: 'quote-date' }, ' · цитата дня')));
+        author,
+        h('span', { class: 'quote-date' }, q.own ? ' · моя цитата дня' : ' · цитата дня')));
   }
 
   // ---------- Цифри дня ----------
@@ -274,13 +278,14 @@ window.CRM = window.CRM || {};
     food: { name: 'Харчування сьогодні', sub: 'калорії й БЖВ', has: () => !!CRM.nutrition, render: () => CRM.nutrition.homeCard() },
     money: { name: 'Гроші сьогодні', sub: 'доходи, витрати, результат', render: () => moneyCard() },
     habits: { name: 'Звички', sub: 'відмітки на сьогодні', has: () => !!CRM.habits, render: () => CRM.habits.homeCard() },
+    books: { name: 'Читаю зараз', sub: 'книги й прогрес у сторінках', has: () => !!CRM.books, render: () => CRM.books.homeCard() },
     training: { name: 'Сьогоднішнє тренування', sub: 'коли за програмою є тренування', has: () => !!CRM.programs, render: () => CRM.programs.homeCard() },
     schedule: { name: 'Розклад на сьогодні', sub: 'події, план дня, платежі', render: () => scheduleCard() }
   };
   const TOP = { pc: ['today', 'quote'], phone: ['quote'] };
   const DEFAULTS = {
-    pc: { left: ['tasks', 'people', 'food'], right: ['money', 'habits', 'training', 'schedule'], off: [], folded: [] },
-    phone: { list: ['today', 'tasks', 'schedule', 'habits', 'money', 'people', 'food', 'training'], off: [], folded: [] }
+    pc: { left: ['tasks', 'people', 'food', 'books'], right: ['money', 'habits', 'training', 'schedule'], off: [], folded: [] },
+    phone: { list: ['today', 'tasks', 'schedule', 'habits', 'books', 'money', 'people', 'food', 'training'], off: [], folded: [] }
   };
   const has = (id) => !!BLOCKS[id] && (!BLOCKS[id].has || BLOCKS[id].has());
   const narrowMq = window.matchMedia ? window.matchMedia('(max-width: 860px)') : null;
@@ -534,7 +539,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'events', 'people', 'habits', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'events', 'people', 'habits', 'books', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

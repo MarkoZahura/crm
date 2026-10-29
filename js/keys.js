@@ -38,6 +38,7 @@ window.CRM = window.CRM || {};
     { code: 'KeyL', key: 'L', route: 'learning', label: 'Навчання' },
     { code: 'KeyP', key: 'P', route: 'people', label: 'Люди' },
     { code: 'KeyZ', key: 'Z', route: 'habits', label: 'Звички' },
+    { code: 'KeyR', key: 'R', route: 'books', label: 'Книги' },
     { code: 'KeyK', key: 'K', route: 'trash', label: 'Кошик' },
     { code: 'KeyM', key: 'M', route: 'profile', label: 'Мій кабінет' }
   ];
