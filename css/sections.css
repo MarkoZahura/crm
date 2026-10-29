@@ -2661,3 +2661,4 @@ a.bk-quote-src:hover { color: var(--accent-text); }
   .lim-cats .lim-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px; padding: 2px 8px 8px; }
   .lim-cats .lim-row { padding: 12px; }
 }
+.wo-dur-in { width: 150px; }

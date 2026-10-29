@@ -561,7 +561,7 @@ window.CRM = window.CRM || {};
       if (done) {
         action = h('div', { class: 'prog-done' },
           h('span', { class: 'badge badge-success' }, CRM.icon('check', { size: 'sm' }), 'Виконано'),
-          h('span', { class: 'subtle' }, `${fmt.dateShort(done.date)} · ${done.durationMin} хв`),
+          h('span', { class: 'subtle' }, `${fmt.dateShort(done.date)} · ${CRM.training && CRM.training.durationText ? CRM.training.durationText(done.durationMin) : done.durationMin + ' хв'}`),
           ui.button({ label: 'Відкрити запис', size: 'sm', variant: 'ghost', onClick: () => CRM.training.openForm(done.id) }));
       } else if (date > T) {
         action = h('div', { class: 'prog-done subtle' }, `Ще попереду — ${inDays(D.diffDays(T, date))}`);

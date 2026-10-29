@@ -27,6 +27,8 @@ window.CRM = window.CRM || {};
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const D = CRM.date;
   const fmt = CRM.fmt;
+  /** Тривалість тренування: «45 хв», «9 хв 30 с» (training.js), запасний варіант — хвилини. */
+  const durText = (min) => (CRM.training && CRM.training.durationText ? CRM.training.durationText(min) : `${Math.round(min)} хв`);
 
   const STORE = 'programs';
   const SCHEMA_VERSION = 1;
@@ -478,7 +480,7 @@ window.CRM = window.CRM || {};
   }
   function factText(w) {
     if (w.type === 'cardio') {
-      return [w.distanceKm ? kmText(Math.round(w.distanceKm * 1000)) : null, w.durationMin ? `${w.durationMin} хв` : null, CRM.training.pace(w)].filter(Boolean).join(' · ');
+      return [w.distanceKm ? kmText(Math.round(w.distanceKm * 1000)) : null, w.durationMin ? durText(w.durationMin) : null, CRM.training.pace(w)].filter(Boolean).join(' · ');
     }
     return (w.exercises || []).map((e) => `${e.name}: ${(e.sets || []).map((s) => s.reps).join('·') || '—'}`).join(' · ');
   }
@@ -841,7 +843,7 @@ window.CRM = window.CRM || {};
       h('div', { class: 'prog-done' },
         h('span', { class: 'badge badge-success' }, CRM.icon('check', { size: 'sm' }), 'Виконано'),
         met === true ? h('span', { class: 'badge' }, 'План виконано') : met === false ? h('span', { class: 'badge badge-warning' }, 'Не весь план') : null,
-        h('span', { class: 'subtle' }, `${fmt.dateShort(w.date)}${w.durationMin ? ` · ${w.durationMin} хв` : ''}`),
+        h('span', { class: 'subtle' }, `${fmt.dateShort(w.date)}${w.durationMin ? ` · ${durText(w.durationMin)}` : ''}`),
         ui.button({ label: 'Відкрити запис', size: 'sm', variant: 'ghost', onClick: () => CRM.training.openForm(w.id) })),
       h('div', { class: 'ip-fact subtle' }, 'Факт: ', factText(w) || '—'));
   }

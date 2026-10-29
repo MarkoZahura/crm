@@ -134,7 +134,7 @@ window.CRM = window.CRM || {};
     workouts: {
       label: 'Тренування', group: 'Тренування', icon: 'dumbbell', iconClass: 'ico-danger', section: 'training',
       title: (r) => r.title || CRM.dict.label('workoutTypes', r.type) || 'Тренування',
-      sub: (r) => [fmt().date(r.date), r.durationMin ? r.durationMin + ' хв' : null, r.distanceKm ? fmt().number(r.distanceKm, 1).replace(/,0$/, '') + ' км' : null].filter(Boolean).join(' · '),
+      sub: (r) => [fmt().date(r.date), r.durationMin ? (CRM.training && CRM.training.durationText ? CRM.training.durationText(r.durationMin) : Math.round(r.durationMin) + ' хв') : null, r.distanceKm ? fmt().number(r.distanceKm, 1).replace(/,0$/, '') + ' км' : null].filter(Boolean).join(' · '),
       text: (r) => [r.title, CRM.dict.label('workoutTypes', r.type), (r.exercises || []).map((e) => e.name).join(' '), r.note],
       route: (r) => ['training', { open: r.id }]
     },

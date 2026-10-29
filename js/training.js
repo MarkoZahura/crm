@@ -33,10 +33,72 @@ window.CRM = window.CRM || {};
     const secPerKm = Math.round(w.durationMin * 60 / w.distanceKm);
     return `${Math.floor(secPerKm / 60)}:${String(secPerKm % 60).padStart(2, '0')} хв/км`;
   }
+  /** Підсумки (тиждень, місяць): лише години й хвилини — «2 год 15 хв». */
   function durationLabel(min) {
     const m = Math.round(Number(min) || 0);
     if (m < 60) return `${m} хв`;
     return `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ''}`;
+  }
+
+  // ---------- Тривалість: хвилини й секунди ----------
+  // Зберігається, як і раніше, у durationMin — хвилинах, тепер і з дробом (9:30 → 9,5 хв).
+  const MAX_SEC = 600 * 60;
+  /** Секунди тривалості (ціле число). */
+  function durSec(min) { return Math.round((Number(min) || 0) * 60); }
+  /** Секунди → хвилини для збереження (без «хвостів» на кшталт 9.516666666666667). */
+  function secToMin(sec) { return Number((Math.round(sec) / 60).toFixed(6)); }
+  /** Одного тренування: «45 хв», «9 хв 30 с», «1 год 5 хв», «1 год 5 хв 20 с». */
+  function durationText(min) {
+    const total = durSec(min);
+    const hh = Math.floor(total / 3600);
+    const mm = Math.floor((total % 3600) / 60);
+    const ss = total % 60;
+    const parts = [];
+    if (hh) parts.push(`${hh} год`);
+    if (mm || (!hh && !ss)) parts.push(`${mm} хв`);
+    if (ss) parts.push(`${ss} с`);
+    return parts.join(' ');
+  }
+  /** Для поля форми: цілі хвилини — «45», із секундами — «9:30» / «1:05:20». */
+  function durationInput(min) {
+    const total = durSec(min);
+    if (!total) return '';
+    if (total % 60 === 0) return String(total / 60);
+    const hh = Math.floor(total / 3600);
+    const mm = Math.floor((total % 3600) / 60);
+    const ss = String(total % 60).padStart(2, '0');
+    return hh ? `${hh}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+  }
+  /**
+   * Розібрати тривалість, як її пишуть люди → секунди або null:
+   * «45» (хвилини), «45,5», «9:30» (хв:сек), «1:05:20» (год:хв:сек), «1 год 5 хв», «9 хв 30 с», «90 хв», «1,5 год».
+   */
+  function parseDuration(text) {
+    const s = String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!s) return null;
+    let m = /^(\d+(?:[.,]\d+)?)$/.exec(s);
+    if (m) return Math.round(Number(m[1].replace(',', '.')) * 60);
+    m = /^(\d{1,4}):(\d{2})$/.exec(s);
+    if (m) return Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : null;
+    m = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(s);
+    if (m) return Number(m[2]) < 60 && Number(m[3]) < 60 ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
+    // З одиницями: «1 год 5 хв 20 с», «9хв 30с», «1,5 год»
+    const re = /(\d+(?:[.,]\d+)?)\s*(години|годин|година|год|г|h|хвилини|хвилин|хвилина|хв|min|m|секунди|секунд|секунда|сек|с|s)\.?(?=\s|\d|$)/g;
+    let rest = s;
+    let sec = 0;
+    let any = false;
+    let x;
+    while ((x = re.exec(s))) {
+      const v = Number(x[1].replace(',', '.'));
+      const u = x[2];
+      if (/^(год|г|h)/.test(u)) sec += v * 3600;
+      else if (/^(хв|min|m$)/.test(u)) sec += v * 60;
+      else sec += v;
+      any = true;
+      rest = rest.replace(x[0], ' ');
+    }
+    if (!any || rest.replace(/[\s,і+та]/g, '') !== '') return null;
+    return Math.round(sec);
   }
   function km(v) { return fmt.number(v, 1).replace(/,0$/, '') + ' км'; }
   function typeLabel(t) { return CRM.dict.label('workoutTypes', t) || 'Тренування'; }
@@ -140,7 +202,7 @@ window.CRM = window.CRM || {};
       h('span', { class: 'rec-name' }, title(w),
         w.program ? h('span', { class: 'badge badge-accent' }, programBadge(w)) : w.title ? h('span', { class: 'badge' }, typeLabel(w.type)) : null),
       h('span', { class: 'rec-sub' }, summaryText(w) || '—')),
-    h('span', { class: 'wo-dur num' }, w.durationMin ? durationLabel(w.durationMin) : ''),
+    h('span', { class: 'wo-dur num' }, w.durationMin ? durationText(w.durationMin) : ''),
     ui.button({ icon: 'repeat', iconOnly: true, size: 'sm', variant: 'ghost', title: 'Повторити сьогодні', onClick: (e) => { e.stopPropagation(); repeatToday(w); } }));
   }
 
@@ -252,8 +314,22 @@ window.CRM = window.CRM || {};
     }
 
     const dateIn = ui.dateInput({ value: st.date, clearable: false, ariaLabel: 'Дата тренування' });
-    const durIn = h('input', { class: 'input input-num', type: 'number', min: 1, max: 600, step: 1, value: st.durationMin || '', placeholder: 'хв', 'aria-label': 'Тривалість, хв' });
-    const fDur = ui.field({ label: 'Тривалість, хв', input: durIn, required: true });
+    // Тривалість — хвилини («45») або хв:сек («9:30»), год:хв:сек («1:05:20»), «1 год 5 хв»
+    const durIn = h('input', {
+      class: 'input input-num wo-dur-in', type: 'text', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false',
+      value: durationInput(st.durationMin), placeholder: '45 або 9:30', 'aria-label': 'Тривалість: хвилини або хв:сек'
+    });
+    const durHint = h('div', { class: 'field-hint wo-dur-hint' });
+    const fDur = ui.field({ label: 'Тривалість', input: durIn, required: true });
+    fDur.appendChild(durHint);
+    function updateDurHint() {
+      const v = durIn.value.trim();
+      const sec = parseDuration(v);
+      if (v && sec != null && sec > 0 && !/^\d+$/.test(v)) durHint.textContent = '= ' + durationText(secToMin(sec));
+      else durHint.textContent = 'Хвилини (45) або хвилини й секунди через двокрапку (9:30); з годинами — 1:05:20.';
+    }
+    durIn.addEventListener('input', updateDurHint);
+    updateDurHint();
     const titleIn = ui.input({ value: st.title || '', maxlength: 60, placeholder: 'Необовʼязково, напр., Ноги + спина' });
     const fTitle = ui.field({ label: 'Назва', input: titleIn });
 
@@ -264,7 +340,8 @@ window.CRM = window.CRM || {};
     fDist.appendChild(paceOut);
     function updatePace() {
       const d = CRM.utils.parseAmount(distIn.value);
-      const m = Number(durIn.value);
+      const sec = parseDuration(durIn.value);
+      const m = sec ? sec / 60 : 0;
       paceOut.textContent = d > 0 && m > 0 ? `Темп: ${pace({ distanceKm: d, durationMin: m })}` : 'Темп рахується автоматично з дистанції й тривалості.';
     }
     distIn.addEventListener('input', updatePace);
@@ -324,8 +401,12 @@ window.CRM = window.CRM || {};
     async function submit(e) {
       if (e) e.preventDefault();
       let ok = true;
-      const dur = Number(durIn.value);
-      if (!Number.isInteger(dur) || dur < 1 || dur > 600) { fDur.setError('Вкажи тривалість у хвилинах, 1–600'); ok = false; }
+      const durS = parseDuration(durIn.value);
+      const dur = durS != null ? secToMin(durS) : null;
+      if (durS == null || durS < 1 || durS > MAX_SEC) {
+        fDur.setError(durS != null && durS > MAX_SEC ? 'Не більше 600 хв (10 годин)' : 'Вкажи тривалість: хвилини (45) або хв:сек (9:30)');
+        ok = false;
+      }
       let dist = null;
       if (st.type === 'cardio' && distIn.value.trim()) {
         dist = CRM.utils.parseAmount(distIn.value);
@@ -381,5 +462,5 @@ window.CRM = window.CRM || {};
   }
 
   CRM.router.register('training', { title: 'Тренування', stores: ['workouts', 'programs'], render });
-  CRM.training = { openForm, stats, tonnage, pace };
+  CRM.training = { openForm, stats, tonnage, pace, durationText, durationInput, parseDuration, durSec, secToMin };
 })(window.CRM);

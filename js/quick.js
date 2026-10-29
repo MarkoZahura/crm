@@ -47,6 +47,7 @@ window.CRM = window.CRM || {};
   const MONTH_UNITS = /^(місяць|місяці|місяців|місяця)$/;
   const HOUR_UNITS = /^(год|годин|година|години|годину)$/;
   const MIN_UNITS = /^(хв|хвилин|хвилина|хвилини|хвилину)$/;
+  const SEC_UNITS = /^(с|сек|секунд|секунди|секунду|секунда)$/;
   const GRAM_UNITS = /^(г|гр|грам|грамів|грами|грама|g|мл|ml)$/;
   const KG_UNITS = /^(кг|kg)$/;
   const KCAL_UNITS = /^(ккал|kcal)$/;
@@ -558,13 +559,48 @@ window.CRM = window.CRM || {};
   function durAt(T, i) {
     if (!free(T, i)) return null;
     const n = T[i].n;
+    let r = null;
     const m = /^(\d+(?:[.,]\d+)?)(хв|год)$/.exec(n);
-    if (m) return { min: m[2] === 'год' ? numOf(m[1]) * 60 : numOf(m[1]), last: i };
-    if (/^\d+(?:[.,]\d+)?$/.test(n) && free(T, i + 1)) {
-      if (MIN_UNITS.test(T[i + 1].n)) return { min: numOf(n), last: i + 1 };
-      if (HOUR_UNITS.test(T[i + 1].n)) return { min: numOf(n) * 60, last: i + 1 };
+    if (m) r = { min: m[2] === 'год' ? numOf(m[1]) * 60 : numOf(m[1]), last: i, unit: m[2] };
+    else if (/^\d+(?:[.,]\d+)?$/.test(n) && free(T, i + 1)) {
+      if (MIN_UNITS.test(T[i + 1].n)) r = { min: numOf(n), last: i + 1, unit: 'хв' };
+      else if (HOUR_UNITS.test(T[i + 1].n)) r = { min: numOf(n) * 60, last: i + 1, unit: 'год' };
     }
-    return null;
+    // «28 хв 30 с», «28 хв 30 сек», «28хв 30с»
+    if (r && r.unit === 'хв') {
+      const j = r.last + 1;
+      if (free(T, j)) {
+        const sm = /^(\d{1,2})(с|сек)$/.exec(T[j].n);
+        if (sm && Number(sm[1]) < 60) { r.min += Number(sm[1]) / 60; r.last = j; }
+        else if (/^\d{1,2}$/.test(T[j].n) && Number(T[j].n) < 60 && free(T, j + 1) && SEC_UNITS.test(T[j + 1].n)) { r.min += Number(T[j].n) / 60; r.last = j + 1; }
+      }
+    }
+    return r;
+  }
+  /**
+   * Кардіо з дистанцією: «біг 5 км 28:30», «біг 1,83 км 9:30», «вело 20 км 1:05:20» — хв:сек (год:хв:сек) як тривалість,
+   * а не час доби (до розбору часу). З прийменником («о 9:30», «на 7:00») — це час.
+   */
+  function passCardioClock(T, P) {
+    const cardio = T.some((t, i) => free(T, i) && CARDIO.some(([re]) => re.test(t.n)));
+    if (!cardio) return;
+    const dist = T.some((t, i) => /^\d+(?:[.,]\d+)?(км|km)$/.test(t.n) || (/^\d+(?:[.,]\d+)?$/.test(t.n) && i + 1 < T.length && KM_UNITS.test(T[i + 1].n)) ||
+      /^\d+(м|m)$/.test(t.n) || (/^\d+$/.test(t.n) && i + 1 < T.length && M_UNITS.test(T[i + 1].n)));
+    for (let i = 0; i < T.length; i++) {
+      if (!free(T, i)) continue;
+      const m = /^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(T[i].n);
+      if (!m) continue;
+      if (i > 0 && /^(о|об|з|із|в|у|во|на|до|від|після)$/.test(T[i - 1].n)) continue;
+      const three = m[3] != null;
+      if (Number(m[2]) > 59 || (three && Number(m[3]) > 59)) continue;
+      // Без дистанції «біг 7:30» — скоріше час; хв:сек — лише з дистанцією або якщо як час неможливо (28:30)
+      if (!three && !dist && Number(m[1]) < 24) continue;
+      const sec = three ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : Number(m[1]) * 60 + Number(m[2]);
+      if (!sec) continue;
+      mark(T, i, i, 'wdur');
+      P.cardioMin = sec / 60;
+      return;
+    }
   }
   /** Підходи: «3×20», «3 x 20», «3×10×60», «3 по 20», «3 підходи по 20», + «60 кг» → { sets, reps, weight, last }. */
   function setAt(T, i) {
@@ -632,11 +668,12 @@ window.CRM = window.CRM || {};
         const d = durAt(T, i);
         if (d) { min = (min || 0) + d.min; marks.push([i, d.last]); i = d.last; }
       }
+      if (min == null && P.cardioMin != null) min = P.cardioMin;
       if (min == null && P.dur) min = P.dur;
       if (km != null || min != null) {
         mark(T, ci, ci, 'workout');
         marks.forEach(([a, b]) => mark(T, a, b, 'workout'));
-        P.workout = { cardio: true, name: cname, km: km != null ? Math.round(km * 100) / 100 : null, min: min != null ? Math.round(min) : null, sure: true };
+        P.workout = { cardio: true, name: cname, km: km != null ? Math.round(km * 100) / 100 : null, min: min != null ? roundSec(min) : null, sure: true };
       }
       return;
     }
@@ -806,6 +843,7 @@ window.CRM = window.CRM || {};
     });
     passRange(T, P, day);
     passRemind(T, P);
+    passCardioClock(T, P);
     passTime(T, P);
     passIn(T, P, toMin(o.now) != null ? toMin(o.now) : toMin(D.nowTime()), day);
     passDuration(T, P);
@@ -1326,7 +1364,13 @@ window.CRM = window.CRM || {};
     });
     return groups.map((g) => `${g.n}×${g.reps}` + (g.weight != null ? `×${fmt.number(g.weight, 2).replace(/,00$/, '')} кг` : '')).join(', ');
   }
-  function minText(m) { return m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ' ' + (m % 60) + ' хв' : ''}` : `${m} хв`; }
+  function minText(m) {
+    if (CRM.training && CRM.training.durationText) return CRM.training.durationText(m);
+    const r = Math.round(m);
+    return r >= 60 ? `${Math.floor(r / 60)} год${r % 60 ? ' ' + (r % 60) + ' хв' : ''}` : `${r} хв`;
+  }
+  /** Хвилини з точністю до секунди (9:30 → 9,5). */
+  const roundSec = (min) => Number((Math.round(min * 60) / 60).toFixed(6));
   function buildWorkout(P, ctx) {
     if (!P.workout || !CRM.training || !CRM.db.SCHEMA.workouts) return null;
     const W = P.workout;
@@ -1335,7 +1379,7 @@ window.CRM = window.CRM || {};
     const base = { kind: 'workout', label: 'Тренування', icon: 'dumbbell', iconClass: 'ico-goal' };
     if (W.cardio) {
       const rec = { type: 'cardio', date, title: W.name, durationMin: W.min, distanceKm: W.km, exercises: [], note: '', quick: true };
-      if (W.min != null && (W.min < 1 || W.min > 600)) problem = problem || 'Тривалість — від 1 до 600 хв.';
+      if (W.min != null && (W.min * 60 < 1 || W.min > 600)) problem = problem || 'Тривалість — до 600 хв.';
       if (W.km != null && !(W.km > 0 && W.km <= 500)) problem = problem || 'Дистанція — до 500 км.';
       const parts = [];
       if (W.km != null) parts.push(fmt.number(W.km, 2).replace(/,?0+$/, '') + ' км');
@@ -1354,7 +1398,7 @@ window.CRM = window.CRM || {};
     if (W.min != null) parts.push(minText(W.min));
     parts.push(workoutTypeLabel(type));
     parts.push(merge ? (date === P.today ? 'додати до сьогоднішнього тренування' : 'додати до тренування ' + relDay(date)) : 'нове тренування' + (date === P.today ? '' : ', ' + relDay(date)));
-    if (W.min != null && (W.min < 1 || W.min > 600)) problem = problem || 'Тривалість — від 1 до 600 хв.';
+    if (W.min != null && (W.min * 60 < 1 || W.min > 600)) problem = problem || 'Тривалість — до 600 хв.';
     return Object.assign(base, { title: W.exercises.map((e) => e.name).join(', '), parts, rec, ok: !problem, problem, merge, sure: W.sure });
   }
 
@@ -1590,7 +1634,7 @@ window.CRM = window.CRM || {};
           const same = merged.exercises.find((e) => U.normalize(e.name) === U.normalize(ex.name));
           if (same) same.sets = (same.sets || []).concat(ex.sets); else merged.exercises.push(ex);
         });
-        if (rec.durationMin) merged.durationMin = (Number(merged.durationMin) || 0) + rec.durationMin;
+        if (rec.durationMin) merged.durationMin = roundSec((Number(merged.durationMin) || 0) + rec.durationMin);
         const saved = await CRM.store.save('workouts', merged);
         return {
           kind: 'workout', store: 'workouts', id: saved.id, short,
