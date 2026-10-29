@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.10.29-9';
-const BUILD = '4829f488da69';
+const VERSION = '2026.10.29-10';
+const BUILD = 'a2642e033ead';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': '67bdc642b5ae5f02',
-  'css/sections.css': '4cc5d7cfee21616d',
+  'css/sections.css': '061f8a0d5a62a1cd',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -77,14 +77,14 @@ const FILES = {
   'js/profile.js': '5e8f88362b0bf197',
   'js/program.js': '1a7ed7cc42642fac',
   'js/programs.js': '5badb646bc6e27ac',
-  'js/pwa.js': '7a3a78abaa76718c',
+  'js/pwa.js': '09f2883492d2dcd6',
   'js/quick.js': '4db12b18ed0c9cb8',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',
   'js/sync-config.js': '6e4963577579c35a',
   'js/sync.js': 'a578fe3cb1a118a3',
   'js/tasks.js': '7de521fc6a3fd0e7',
-  'js/training.js': '6c5966d747e03302',
+  'js/training.js': '477b2f5e63a1d32c',
   'js/trash.js': '7da831efebe3f16d',
   'manifest-c.json': '6bec32309f09144a',
   'manifest-tiles.json': 'a5d3ba9581552a4b',

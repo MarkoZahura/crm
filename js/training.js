@@ -199,7 +199,7 @@ window.CRM = window.CRM || {};
     h('span', { class: 'rec-date' }, h('span', { class: 'rec-day num' }, String(D.parse(w.date).d)), h('span', { class: 'rec-wd' }, wd)),
     h('span', { class: 'list-row-icon wo-ico wo-' + w.type }, CRM.icon(TYPE_ICON[w.type] || 'dumbbell', { size: 'sm' })),
     h('span', { class: 'rec-main' },
-      h('span', { class: 'rec-name' }, title(w),
+      h('span', { class: 'rec-name' }, h('span', { class: 'rec-title' }, title(w)),
         w.program ? h('span', { class: 'badge badge-accent' }, programBadge(w)) : w.title ? h('span', { class: 'badge' }, typeLabel(w.type)) : null),
       h('span', { class: 'rec-sub' }, summaryText(w) || '—')),
     h('span', { class: 'wo-dur num' }, w.durationMin ? durationText(w.durationMin) : ''),
