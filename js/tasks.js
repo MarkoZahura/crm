@@ -222,8 +222,12 @@ window.CRM = window.CRM || {};
     if (t.planDate && !t.done) meta.push(h('span', { class: 'task-meta-item task-plan' + (t.planDate < D.today() ? ' overdue' : ''), title: 'Заплановано в календарі' }, CRM.icon('target', { size: 'sm' }), 'План: ' + planLabel(t)));
     if (o.archive && t.completedAt) meta.push(h('span', { class: 'task-meta-item' }, 'Виконано ' + fmt.dateShort(D.toKyivDate(t.completedAt))));
 
+    // Колір стану (риска зліва): прострочено — дедлайн минув або день плану минув (без пізнішого дедлайну); сьогодні — дедлайн сьогодні
+    const T = D.today();
+    const overdue = !t.done && ((dl && dl.cls === 'due-overdue') || (t.planDate && t.planDate < T && !(t.deadline && t.deadline >= T)));
+    const dueToday = !t.done && !overdue && dl && dl.cls === 'due-today';
     const row = h('div', {
-      class: 'task-row' + (t.done ? ' is-done' : '') + (o.compact ? ' compact' : ''),
+      class: 'task-row' + (t.done ? ' is-done' : '') + (o.compact ? ' compact' : '') + (overdue ? ' is-overdue' : dueToday ? ' is-today' : ''),
       role: 'button', tabIndex: 0, 'aria-label': 'Відкрити задачу ' + t.title, dataset: { id: t.id },
       onClick: () => openTask(t.id),
       onKeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); openTask(t.id); } }

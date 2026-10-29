@@ -23,11 +23,15 @@
 /* ---------- Задачі ---------- */
 .task-list { overflow: hidden; }
 .task-row {
+  position: relative;
   display: flex; align-items: center; gap: 12px;
   padding: 10px 16px; min-height: 52px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid transparent;
   cursor: pointer; transition: background .12s;
 }
+/* Кольори стану (29.10.2026): риска зліва — прострочено (кораловий) / сьогодні (бурштиновий) */
+.task-row.is-overdue::before, .task-row.is-today::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--hot); }
+.task-row.is-today::before { background: var(--soon); }
 .task-row:first-child { border-top: 0; }
 .task-row:hover { background: var(--surface-2); }
 .task-row:focus-visible { box-shadow: inset var(--focus-ring); }
@@ -212,7 +216,7 @@
   .home-col .stat-value { font-size: 15px; }
 }
 
-.quote-card { display: flex; gap: 16px; padding: 22px 24px; background: linear-gradient(135deg, var(--accent-soft), transparent 60%), var(--surface); }
+.quote-card { display: flex; gap: 16px; padding: 22px 24px; background: var(--surface); }
 .quote-mark { flex-shrink: 0; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); }
 .quote-body { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .quote-text { margin: 0; font-size: 18px; line-height: 1.5; font-weight: 500; letter-spacing: -0.01em; text-wrap: pretty; }
@@ -221,10 +225,10 @@
 .quote-date { font-size: 13px; color: var(--text-3); }
 @media (max-width: 640px) { .quote-card { padding: 18px; } .quote-text { font-size: 16px; } .quote-mark { display: none; } }
 
-.more-link { display: block; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.more-link { display: block; padding: 10px 16px; font-size: 13px; }
 
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.stat { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: var(--radius); background: var(--surface-2); min-width: 0; }
+.stat { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: var(--surface-2); min-width: 0; }
 .stat-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .stat-value { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-ico { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; }
@@ -257,7 +261,7 @@
 .card-head h2 .tab-count { font-size: 12px; font-weight: 500; }
 
 @media (max-width: 640px) {
-  .card-head { padding: 12px 14px; }
+  .card-head { padding: 14px 14px 4px; }
   .card-head h2 { font-size: 16px; min-width: 0; }
   .card-head { flex-wrap: wrap; }
   .card-head > .btn, .card-head > .btn-row, .card-head > a { flex-shrink: 0; }

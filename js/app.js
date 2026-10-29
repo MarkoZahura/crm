@@ -94,19 +94,47 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Каркас ----------
+  // Меню групами (29.10.2026). count() → число або { n, hot, title }
   const NAV = [
+    { group: 'День' },
     { id: 'home', label: 'Головна', icon: 'home' },
     { id: 'calendar', label: 'Календар', icon: 'calendar' },
-    { id: 'tasks', label: 'Задачі', icon: 'tasks' },
+    { id: 'tasks', label: 'Задачі', icon: 'tasks', count: tasksCount },
+    { group: 'Гроші' },
     { id: 'budget', label: 'Бюджет', icon: 'wallet' },
+    { group: 'Здоровʼя' },
     { id: 'training', label: 'Тренування', icon: 'dumbbell' },
     { id: 'nutrition', label: 'Харчування', icon: 'apple' },
-    { id: 'learning', label: 'Навчання', icon: 'book' },
+    { id: 'habits', label: 'Звички', icon: 'habits', count: habitsCount },
+    { group: 'Люди й навчання' },
     { id: 'people', label: 'Люди', icon: 'users' },
-    { id: 'habits', label: 'Звички', icon: 'habits' },
-    { sep: true },
+    { id: 'learning', label: 'Навчання', icon: 'book' },
+    { group: 'Інше' },
     { id: 'trash', label: 'Кошик', icon: 'trash', count: () => CRM.store.trashItems().length }
   ];
+
+  /** «Задачі»: на сьогодні (дедлайн чи план) + прострочені; червоним, якщо є прострочені. */
+  function tasksCount() {
+    if (!CRM.tasks || !CRM.tasks.activeTasks) return 0;
+    const T = CRM.date.today();
+    let today = 0;
+    let over = 0;
+    CRM.tasks.activeTasks().forEach((t) => {
+      if (t.deadline && t.deadline < T) over++;
+      else if (!t.deadline && t.planDate && t.planDate < T) over++;
+      else if (t.deadline === T || t.planDate === T) today++;
+    });
+    const n = today + over;
+    const title = [today ? `${today} на сьогодні` : '', over ? `${over} ${CRM.fmt.plural(over, ['прострочена', 'прострочені', 'прострочених'])}` : ''].filter(Boolean).join(', ');
+    return { n, hot: over > 0, title };
+  }
+  /** «Звички»: скільки ще відмітити сьогодні. */
+  function habitsCount() {
+    if (!CRM.habits || !CRM.habits.today) return 0;
+    const t = CRM.habits.today();
+    const n = Math.max(0, t.total - t.done);
+    return { n, hot: false, title: n ? `Сьогодні ще ${n} з ${t.total}` : '' };
+  }
 
   const el = {};
   let closeMobileNav = null;
@@ -115,8 +143,15 @@ window.CRM = window.CRM || {};
     const app = document.getElementById('app');
 
     el.nav = h('nav', { class: 'nav', 'aria-label': 'Розділи' },
-      NAV.map((item) => {
+      NAV.map((item, i) => {
         if (item.sep) return h('div', { class: 'nav-sep', role: 'separator' });
+        if (item.group) {
+          // Група без жодного завантаженого розділу (неповне оновлення сайту) — без заголовка
+          const next = NAV.slice(i + 1);
+          const end = next.findIndex((x) => x.group);
+          const any = (end < 0 ? next : next.slice(0, end)).some((x) => x.id === 'trash' || CRM.router.routes.has(x.id));
+          return any ? h('div', { class: 'nav-group', role: 'presentation' }, item.group) : null;
+        }
         // Розділ не завантажився (неповне оновлення сайту) — не показуємо порожній пункт
         if (item.id !== 'trash' && !CRM.router.routes.has(item.id)) return null;
         const a = h('a', { class: 'nav-item', href: '#/' + item.id, dataset: { route: item.id } },
@@ -218,8 +253,13 @@ window.CRM = window.CRM || {};
     NAV.forEach((item) => {
       if (!item.count) return;
       const badge = el.nav.querySelector(`[data-count="${item.id}"]`);
-      const n = item.count();
-      badge.textContent = n ? String(n) : '';
+      if (!badge) return;
+      let c = 0;
+      try { c = item.count(); } catch (e) { console.error(e); }
+      const o = typeof c === 'number' ? { n: c } : (c || { n: 0 });
+      badge.textContent = o.n ? String(o.n) : '';
+      badge.classList.toggle('hot', !!(o.n && o.hot));
+      if (o.title && o.n) badge.setAttribute('title', o.title); else badge.removeAttribute('title');
     });
   }
 
@@ -244,6 +284,7 @@ window.CRM = window.CRM || {};
     const day = CRM.date.today();
     if (lastDay && day !== lastDay) {
       updateDate();
+      updateShell();
       document.dispatchEvent(new CustomEvent('crm:daychange', { detail: { day } }));
       CRM.router.rerender();
       CRM.store.purgeExpired().catch((e) => console.error(e));

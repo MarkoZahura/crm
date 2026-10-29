@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.10.29-3';
-const BUILD = '0ea715a682ed';
+const VERSION = '2026.10.29-4';
+const BUILD = '7caf9df4ea74';
 const FILES = {
-  'css/base.css': '19e80512c54e49e6',
-  'css/components.css': '1f94a2f41c9beef3',
-  'css/layout.css': '4d4476a29ada4d90',
-  'css/sections.css': '5e4690352b3d8742',
+  'css/base.css': '188bcc6c14604a80',
+  'css/components.css': '675f9350932e5b7a',
+  'css/layout.css': 'd7269628a2c90b43',
+  'css/sections.css': '3142f13317cd91ad',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -38,7 +38,7 @@ const FILES = {
   'icons/tiles-apple-touch-icon.png': '9454b72f51288974',
   'icons/tiles-maskable-512.png': '28ae91bcaf8a45f5',
   'index.html': '658dd6828478de15',
-  'js/app.js': '2e2bec073e6790d0',
+  'js/app.js': '13ddab8e8954745d',
   'js/backup.js': 'd63f11891c0a78e0',
   'js/budget/accounts.js': 'be75e3d139369d4d',
   'js/budget/analytics.js': 'ecbea03d4333b25a',
@@ -75,13 +75,13 @@ const FILES = {
   'js/profile.js': '7e3b0b7666b1e138',
   'js/program.js': '394ed56868fae621',
   'js/programs.js': '17e17a1f639bf04a',
-  'js/pwa.js': 'bda39bfcac7ecfec',
+  'js/pwa.js': '136a6d6b4e00ce9e',
   'js/quick.js': 'd3701fda55522fc9',
   'js/quotes.js': '57b3b169ce3e9dcb',
   'js/search.js': 'b6d692ed7659fc8a',
   'js/sync-config.js': '6e4963577579c35a',
   'js/sync.js': '7fc2e602ce7ecbd4',
-  'js/tasks.js': 'c6509552bf4f3474',
+  'js/tasks.js': '7de521fc6a3fd0e7',
   'js/training.js': '057239b930aadc95',
   'js/trash.js': '7ad01ec7851cf561',
   'manifest-c.json': '6bec32309f09144a',

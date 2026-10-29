@@ -9,9 +9,9 @@
   --font-mono: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 
   --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 18px;
   --radius-full: 999px;
 
   --sidebar-w: 244px;
@@ -45,17 +45,18 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #ffffff;
-  --bg-sidebar: #f7f7f5;
+  /* Вигляд «Повітря» (29.10.2026): світло-сіре тло, білі картки з мʼякою тінню замість рамок */
+  --bg: #f4f5f7;
+  --bg-sidebar: #f4f5f7;
   --surface: #ffffff;
-  --surface-2: #f4f4f2;      /* наведення, фон полів */
-  --surface-3: #ebebe8;      /* натискання, активні елементи */
-  --border: #e6e6e3;
-  --border-strong: #d4d4cf;
+  --surface-2: #f1f2f4;      /* наведення, фон полів */
+  --surface-3: #e8eaee;      /* натискання, активні елементи */
+  --border: #e7e8ec;
+  --border-strong: #d6d8de;
 
-  --text: #1f1f1d;
-  --text-2: #5f5e5b;
-  --text-3: #6f6e6a;
+  --text: #16181d;
+  --text-2: #565b66;
+  --text-3: #6b707c;
 
   --accent: var(--accent-l);
   --accent-hover: color-mix(in srgb, var(--accent-l) 88%, black);
@@ -64,17 +65,24 @@
   --accent-soft-2: color-mix(in srgb, var(--accent-l) 16%, transparent);
   --on-accent: #ffffff;
 
-  --danger: #c9291c;
-  --danger-hover: #b42318;
-  --danger-soft: #fdecea;
+  /* Кольори стану (однакові скрізь): прострочене / «горить» — кораловий, «сьогодні» — бурштиновий */
+  --danger: #cf3d28;
+  --danger-hover: #b8321f;
+  --danger-soft: #fdece8;
   --success: #15803d;
   --success-soft: #e8f5ec;
-  --warning: #b45309;
-  --warning-soft: #fdf3e2;
+  --warning: #a35e00;
+  --warning-soft: #fcf1df;
+  --hot: var(--danger);
+  --hot-soft: var(--danger-soft);
+  --soon: var(--warning);
+  --soon-soft: var(--warning-soft);
   --info: #2563eb;
   --info-soft: #eaf1fe;
 
   --overlay: rgba(15, 15, 15, .32);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 2px 8px rgba(16, 24, 40, .05);
+  --card-border: transparent;
   --shadow-pop: 0 12px 32px rgba(15, 15, 15, .12), 0 2px 6px rgba(15, 15, 15, .06), 0 0 0 1px rgba(15, 15, 15, .05);
   --shadow-drawer: -12px 0 32px rgba(15, 15, 15, .10), 0 0 0 1px rgba(15, 15, 15, .05);
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-l) 28%, transparent);
@@ -84,17 +92,17 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #191919;
-  --bg-sidebar: #202020;
-  --surface: #202020;
-  --surface-2: #2a2a2a;
-  --surface-3: #333333;
-  --border: #2f2f2f;
-  --border-strong: #3d3d3d;
+  --bg: #111215;
+  --bg-sidebar: #111215;
+  --surface: #1a1b1f;
+  --surface-2: #222328;
+  --surface-3: #2b2d33;
+  --border: #26272c;
+  --border-strong: #34363d;
 
-  --text: #ebebea;
-  --text-2: #a3a3a0;
-  --text-3: #8b8b88;
+  --text: #eceef2;
+  --text-2: #a5a9b3;
+  --text-3: #8e929c;
 
   --accent: var(--accent-d);
   --accent-hover: color-mix(in srgb, var(--accent-d) 85%, white);
@@ -103,19 +111,25 @@
   --accent-soft-2: color-mix(in srgb, var(--accent-d) 30%, transparent);
   --on-accent: #ffffff;
 
-  --danger: #f07167;
-  --danger-hover: #f48a82;
-  --danger-soft: rgba(240, 113, 103, .14);
+  --danger: #ff7a5f;
+  --danger-hover: #ff927c;
+  --danger-soft: rgba(255, 122, 95, .14);
   --success: #4ade80;
   --success-soft: rgba(74, 222, 128, .12);
-  --warning: #fbbf24;
-  --warning-soft: rgba(251, 191, 36, .12);
+  --warning: #f0b43c;
+  --warning-soft: rgba(240, 180, 60, .13);
+  --hot: var(--danger);
+  --hot-soft: var(--danger-soft);
+  --soon: var(--warning);
+  --soon-soft: var(--warning-soft);
   --info: #93b0ee;
   --info-soft: rgba(96, 140, 230, .16);
 
   --overlay: rgba(0, 0, 0, .55);
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, .45), 0 0 0 1px #363636;
-  --shadow-drawer: -12px 0 32px rgba(0, 0, 0, .45), 0 0 0 1px #363636;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .3);
+  --card-border: var(--border);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, .45), 0 0 0 1px #34363d;
+  --shadow-drawer: -12px 0 32px rgba(0, 0, 0, .45), 0 0 0 1px #34363d;
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-d) 45%, transparent);
 }
 
