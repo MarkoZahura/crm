@@ -11,6 +11,9 @@
    • Дані — Google Calendar API v3 (лише читання):
        GET /users/me/calendarList            (scope calendar.calendarlist.readonly)
        GET /calendars/{calendarId}/events    (scope calendar.events.readonly)
+   • Те саме підключення дає доступ і іншим розділам, якщо їх увімкнено: Google Диск
+     (копії, drive.file — backup.js) і Google-таблиця «Репетиторство» (лише читання,
+     spreadsheets.readonly — tutor.js; accessToken('sheets')).
    • Google дозволяє вхід лише зі справжньої адреси сайту (https://… або
      http://localhost…), тому при відкритті index.html подвійним кліком
      (file://) календар недоступний.
@@ -39,7 +42,10 @@ window.CRM = window.CRM || {};
   // Резервні копії на Google Диск (backup.js): доступ лише до файлів, які створила сама CRM
   const SCOPE_DRIVE = 'https://www.googleapis.com/auth/drive.file';
   const driveWanted = () => !!((CRM.store.getSetting('driveBackup', null) || {}).enabled);
-  const scopes = () => SCOPES + (driveWanted() ? ' ' + SCOPE_DRIVE : '');
+  // «Репетиторство» (tutor.js): читати Google-таблицю з планами уроків — лише читання, лише коли таблицю підключено
+  const SCOPE_SHEETS = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+  const sheetsWanted = () => !!((CRM.store.getSetting('tutor', null) || {}).sheetId);
+  const scopes = () => SCOPES + (driveWanted() ? ' ' + SCOPE_DRIVE : '') + (sheetsWanted() ? ' ' + SCOPE_SHEETS : '');
   const REFRESH_MS = 10 * 60 * 1000;   // події оновлюються раз на 10 хв
   const REMIND_MIN = 15;               // нагадування за 15 хв до початку
   const WINDOW_BACK = 7;               // днів назад від сьогодні
@@ -189,8 +195,9 @@ window.CRM = window.CRM || {};
       }
       const list = oauth.hasGrantedAllScopes(resp, SCOPE_LIST);
       const drive = oauth.hasGrantedAllScopes(resp, SCOPE_DRIVE);
+      const sheets = oauth.hasGrantedAllScopes(resp, SCOPE_SHEETS);
       const secs = Number(resp.expires_in) || 3600;
-      await CRM.store.setSetting('gcalToken', { accessToken: resp.access_token, expiresAt: Date.now() + Math.max(60, secs - 60) * 1000, list, drive });
+      await CRM.store.setSetting('gcalToken', { accessToken: resp.access_token, expiresAt: Date.now() + Math.max(60, secs - 60) * 1000, list, drive, sheets });
       await setCfg({ wanted: true });
       lastError = null;
       changed();
@@ -214,7 +221,8 @@ window.CRM = window.CRM || {};
       message: (t
         ? 'Події зникнуть із Головної й Календаря, нагадувань про них не буде. Доступ, наданий цьому сайту в Google, буде відкликано.'
         : 'Події зникнуть із Головної й Календаря, нагадувань про них не буде. Термін доступу вже сплив, тож CRM більше не звертається до календаря.') +
-        (driveWanted() ? ' Щоденні копії на Google Диск використовують це саме підключення — вони чекатимуть, доки ти знову не підключиш Google.' : ''),
+        (driveWanted() ? ' Щоденні копії на Google Диск використовують це саме підключення — вони чекатимуть, доки ти знову не підключиш Google.' : '') +
+        (sheetsWanted() ? ' Таблиця «Репетиторство» теж читається через це підключення — CRM показуватиме останнє збережене.' : ''),
       confirmText: 'Відключити'
     });
     if (!ok) return false;
@@ -461,7 +469,8 @@ window.CRM = window.CRM || {};
 
   // ---------- Розклад на Головній ----------
   CRM.home.addScheduleSource((date) => {
-    const list = eventsOn(date);
+    // «Заняття Макс», коли того дня є урок Макса в CRM, — показує tutor.js (без дублів)
+    const list = eventsOn(date).filter((e) => !(CRM.tutor && CRM.tutor.isGoogleDuplicate && CRM.tutor.isGoogleDuplicate(e, date)));
     const multi = (cfg().calendars || []).length > 1;
     return list.map((e) => {
       const startsToday = !e.allDay && D.toKyivDate(e.start) === date;
@@ -491,6 +500,8 @@ window.CRM = window.CRM || {};
     return c.events.filter((e) => !e.allDay).map((e) => {
       const left = Date.parse(e.start) - now;
       if (!(left > 0 && left <= REMIND_MIN * 60000)) return null;
+      // урок, який є і в CRM, — нагадує CRM (за своїм часом), без дубля
+      if (CRM.tutor && CRM.tutor.isGoogleDuplicate && CRM.tutor.isGoogleDuplicate(e, D.toKyivDate(e.start))) return null;
       const mins = Math.max(1, Math.round(left / 60000));
       return {
         key: `event:${e.id}:${e.start}`, kind: 'event',
@@ -710,18 +721,19 @@ window.CRM = window.CRM || {};
     });
   }
 
-  /** Дійсний ключ доступу Google (для backup.js); need: 'drive' — лише якщо дано доступ до Диска. */
+  /** Дійсний ключ доступу Google (для backup.js, tutor.js); need: 'drive' / 'sheets' — лише якщо дано доступ до Диска / таблиць. */
   function accessToken(need) {
     const t = token();
     if (!t) return null;
     if (need === 'drive' && !t.drive) return null;
+    if (need === 'sheets' && !t.sheets) return null;
     return t.accessToken;
   }
   /** Ключ став недійсним (напр., Google відповів 401) — забути його. */
   async function dropToken() { await CRM.store.setSetting('gcalToken', null); changed(); }
 
   CRM.gcal = {
-    SCOPES, SCOPE_DRIVE, init, status, connect, disconnect, refresh, statusNote, settingsBlock, accessToken, dropToken,
+    SCOPES, SCOPE_DRIVE, SCOPE_SHEETS, init, status, connect, disconnect, refresh, statusNote, settingsBlock, accessToken, dropToken,
     eventsOn, eventsBetween, loadedRange, ensureRange, occursOn, openEvent, calendarName, hhmm,
     kyivStartISO, isValidClientId: (v) => CLIENT_RE.test(String(v || '').trim())
   };

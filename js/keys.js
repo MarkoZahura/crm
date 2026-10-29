@@ -36,6 +36,7 @@ window.CRM = window.CRM || {};
     { code: 'KeyW', key: 'W', route: 'training', label: 'Тренування' },
     { code: 'KeyF', key: 'F', route: 'nutrition', label: 'Харчування' },
     { code: 'KeyL', key: 'L', route: 'learning', label: 'Навчання' },
+    { code: 'KeyU', key: 'U', route: 'tutor', label: 'Репетиторство' },
     { code: 'KeyP', key: 'P', route: 'people', label: 'Люди' },
     { code: 'KeyZ', key: 'Z', route: 'habits', label: 'Звички' },
     { code: 'KeyR', key: 'R', route: 'books', label: 'Книги' },

@@ -32,6 +32,8 @@ window.CRM = window.CRM || {};
     { id: 'friends', label: 'Друзі', color: 'blue' },
     { id: 'work', label: 'Робота', color: 'orange' },
     { id: 'study', label: 'Навчання', color: 'violet' },
+    { id: 'students', label: 'Учні', color: 'teal' },
+    { id: 'parents', label: 'Батьки учнів', color: 'brown' },
     { id: 'other', label: 'Інше', color: 'slate' }
   ];
   const FREQS = [

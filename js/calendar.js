@@ -519,7 +519,8 @@ window.CRM = window.CRM || {};
       occurrences(from, to).forEach(({ ev, date, series, span }) => {
         if (hidden.size && hidden.has(categoryOf(ev.cat).id)) return;
         const it = {
-          key: 'own:' + ev.id + ':' + (ev.occ || date), kind: 'own', title: ev.title || 'Без назви', color: catColor(ev.cat),
+          key: 'own:' + ev.id + ':' + (ev.occ || date), kind: 'own', title: ev.title || 'Без назви',
+          color: (ev.studentId && CRM.tutor && CRM.tutor.colorOfEvent(ev)) || catColor(ev.cat), lesson: !!(ev.studentId && CRM.tutor && CRM.tutor.get(ev.studentId)),
           icon: 'calendar', ev, date, editable: true, series: !!series, rep: series ? repeatText(series) : ''
         };
         if (span) {
@@ -577,9 +578,12 @@ window.CRM = window.CRM || {};
 
     if (L.gcal && CRM.gcal && CRM.gcal.eventsBetween) {
       const gColor = CRM.dict.categoryColor('teal');
+      // «Заняття Макс» з Google, коли того дня є урок Макса в CRM, — не показуємо (без дублів; tutor.js)
+      const dupIdx = CRM.tutor && CRM.tutor.dupIndex ? CRM.tutor.dupIndex(from, to) : null;
       CRM.gcal.eventsBetween(from, to).forEach((g) => {
         days.forEach((d) => {
           if (!CRM.gcal.occursOn(g, d)) return;
+          if (dupIdx && dupIdx.size && CRM.tutor.isGoogleDuplicate(g, d, dupIdx)) return;
           const it = {
             key: 'g:' + g.cal + ':' + g.id + ':' + d, kind: 'gcal', title: g.title, color: gColor, icon: 'calendar',
             gev: g, date: d, tentative: !!g.tentative
@@ -736,7 +740,7 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Копії ----------
-  const COPY_F = ['title', 'date', 'allDay', 'start', 'dur', 'cat', 'remind', 'note'];
+  const COPY_F = ['title', 'date', 'allDay', 'start', 'dur', 'cat', 'remind', 'note', 'studentId'];
   /** Поля події для копії: повтор серії стає звичайною подією (без правила), «на кілька днів» — зберігається. */
   function copyFields(ev) {
     const out = {};
@@ -1521,7 +1525,9 @@ window.CRM = window.CRM || {};
 
   // ---------- Відкрити пункт ----------
   function openItem(it) {
-    if (it.kind === 'own') openEditor(it.ev.id, null, it.ev.occ || null);
+    // Урок з «Репетиторства» — вікно уроку (план, звіт); змінити подію — звідти
+    if (it.kind === 'own' && it.lesson && CRM.tutor) CRM.tutor.openLessonOn(it.ev.studentId, it.date);
+    else if (it.kind === 'own') openEditor(it.ev.id, null, it.ev.occ || null);
     else if (it.kind === 'task') CRM.tasks.openTask(it.task.id);
     else if (it.kind === 'gcal') showGoogle(it.gev);
     else if (it.onOpen) it.onOpen();
@@ -2210,7 +2216,13 @@ window.CRM = window.CRM || {};
       copyRow = h('div', { class: 'kal-ed-actions' }, dupBtn, copyBtn);
     }
 
+    // Урок з «Репетиторства»: підказка й перехід до вікна уроку
+    const stu = cur && cur.studentId && CRM.tutor ? CRM.tutor.get(cur.studentId) : null;
+    const lessonNote = stu ? h('div', { class: 'kal-lesson-note' }, CRM.icon('board', { size: 'sm' }),
+      h('span', null, `Урок учня «${stu.name}» (Репетиторство)`),
+      h('button', { type: 'button', class: 'link-like kal-lesson-open', onClick: () => { dlg.close('lesson'); CRM.tutor.openLessonOn(stu.id, ev.date); } }, 'Відкрити урок')) : null;
     const body = h('div', { class: 'form-stack kal-editor' },
+      lessonNote,
       fTitle,
       copyRow,
       h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), fEnd, allDayBox),
@@ -2329,6 +2341,7 @@ window.CRM = window.CRM || {};
   function chip(it, opts) {
     const o = opts || {};
     const cls = ['kal-chip', 'k-' + it.kind];
+    if (it.lesson) cls.push('k-lesson');
     if (it.done) cls.push('done');
     if (it.overdue) cls.push('overdue');
     if (it.tentative) cls.push('tentative');
@@ -2501,6 +2514,7 @@ window.CRM = window.CRM || {};
     const height = (Math.max(it.endMin, it.startMin + MIN_VIS) - it.startMin) / 60 * HOUR;
     const short = height < 38;
     const cls = ['kal-ev', 'k-' + it.kind];
+    if (it.lesson) cls.push('k-lesson');
     if (short) cls.push('short');
     if (it.past) cls.push('past');
     if (it.tentative) cls.push('tentative');
@@ -3001,7 +3015,8 @@ window.CRM = window.CRM || {};
   });
 
   // ---------- Розклад на Головній ----------
-  CRM.home.addScheduleSource((date) => occurrences(date, date).map(({ ev, span }) => ({
+  // (уроки з «Репетиторства» показує tutor.js — зі своїм вікном уроку)
+  CRM.home.addScheduleSource((date) => occurrences(date, date).filter(({ ev }) => !(ev.studentId && CRM.tutor && CRM.tutor.get(ev.studentId))).map(({ ev, span }) => ({
     time: ev.allDay || !ev.start ? null : ev.start, kind: 'calendar', icon: 'calendar', cls: 'ico-event',
     title: ev.title || 'Без назви',
     sub: ['Календар', span ? `день ${span.day} з ${span.days} (${spanText(span.first, span.last)})` : whenText(ev), categoryName(ev.cat)].join(' · '),

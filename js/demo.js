@@ -339,6 +339,34 @@ window.CRM = window.CRM || {};
       cat: 'health', remind: null, note: '', repeat: { freq: 'week', every: 1, days: [0, 2, 4], until: null, count: null }
     }, D.addDays(T, -14)));
 
+    // ---------- Репетиторство (вигадані учні без Google-таблиці; уроки — серії подій без нагадувань, звіти вже «надіслано») ----------
+    const lessonDates = (days, from, to) => { const out = []; for (let d = from; d <= to; d = D.addDays(d, 1)) if (days.includes(D.weekday(d))) out.push(d); return out; };
+    const student = (o, slot, since, notes) => {
+      const id = uid();
+      const from = D.addDays(T, -since);
+      const first = lessonDates(slot.days, from, D.addDays(from, 6))[0];
+      events.push(base({
+        id: uid(), title: 'Урок: ' + o.name, date: first, allDay: false, start: slot.start, dur: slot.dur, cat: 'work', remind: null, note: '',
+        repeat: { freq: 'week', every: 1, days: slot.days, until: null, count: null }, skip: [], overrides: {}, studentId: id
+      }, from));
+      const lessons = {};
+      const past = lessonDates(slot.days, first, T);
+      past.forEach((d, i) => { lessons[d] = Object.assign({ sent: iso(d, '19:00') }, notes(i, past.length)); });
+      const nx = lessonDates(slot.days, D.addDays(T, 1), D.addDays(T, 14))[0];
+      if (nx) lessons[nx] = { plan: o.nextPlan };
+      delete o.nextPlan;
+      return base(Object.assign({ id, sheetName: '', personId: null, reportTo: 'self', goal: '', examDate: null, notes: '', archived: false, lessons }, o), from);
+    };
+    const units = ['Present Perfect', 'Past Simple vs Present Perfect', 'Future forms', 'Modal verbs', 'Conditionals', 'Passive voice'];
+    const students = [
+      student({ name: 'Софія', color: 'teal', goal: 'НМТ з англійської', notes: 'Любить ігри на уроці, не любить довгих вправ.', nextPlan: 'Перевірка домашнього. Reported speech: питання. Destination B1 — Unit 12: Ex. A–D.' },
+        { days: [1, 3], start: '17:00', dur: 90 }, 22,
+        (i) => ({ what: `Перевірили домашнє. ${units[i % units.length]}: пояснення й вправи.`, hw: `H/w: Destination B1 — Unit ${8 + i}: Ex. E–G + Quizlet`, next: `Повторення: ${units[i % units.length]}. Нова тема — ${units[(i + 1) % units.length]}.` })),
+      student({ name: 'Дмитро', color: 'orange', goal: 'IELTS Academic 6.5', examDate: D.addDays(T, 40), notes: 'Слабке місце — Writing Task 1.', nextPlan: 'Writing Task 1: графіки. Лексика для опису трендів.' },
+        { days: [5], start: '11:00', dur: 120 }, 22,
+        (i) => ({ what: `Reading: True/False/Not Given. Writing Task 2 — план есе (${i + 1}).`, hw: 'H/w: Task 2, 250+ слів, 40 хв', next: 'Розбір есе, Listening Section 3.' }))
+    ];
+
     // ---------- Люди (вигадані; дні народження — не ближче ніж за тиждень, «час написати» ще не настав, тож без нагадувань) ----------
     const md = (d) => d.slice(5);
     const person = (o, since) => base(Object.assign({
@@ -405,7 +433,7 @@ window.CRM = window.CRM || {};
         log: bookLog([[-90, 30], [-85, 30]]) }, 92)
     ];
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, habits, books, notifications };
+    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, habits, books, students, notifications };
   }
 
   CRM.demo = { generate };

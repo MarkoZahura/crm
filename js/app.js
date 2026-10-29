@@ -110,6 +110,7 @@ window.CRM = window.CRM || {};
     { group: 'Люди й навчання' },
     { id: 'people', label: 'Люди', icon: 'users' },
     { id: 'learning', label: 'Навчання', icon: 'book' },
+    { id: 'tutor', label: 'Репетиторство', icon: 'board' },
     { id: 'books', label: 'Книги', icon: 'library' },
     { group: 'Інше' },
     { id: 'trash', label: 'Кошик', icon: 'trash', count: () => CRM.store.trashItems().length }
@@ -476,7 +477,7 @@ window.CRM = window.CRM || {};
     // Службові модулі запускаємо окремо: помилка в одному (або неповне оновлення сайту,
     // коли index.html старий і не підключає новий файл) не має зупиняти весь застосунок.
     const missing = [];
-    [['search', 'js/search.js'], ['notify', 'js/notifications.js'], ['gcal', 'js/gcal.js'], ['sync', 'js/sync.js'], ['backup', 'js/backup.js'], ['pwa', 'js/pwa.js'], ['keys', 'js/keys.js']]
+    [['search', 'js/search.js'], ['notify', 'js/notifications.js'], ['gcal', 'js/gcal.js'], ['sync', 'js/sync.js'], ['backup', 'js/backup.js'], ['pwa', 'js/pwa.js'], ['keys', 'js/keys.js'], ['tutor', 'js/tutor.js']]
       .forEach(([name, file]) => {
         if (!CRM[name] || typeof CRM[name].init !== 'function') { missing.push(file); return; }
         try { CRM[name].init(); } catch (e) { console.error(e); }

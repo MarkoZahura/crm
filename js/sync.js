@@ -24,11 +24,11 @@ window.CRM = window.CRM || {};
 
   const { h, ui } = { h: CRM.ui.h, ui: CRM.ui };
   const CFG = CRM.SYNC_CONFIG;
-  const STORES = ['tasks', 'events', 'people', 'habits', 'books', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'];
+  const STORES = ['tasks', 'events', 'people', 'habits', 'books', 'students', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals'];
   // Сховища, що синхронізувалися до появи «Харчування» (для пристроїв, які ввійшли ще тоді)
   const STORES_V1 = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
-  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget', 'quickInput', 'taskLabels', 'calCategories', 'bankImport', 'greetings', 'homeLayout', 'budgetLimits'];
+  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget', 'quickInput', 'taskLabels', 'calCategories', 'bankImport', 'greetings', 'homeLayout', 'budgetLimits', 'tutor'];
   // Налаштування, що синхронізувалися з першої версії (для пристроїв, які ввійшли ще тоді)
   const SETTINGS_V1 = ['profile', 'accent', 'trainingProgram', 'trainingProfile'];
   const LS = 'crm.sync.';
@@ -300,6 +300,7 @@ window.CRM = window.CRM || {};
     if (k === 'greetings') return typeof v === 'object' && Array.isArray(v.templates) && v.templates.length > 0;
     if (k === 'homeLayout') return typeof v === 'object' && (!!v.pc || !!v.phone);
     if (k === 'budgetLimits') return typeof v === 'object' && (!!v.total || Object.keys(v.cats || {}).length > 0 || Object.keys(v.months || {}).length > 0);
+    if (k === 'tutor') return typeof v === 'object' && (!!v.sheetId || !!v.template);
     if (k === 'bankImport') return typeof v === 'object' && (Object.keys(v.profiles || {}).length > 0 || Object.keys(v.rules || {}).length > 0);
     return true;
   }

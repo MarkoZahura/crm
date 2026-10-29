@@ -166,7 +166,7 @@ window.CRM = window.CRM || {};
   function summaryNode(obj) {
     const s = CRM.store.summarize(obj);
     const rows = [
-      ['Задачі', s.tasks], ['Події календаря', s.events], ['Люди', s.people], ['Звички', s.habits], ['Книги', s.books], ['Рахунки', s.accounts], ['Транзакції', s.transactions], ['Категорії', s.categories],
+      ['Задачі', s.tasks], ['Події календаря', s.events], ['Люди', s.people], ['Звички', s.habits], ['Книги', s.books], ['Учні', s.students], ['Рахунки', s.accounts], ['Транзакції', s.transactions], ['Категорії', s.categories],
       ['Регулярні платежі', s.recurring], ['Фінансові цілі', s.goals], ['Тренування', s.workouts], ['Програми тренувань', s.programs],
       ['Навчання', s.courses], ['Харчування', s.meals], ['Продукти', s.foods], ['Вкладення', s.attachments]
     ].filter((r) => r[1] > 0);

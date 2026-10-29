@@ -279,14 +279,15 @@ window.CRM = window.CRM || {};
     money: { name: 'Гроші сьогодні', sub: 'доходи, витрати, результат', render: () => moneyCard() },
     limits: { name: 'Ліміти', sub: 'скільки лишилось на місяць', has: () => !!CRM.limits, render: () => CRM.limits.homeCard() },
     habits: { name: 'Звички', sub: 'відмітки на сьогодні', has: () => !!CRM.habits, render: () => CRM.habits.homeCard() },
+    tutor: { name: 'Уроки сьогодні', sub: 'репетиторство: план і звіт', has: () => !!CRM.tutor && CRM.tutor.all().length > 0, render: () => CRM.tutor.homeCard() },
     books: { name: 'Читаю зараз', sub: 'книги й прогрес у сторінках', has: () => !!CRM.books, render: () => CRM.books.homeCard() },
     training: { name: 'Сьогоднішнє тренування', sub: 'коли за програмою є тренування', has: () => !!CRM.programs, render: () => CRM.programs.homeCard() },
     schedule: { name: 'Розклад на сьогодні', sub: 'події, план дня, платежі', render: () => scheduleCard() }
   };
   const TOP = { pc: ['today', 'quote'], phone: ['quote'] };
   const DEFAULTS = {
-    pc: { left: ['tasks', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
-    phone: { list: ['today', 'tasks', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
+    pc: { left: ['tasks', 'tutor', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
+    phone: { list: ['today', 'tasks', 'tutor', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
   };
   const has = (id) => !!BLOCKS[id] && (!BLOCKS[id].has || BLOCKS[id].has());
   const narrowMq = window.matchMedia ? window.matchMedia('(max-width: 860px)') : null;
@@ -301,10 +302,12 @@ window.CRM = window.CRM || {};
     const out = { off: [...new Set(arr(raw.off))], folded: [...new Set(arr(raw.folded))] };
     const seen = new Set(TOP[kind]);
     const lists = kind === 'pc' ? ['left', 'right'] : ['list'];
-    lists.forEach((k) => { out[k] = arr(raw[k]).filter((id) => !seen.has(id) && (seen.add(id), true)); });
+    // Недоступні зараз блоки (немає модуля; «Уроки сьогодні» без учнів) у списках не показуються —
+    // коли стануть доступні, стануть після свого сусіда з типового порядку
+    lists.forEach((k) => { out[k] = arr(raw[k]).filter((id) => has(id) && !seen.has(id) && (seen.add(id), true)); });
     lists.forEach((k) => {
       def[k].forEach((id, i) => {
-        if (seen.has(id)) return;
+        if (seen.has(id) || !has(id)) return;
         seen.add(id);
         // Новий блок (ще не був у налаштуванні) — після свого сусіда з типового порядку
         const prev = def[k].slice(0, i).reverse().find((x) => out[k].includes(x));
@@ -540,7 +543,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'events', 'people', 'habits', 'books', 'attachments', 'transactions', 'accounts', 'categories', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'events', 'people', 'habits', 'books', 'students', 'attachments', 'transactions', 'accounts', 'categories', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

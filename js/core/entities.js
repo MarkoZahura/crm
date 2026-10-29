@@ -184,6 +184,13 @@ window.CRM = window.CRM || {};
       text: (r) => [r.name, r.phone, r.telegram, r.instagram, r.email, r.notes, (r.gifts || []).map((g) => g.text).join(' '), (r.dates || []).map((d) => d.title).join(' ')],
       route: (r) => ['people', { open: r.id }]
     },
+    students: {
+      label: 'Учень', group: 'Учні', icon: 'board', iconClass: 'ico-learning', section: 'tutor',
+      title: (r) => r.name || 'Учень',
+      sub: (r) => (CRM.tutor && !r.deletedAt ? CRM.tutor.subText(r) : r.goal || ''),
+      text: (r) => [r.name, r.sheetName, r.goal, r.notes, Object.keys(r.lessons || {}).map((d) => { const x = r.lessons[d] || {}; return [x.notes, x.plan, x.what, x.hw, x.next].filter(Boolean).join(' '); }).join(' ')],
+      route: (r) => ['tutor/' + r.id, null]
+    },
     habits: {
       label: 'Звичка', group: 'Звички', icon: 'habits', iconClass: 'ico-goal', section: 'habits',
       title: (r) => r.name || 'Звичка',
@@ -257,7 +264,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'events', 'people', 'habits', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'books', 'foods'],
+    order: ['tasks', 'events', 'people', 'students', 'habits', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'books', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);

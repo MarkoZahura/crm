@@ -19,10 +19,10 @@ window.CRM = window.CRM || {};
 
   // Сховища з «звичайними» записами (мають id, можуть бути в Кошику)
   // (лише ті, що є в схемі бази: якщо браузер узяв старий db.js з кешу, сайт однаково відкриється)
-  const DATA_STORES = ['tasks', 'events', 'people', 'habits', 'books', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals', 'notifications']
+  const DATA_STORES = ['tasks', 'events', 'people', 'habits', 'books', 'students', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'foods', 'meals', 'notifications']
     .filter((n) => CRM.db.SCHEMA[n]);
   // Налаштування, які не потрапляють в експорт (службові або секретні)
-  const EXPORT_EXCLUDE = new Set(['gcalToken', 'gcalCache']);
+  const EXPORT_EXCLUDE = new Set(['gcalToken', 'gcalCache', 'tutorSheetCache']);
   // Налаштування, що лишаються після «Очистити всі дані»
   const KEEP_ON_CLEAR = new Set(['theme', 'accent']);
 
@@ -382,7 +382,7 @@ window.CRM = window.CRM || {};
     const s = obj.stores || {};
     const live = (n) => (s[n] || []).filter((r) => !r.deletedAt).length;
     return {
-      tasks: live('tasks'), events: live('events'), people: live('people'), habits: live('habits'), books: live('books'), accounts: live('accounts'), transactions: live('transactions'),
+      tasks: live('tasks'), events: live('events'), people: live('people'), habits: live('habits'), books: live('books'), students: live('students'), accounts: live('accounts'), transactions: live('transactions'),
       categories: live('categories'), recurring: live('recurring'), goals: live('goals'),
       workouts: live('workouts'), programs: live('programs'), courses: live('courses'), foods: live('foods'), meals: live('meals'),
       attachments: (s.attachments || []).length
