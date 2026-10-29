@@ -14,7 +14,7 @@ window.CRM = window.CRM || {};
   const F = () => CRM.finance;
 
   const TAB_ORDER = [
-    ['dashboard', 'Дашборд'], ['accounts', 'Рахунки'], ['transactions', 'Транзакції'], ['categories', 'Категорії'],
+    ['dashboard', 'Дашборд'], ['accounts', 'Рахунки'], ['transactions', 'Транзакції'], ['categories', 'Категорії'], ['limits', 'Ліміти'],
     ['capital', 'Капітал'], ['recurring', 'Регулярні платежі'], ['goals', 'Фінансові цілі'], ['analytics', 'Аналітика']
   ];
   const tabs = new Map();
@@ -54,7 +54,8 @@ window.CRM = window.CRM || {};
     const tabId = tabs.has(route.sub) ? route.sub : 'dashboard';
     const tab = tabs.get(tabId);
     const nav = h('nav', { class: 'tabs tabs-scroll', 'aria-label': 'Вкладки бюджету' },
-      TAB_ORDER.map(([id, label]) => h('a', {
+      // Лише вкладки, чиї файли завантажено (неповне оновлення сайту — без «порожньої» вкладки)
+      TAB_ORDER.filter(([id]) => tabs.has(id)).map(([id, label]) => h('a', {
         href: '#/budget/' + id, class: 'tab' + (id === tabId ? ' active' : ''),
         'aria-current': id === tabId ? 'page' : null
       }, label)));
@@ -188,14 +189,16 @@ window.CRM = window.CRM || {};
     });
     const curBadge = h('span', { class: 'amount-cur' });
     const fAmount = ui.field({ label: 'Сума', input: h('div', { class: 'amount-wrap' }, amountIn, curBadge), required: true, className: 'span-2' });
-    amountIn.addEventListener('input', () => { fAmount.setError(null); if (!toTouched) autoTo(); if (splitMode) splitStatus(); });
+    amountIn.addEventListener('input', () => { fAmount.setError(null); if (!toTouched) autoTo(); if (splitMode) splitStatus(); renderLimitLater(); });
+    let limitTimer = null;
+    const renderLimitLater = () => { clearTimeout(limitTimer); limitTimer = setTimeout(() => renderLimit(), 120); };
 
     // --- Рахунки ---
     const accSel = h('select', { class: 'select', 'aria-label': 'Рахунок' });
     const toSel = h('select', { class: 'select', 'aria-label': 'На рахунок' });
     const fAcc = ui.field({ label: 'Рахунок', input: accSel, required: true });
     const fTo = ui.field({ label: 'На рахунок', input: toSel, required: true });
-    accSel.addEventListener('change', () => { st.accountId = accSel.value; fAcc.setError(null); renderAccounts(); renderTo(); });
+    accSel.addEventListener('change', () => { st.accountId = accSel.value; fAcc.setError(null); renderAccounts(); renderTo(); renderLimit(); });
     toSel.addEventListener('change', () => { st.toAccountId = toSel.value || null; fTo.setError(null); renderTo(); });
     function renderAccounts() {
       // «Рахунок» — на всю ширину, або навпіл із «На рахунок» для переказу
@@ -252,9 +255,25 @@ window.CRM = window.CRM || {};
       type: 'button', class: 'link-like tx-split-toggle',
       onClick: () => startSplit()
     }, CRM.icon('listChecks', { size: 'sm' }), 'Розділити на кілька категорій');
-    const fCat = ui.field({ label: 'Категорія', input: h('div', null, catBox, subBox, splitBox, splitToggle), required: true });
+    // Підказка про ліміт (js/budget/limits.js): «Ліміт «Кафе»: лишилось 585 ₴ з 2 000 ₴ → після цієї витрати…»
+    const limitBox = h('div', { class: 'tx-limit-box' });
+    const fCat = ui.field({ label: 'Категорія', input: h('div', null, catBox, subBox, splitBox, splitToggle, limitBox), required: true });
+    function renderLimit() {
+      if (!CRM.limits) return;
+      if (st.type !== 'expense' || splitMode) { limitBox.replaceChildren(); return; }
+      const amt = CRM.utils.parseAmount(amountIn.value);
+      let el = null;
+      try {
+        el = CRM.limits.formHint({
+          categoryId: st.categoryId, amount: isNaN(amt) ? null : amt, accountId: st.accountId,
+          date: dateIn.dateValue || D.today(), excludeId: existing ? existing.id : null
+        });
+      } catch (e) { console.error(e); }
+      ui.mount(limitBox, el);
+    }
     function renderCats() {
       fCat.hidden = st.type === 'transfer';
+      renderLimit();
       if (st.type === 'transfer') return;
       fCat.querySelector('.field-label').firstChild.textContent = splitMode ? 'Категорії' : 'Категорія';
       const cats = F().categories(st.type);
@@ -397,7 +416,7 @@ window.CRM = window.CRM || {};
     }
 
     // --- Дата й коментар ---
-    const dateIn = ui.dateInput({ value: st.date, clearable: false, ariaLabel: 'Дата операції', onChange: () => renderTo() });
+    const dateIn = ui.dateInput({ value: st.date, clearable: false, ariaLabel: 'Дата операції', onChange: () => { renderTo(); renderLimit(); } });
     const fDate = ui.field({ label: 'Дата', input: dateIn });
     const commentIn = ui.input({ value: st.comment || '', maxlength: 200, placeholder: 'Напр., продукти на тиждень' });
     const fComment = ui.field({ label: 'Коментар', input: commentIn });
@@ -445,8 +464,9 @@ window.CRM = window.CRM || {};
       rememberAccount(st.type, st.accountId);
       dlg.close('force');
       F().ensureRatesFor([saved]);
-      ui.toast(isNew ? 'Транзакцію додано' : 'Зміни збережено', {
-        type: 'success',
+      const note = limitNote(saved);
+      ui.toast((isNew ? 'Транзакцію додано' : 'Зміни збережено') + (note ? ' · ' + note.text : ''), {
+        type: note && note.level === 'over' ? 'warning' : 'success', duration: note ? 9000 : null,
         action: isNew ? { label: 'Відкрити', onClick: () => openTxForm({ id: saved.id }) } : null
       });
       if (o.onSaved) o.onSaved(saved);
@@ -504,6 +524,12 @@ window.CRM = window.CRM || {};
     return dlg;
   }
 
+  /** Що з лімітами після витрати (js/budget/limits.js): { text, level } | null. */
+  function limitNote(tx) {
+    if (!CRM.limits) return null;
+    try { return CRM.limits.noteFor(tx); } catch (e) { console.error(e); return null; }
+  }
+
   // ---------- «Повторити сьогодні» ----------
   /**
    * Копія операції на сьогодні одним кліком: та сама сума, рахунок, категорія (частини), коментар.
@@ -531,8 +557,9 @@ window.CRM = window.CRM || {};
     const saved = await CRM.store.save('transactions', rec);
     F().ensureRatesFor([saved]);
     const when = date === D.today() ? 'на сьогодні' : 'на ' + fmt.dateShort(date);
-    ui.toast(`Повторено ${when}: ${F().txTitle(saved)} · ${F().txAmountLabel(saved)}`, {
-      type: 'success',
+    const note = limitNote(saved);
+    ui.toast(`Повторено ${when}: ${F().txTitle(saved)} · ${F().txAmountLabel(saved)}` + (note ? ' · ' + note.text : ''), {
+      type: note && note.level === 'over' ? 'warning' : 'success', duration: note ? 9000 : null,
       actions: [
         { label: 'Змінити', onClick: () => openTxForm({ id: saved.id }) },
         { label: 'Скасувати', onClick: () => CRM.store.removeForever('transactions', saved.id) }
@@ -541,5 +568,5 @@ window.CRM = window.CRM || {};
     return saved;
   }
 
-  CRM.budget = { registerTab, openTxForm, repeatTx, rateLine, TAB_ORDER };
+  CRM.budget = { registerTab, openTxForm, repeatTx, rateLine, limitNote, TAB_ORDER };
 })(window.CRM);

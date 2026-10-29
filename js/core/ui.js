@@ -284,7 +284,7 @@ window.CRM = window.CRM || {};
       document.body.appendChild(toastStack);
     }
     const type = o.type || 'info';
-    const iconName = type === 'success' ? 'checkCircle' : type === 'error' ? 'alert' : 'info';
+    const iconName = type === 'success' ? 'checkCircle' : type === 'error' || type === 'warning' ? 'alert' : 'info';
     let timer = null;
     const el = h('div', { class: 'toast toast-' + type + (o.actions && o.actions.length > 1 ? ' toast-multi' : '') },
       h('span', { class: 'toast-ico' }, CRM.icon(iconName)),

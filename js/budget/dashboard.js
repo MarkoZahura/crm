@@ -2,7 +2,8 @@
    dashboard.js — вкладка «Дашборд»: доходи й витрати за поточний місяць,
    фінансовий результат, відкладені кошти, загальний капітал, кругова
    діаграма витрат за категоріями (з легендою: назва, сума, %),
-   найближчі платежі на 14 днів і останні операції.
+   ліміти місяця (js/budget/limits.js), найближчі платежі на 14 днів
+   і останні операції.
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -126,6 +127,11 @@ window.CRM = window.CRM || {};
     h('span', { class: 'num tx-amount tx-' + t.type }, F().txAmountLabel(t))))));
   }
 
+  // ---------- Ліміти (js/budget/limits.js) ----------
+  function limitsCard() {
+    try { return CRM.limits.card({ max: 5 }); } catch (e) { console.error(e); return null; }
+  }
+
   // ---------- Вкладка ----------
   function render(container) {
     if (!F().accounts().length) {
@@ -163,7 +169,7 @@ window.CRM = window.CRM || {};
         kpis,
         h('div', { class: 'dash-grid' },
           expensePie(list, monthName),
-          h('div', { class: 'stack' }, upcomingCard(), recentCard()))));
+          h('div', { class: 'stack' }, CRM.limits ? limitsCard() : null, upcomingCard(), recentCard()))));
   }
 
   CRM.budget.registerTab('dashboard', { render });

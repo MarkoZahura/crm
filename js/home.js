@@ -277,6 +277,7 @@ window.CRM = window.CRM || {};
     people: { name: 'Люди', sub: 'дні народження й «час написати»', has: () => !!CRM.people, render: () => CRM.people.homeCard() },
     food: { name: 'Харчування сьогодні', sub: 'калорії й БЖВ', has: () => !!CRM.nutrition, render: () => CRM.nutrition.homeCard() },
     money: { name: 'Гроші сьогодні', sub: 'доходи, витрати, результат', render: () => moneyCard() },
+    limits: { name: 'Ліміти', sub: 'скільки лишилось на місяць', has: () => !!CRM.limits, render: () => CRM.limits.homeCard() },
     habits: { name: 'Звички', sub: 'відмітки на сьогодні', has: () => !!CRM.habits, render: () => CRM.habits.homeCard() },
     books: { name: 'Читаю зараз', sub: 'книги й прогрес у сторінках', has: () => !!CRM.books, render: () => CRM.books.homeCard() },
     training: { name: 'Сьогоднішнє тренування', sub: 'коли за програмою є тренування', has: () => !!CRM.programs, render: () => CRM.programs.homeCard() },
@@ -284,8 +285,8 @@ window.CRM = window.CRM || {};
   };
   const TOP = { pc: ['today', 'quote'], phone: ['quote'] };
   const DEFAULTS = {
-    pc: { left: ['tasks', 'people', 'food', 'books'], right: ['money', 'habits', 'training', 'schedule'], off: [], folded: [] },
-    phone: { list: ['today', 'tasks', 'schedule', 'habits', 'books', 'money', 'people', 'food', 'training'], off: [], folded: [] }
+    pc: { left: ['tasks', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
+    phone: { list: ['today', 'tasks', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
   };
   const has = (id) => !!BLOCKS[id] && (!BLOCKS[id].has || BLOCKS[id].has());
   const narrowMq = window.matchMedia ? window.matchMedia('(max-width: 860px)') : null;
@@ -539,7 +540,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'events', 'people', 'habits', 'books', 'attachments', 'transactions', 'accounts', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'events', 'people', 'habits', 'books', 'attachments', 'transactions', 'accounts', 'categories', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

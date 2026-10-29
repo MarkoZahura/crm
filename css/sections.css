@@ -2570,3 +2570,94 @@ a.bk-quote-src:hover { color: var(--accent-text); }
   .bk-log-num { flex: 1; min-width: 80px; }
   .bk-log-add { width: 100%; justify-content: center; }
 }
+
+/* ==========================================================================
+   Ліміти (budget/limits.js, 29.10.2026): вкладка «Ліміти», картка на Дашборді
+   й Головній, підказка у формі транзакції, вікно «Ліміти на місяць».
+   Кольори: до 80 % — звичайний (колір категорії / акцент), 80–100 % — --soon,
+   понад 100 % — --hot.
+   ========================================================================== */
+.lim-toolbar .month-nav { flex-wrap: nowrap; }
+.lim-list { display: flex; flex-direction: column; padding: 2px 0 8px; }
+.lim-row { display: flex; flex-direction: column; gap: 7px; padding: 12px 20px; cursor: pointer; border-radius: var(--radius-sm); }
+.lim-row:hover { background: var(--surface-2); }
+.lim-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lim-top, .lim-mini-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-width: 0; }
+.lim-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
+.lim-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lim-ico { display: inline-flex; color: var(--text-2); }
+.lim-badge { flex-shrink: 0; font-size: 11px; font-weight: 500; color: var(--text-2); background: var(--surface-2); border-radius: var(--radius-full); padding: 1px 8px; white-space: nowrap; }
+.lim-nums { white-space: nowrap; color: var(--text-2); font-size: 13px; }
+.lim-nums strong { color: var(--text); font-weight: 600; font-size: 14px; }
+.lim-bar { height: 8px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
+.lim-bar-sm { height: 4px; margin-top: 5px; }
+.lim-row-total .lim-bar { height: 10px; }
+.lim-row-total .lim-name { font-weight: 600; }
+.lim-fill { height: 100%; border-radius: var(--radius-full); background: var(--accent); transition: width .25s var(--ease); }
+.lv-warn .lim-fill { background: var(--soon); }
+.lv-over .lim-fill { background: var(--hot); }
+.lim-bottom { display: flex; align-items: center; gap: 10px; min-height: 28px; font-size: 13px; color: var(--text-2); }
+.lim-left { flex: 1; min-width: 0; }
+.lv-warn .lim-left, .lv-warn .lim-mini-left { color: var(--soon); font-weight: 500; }
+.lv-over .lim-left, .lv-over .lim-mini-left { color: var(--hot); font-weight: 600; }
+.lim-pct { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.lim-row-edit { margin: -4px -6px -4px 0; }
+.lim-state { display: inline-block; margin-right: 6px; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-full); white-space: nowrap; }
+.lim-state.good { color: var(--success); background: var(--success-soft, color-mix(in srgb, var(--success) 12%, transparent)); }
+.lim-state.bad { color: var(--hot); background: var(--hot-soft); }
+.lim-summary { text-align: right; }
+.lim-nototal { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 20px 18px; color: var(--text-2); }
+.lim-nototal strong { color: var(--text); }
+.lim-free-list { display: flex; flex-direction: column; padding: 2px 12px 10px 8px; }
+.lim-free-row { display: flex; align-items: center; gap: 6px; }
+.lim-free-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0; background: none; color: inherit; text-align: left; border-radius: var(--radius-sm); cursor: pointer; font: inherit; }
+.lim-free-main:hover { background: var(--surface-2); }
+.lim-free-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lim-free-sum { white-space: nowrap; font-weight: 600; }
+.lim-free-add { flex-shrink: 0; }
+
+/* Картка на Дашборді й Головній */
+.lim-mini-list { display: flex; flex-direction: column; padding: 2px 8px 10px; }
+.lim-mini { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 8px 12px; border: 0; background: none; color: inherit; text-align: left; border-radius: var(--radius-sm); cursor: pointer; font: inherit; }
+.lim-mini:hover { background: var(--surface-2); }
+.lim-mini .lim-bar { height: 6px; }
+.lim-mini-left { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.lim-mini-nums { font-size: 12px; }
+
+/* Вікно «Ліміти на місяць» */
+.lim-editor { display: flex; flex-direction: column; gap: 14px; }
+.lim-scope { align-self: flex-start; flex-wrap: wrap; }
+.lim-scope-note { font-size: 13px; margin-top: -6px; }
+.lim-reset-month { align-self: flex-start; margin-top: -6px; }
+.lim-ed-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
+.lim-ed-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 150px; align-items: center; gap: 4px 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.lim-ed-list .lim-ed-row:last-child { border-bottom: 0; }
+.lim-ed-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.lim-ed-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lim-avg { font-size: 12px; white-space: nowrap; }
+.lim-ed-amt .amount-input { height: 34px; font-size: 14px; }
+.lim-err { grid-column: 1 / -1; display: none; color: var(--danger); font-size: 12px; }
+.lim-ed-row.has-error .lim-err { display: block; }
+.lim-ed-row.has-error .lim-in { border-color: var(--danger); }
+
+/* Підказка у формі транзакції */
+.tx-limit { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 13px; color: var(--text-2); }
+.tx-limit:empty, .tx-limit-box:empty { display: none; }
+.tx-limit-after { font-weight: 500; }
+.tx-limit-line.lv-warn .tx-limit-after { color: var(--soon); }
+.tx-limit-line.lv-over .tx-limit-after { color: var(--hot); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .lim-row { padding: 12px 14px; }
+  .lim-nototal { padding: 6px 14px 16px; }
+  .lim-free-list { padding: 2px 6px 8px 2px; }
+  .lim-summary { text-align: left; }
+  .lim-ed-row { grid-template-columns: minmax(0, 1fr) 120px; }
+  .lim-avg { grid-column: 1; grid-row: 2; font-size: 11px; margin-top: -4px; }
+  .lim-ed-amt { grid-column: 2; grid-row: 1; }
+}
+.lim-total .card-head { flex-wrap: wrap; }
+@media (min-width: 1180px) {
+  .lim-cats .lim-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px; padding: 2px 8px 8px; }
+  .lim-cats .lim-row { padding: 12px; }
+}

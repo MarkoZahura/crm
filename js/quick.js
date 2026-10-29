@@ -1565,8 +1565,11 @@ window.CRM = window.CRM || {};
     if (o.kind === 'expense' || o.kind === 'income' || o.kind === 'transfer') {
       const saved = await CRM.store.save('transactions', o.rec);
       try { CRM.finance.ensureRatesFor([saved]); } catch (e) { /* курси підвантажаться пізніше */ }
-      const text = o.kind === 'transfer' ? `Переказ додано: ${o.parts[0]} · ${o.parts[1]}` : `${o.kind === 'income' ? 'Дохід' : 'Витрату'} додано: ${o.parts[0]} · ${o.parts[1] || ''}`;
-      return { kind: o.kind, store: 'transactions', id: saved.id, short, text, rec: saved, undo: () => removeRec('transactions', saved.id) };
+      let text = o.kind === 'transfer' ? `Переказ додано: ${o.parts[0]} · ${o.parts[1]}` : `${o.kind === 'income' ? 'Дохід' : 'Витрату'} додано: ${o.parts[0]} · ${o.parts[1] || ''}`;
+      // Ліміти (js/budget/limits.js): «На «Кафе» лишилось 585 ₴ з 2 000 ₴»
+      const note = o.kind === 'expense' && CRM.budget && CRM.budget.limitNote ? CRM.budget.limitNote(saved) : null;
+      if (note) text += ' · ' + note.text;
+      return { kind: o.kind, store: 'transactions', id: saved.id, short, text, rec: saved, level: note ? note.level : null, undo: () => removeRec('transactions', saved.id) };
     }
     if (o.kind === 'meal') {
       const saved = await CRM.store.save('meals', o.rec);
@@ -1644,7 +1647,7 @@ window.CRM = window.CRM || {};
     const res = await apply(o);
     if (!res) return null;
     CRM.ui.toast(res.text, {
-      type: 'success', duration: 9000,
+      type: res.level === 'over' ? 'warning' : 'success', duration: 9000,
       actions: [
         { label: 'Змінити', onClick: () => { openSaved(res.kind, res.id); if (res.rec && (res.kind === 'expense' || res.kind === 'income')) watchCategory(res.rec); } },
         {
@@ -1674,8 +1677,18 @@ window.CRM = window.CRM || {};
     }
     if (done.length) {
       const list = done.map((d) => d.short).join(', ');
-      CRM.ui.toast(`Додано ${fmt.count(done.length, ['запис', 'записи', 'записів'])}: ${list.length > 90 ? list.slice(0, 88) + '…' : list}`, {
-        type: 'success', duration: 9000,
+      // Ліміти — після всіх записів (сума вже з усіма витратами), без повторів
+      const notes = [];
+      let over = false;
+      done.forEach((d) => {
+        if (d.kind !== 'expense' || !CRM.budget || !CRM.budget.limitNote) return;
+        const n = CRM.budget.limitNote(CRM.store.get('transactions', d.id) || d.rec);
+        if (!n) return;
+        if (n.level === 'over') over = true;
+        n.text.split(' · ').forEach((p) => { if (!notes.some((x) => x.toLowerCase() === p.toLowerCase())) notes.push(p); });
+      });
+      CRM.ui.toast(`Додано ${fmt.count(done.length, ['запис', 'записи', 'записів'])}: ${list.length > 90 ? list.slice(0, 88) + '…' : list}` + (notes.length ? ' · ' + notes.join(' · ') : ''), {
+        type: over ? 'warning' : 'success', duration: 9000,
         action: {
           label: 'Скасувати', onClick: async () => {
             for (const d of done.slice().reverse()) { try { await d.undo(); } catch (e) { console.error(e); } }

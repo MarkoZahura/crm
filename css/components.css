@@ -347,8 +347,10 @@
 .toast .icon { width: 18px; height: 18px; }
 .toast-success .toast-ico { color: #4ade80; }
 .toast-error .toast-ico { color: #f87171; }
+.toast-warning .toast-ico { color: #fbbf24; }
 :root[data-theme="dark"] .toast-success .toast-ico { color: #15803d; }
 :root[data-theme="dark"] .toast-error .toast-ico { color: #c9291c; }
+:root[data-theme="dark"] .toast-warning .toast-ico { color: #a35e00; }
 .toast-action {
   height: 28px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
   background: rgba(255,255,255,.12); color: inherit; font-weight: 600; font-size: 13px;

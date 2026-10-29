@@ -18,6 +18,7 @@
      learning:due-today|due-tomorrow|overdue:<курс>:<тема|course>:<дата>
      people:soon|today:<людина>:<bday|id дати>:<дата>   people:contact:<людина>:<дата, коли настав час>
      habit:<звичка>:<дата>   (нагадування звички, якщо до обраного часу не відмічено)
+     limit:<категорія | total>:<РРРР-ММ>:80 | 100   (ліміти Бюджету, js/budget/limits.js)
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -35,6 +36,7 @@ window.CRM = window.CRM || {};
     learning: { icon: 'graduation', cls: 'ico-learning' },
     people: { icon: 'cake', cls: 'ico-goal' },
     habit: { icon: 'habits', cls: 'ico-goal' },
+    limit: { icon: 'gauge', cls: 'ico-payment' },
     system: { icon: 'info', cls: 'ico-event' }
   };
 

@@ -211,7 +211,16 @@ window.CRM = window.CRM || {};
   function render(container, route) {
     // Параметри з адреси (напр., «Показати операції» з рахунку)
     if (route.params.account) { Object.assign(f, DEFAULTS, { accountId: route.params.account, period: 'all' }); CRM.router.consumeParam('account'); }
-    if (route.params.category) { Object.assign(f, DEFAULTS, { categoryId: route.params.category, period: 'all' }); CRM.router.consumeParam('category'); }
+    // Витрати за місяць (з «Лімітів»): month=РРРР-ММ-01 [+ category]
+    const pm = route.params.month;
+    if (pm && D.isDate(pm)) {
+      const from = D.startOfMonth(pm);
+      const T = D.today();
+      const period = from === D.startOfMonth(T) ? 'month' : from === D.addMonths(D.startOfMonth(T), -1) ? 'prevMonth' : 'custom';
+      Object.assign(f, DEFAULTS, { type: 'expense', categoryId: route.params.category || '', period, from: period === 'custom' ? from : null, to: period === 'custom' ? D.endOfMonth(from) : null });
+      CRM.router.consumeParam('month');
+      if (route.params.category) CRM.router.consumeParam('category');
+    } else if (route.params.category) { Object.assign(f, DEFAULTS, { categoryId: route.params.category, period: 'all' }); CRM.router.consumeParam('category'); }
 
     const hasAny = CRM.store.list('transactions').length > 0;
     const list = filtered();
