@@ -2405,3 +2405,19 @@ button.hb-c:hover { box-shadow: 0 0 0 2px var(--hb, var(--accent)); }
 @media (hover: none) and (pointer: coarse) {
   .sidebar-keys, .kb-card { display: none !important; }
 }
+
+/* ---------- Телефон: над нижньою панеллю (29.10.2026, етап 3 дизайну; панель — layout.css) ---------- */
+@media (max-width: 860px) {
+  /* Плашка «Є нова версія» і тости (на ширших за 640 px — унизу) — над нижньою панеллю */
+  .pwa-bar { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); }
+  /* Вікна й бічні панелі на iPhone не ховаються під смужку «додому» */
+  .drawer { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .overlay:not(.overlay-drawer) { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (min-width: 641px) and (max-width: 860px) {
+  .toast-stack { bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); }
+  body.has-pwa-bar .toast-stack { bottom: calc(var(--tabbar-h) + var(--pwa-bar-h, 48px) + 24px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 640px) {
+  body.has-pwa-bar .toast-stack { bottom: auto; }
+}

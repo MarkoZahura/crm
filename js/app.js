@@ -1,6 +1,7 @@
 /* ==========================================================================
-   app.js — запуск застосунку: каркас (сайдбар + верхня панель), тема,
-   акцентний колір, стартові дані, годинник. Підключається останнім.
+   app.js — запуск застосунку: каркас (сайдбар + верхня панель; на телефоні — нижня панель,
+   «Ще», кругла кнопка ⚡ і простий верх), тема, акцентний колір, стартові дані, годинник.
+   Підключається останнім.
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -182,6 +183,9 @@ window.CRM = window.CRM || {};
       'aria-controls': 'sidebar', 'aria-expanded': 'false', onClick: toggleMobileNav
     }, CRM.icon('menu'));
     el.date = h('div', { class: 'topbar-date' });
+    // Телефон: назва розділу ліворуч (зʼявляється, коли великий заголовок сторінки сховався вгорі)
+    el.titleText = h('span', { class: 'topbar-title-text' });
+    el.title = h('div', { class: 'topbar-title', 'aria-hidden': 'true' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }, 'C'), el.titleText);
 
     el.searchBtn = h('button', {
       type: 'button', class: 'search-trigger', title: 'Пошук (Ctrl+K)', 'aria-label': 'Пошук',
@@ -210,11 +214,12 @@ window.CRM = window.CRM || {};
     }, CRM.icon('plus'), h('span', { class: 'btn-label' }, 'Задача'));
 
     const topbar = h('header', { class: 'topbar' },
-      h('div', { class: 'topbar-left' }, el.burger, el.date),
+      h('div', { class: 'topbar-left' }, el.burger, el.title, el.date),
       h('div', { class: 'topbar-right' }, el.searchBtn, el.quickBtn, el.themeBtn, el.bellBtn, h('span', { class: 'topbar-divider' }), el.newTaskBtn));
 
     el.page = h('main', { class: 'page', id: 'page', tabIndex: -1 });
-    el.app = h('div', { class: 'app' }, el.sidebar, el.backdrop, h('div', { class: 'main' }, topbar, el.page));
+    buildTabbar();
+    el.app = h('div', { class: 'app' }, el.sidebar, el.backdrop, h('div', { class: 'main' }, topbar, el.page), el.tabbar, el.fab);
 
     CRM.ui.mount(app, el.app);
     updateShell();
@@ -240,6 +245,147 @@ window.CRM = window.CRM || {};
     };
   }
 
+  // ---------- Телефон: нижня панель, «Ще», кнопка ⚡, простий верх (29.10.2026, етап 3 дизайну) ----------
+  // Показуються лише на вузькому екрані (до 860 px) — це робить CSS; на компʼютері лишаються меню й верхня панель.
+  const TABS = ['home', 'calendar', 'tasks', 'budget'];
+  const narrowMq = window.matchMedia ? window.matchMedia('(max-width: 860px)') : null;
+  const coarseMq = window.matchMedia ? window.matchMedia('(pointer: coarse)') : null;
+  const navItem = (id) => NAV.find((x) => x.id === id);
+  const routeOk = (id) => id === 'trash' || CRM.router.routes.has(id);
+  let closeMore = null;
+
+  function buildTabbar() {
+    el.tabs = {};
+    const items = TABS.filter(routeOk).map((id) => {
+      const it = navItem(id);
+      const a = h('a', { class: 'tabbar-item', href: '#/' + id, dataset: { tab: id } },
+        h('span', { class: 'tabbar-ico' }, CRM.icon(it.icon), it.count ? h('span', { class: 'tabbar-badge', dataset: { navCount: id } }) : null),
+        h('span', { class: 'tabbar-label' }, it.label));
+      el.tabs[id] = a;
+      return a;
+    });
+    el.moreTab = h('button', {
+      type: 'button', class: 'tabbar-item tabbar-more', dataset: { tab: 'more' }, 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+      'aria-controls': 'more-sheet', onClick: toggleMore
+    }, h('span', { class: 'tabbar-ico' }, CRM.icon('apps')), h('span', { class: 'tabbar-label' }, 'Ще'));
+    el.tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Основні розділи' }, items, el.moreTab);
+    // Кругла кнопка ⚡ праворуч над панеллю — те саме швидке введення, що й Ctrl+K
+    el.fab = el.quickBtn ? h('button', {
+      type: 'button', class: 'fab', title: 'Швидке введення', 'aria-label': 'Швидке введення', onClick: () => CRM.search.openQuick()
+    }, CRM.icon('zap')) : null;
+  }
+
+  function toggleMore() { if (closeMore) closeMore(); else openMore(); }
+
+  /** Панель «Ще» знизу: решта розділів плитками за групами, «Мій кабінет» і тема. */
+  function openMore() {
+    const cur = CRM.router.current ? CRM.router.current.name : '';
+    const groups = [];
+    NAV.forEach((it) => {
+      if (it.group) { groups.push({ title: it.group, items: [] }); return; }
+      if (TABS.includes(it.id) || !routeOk(it.id) || !groups.length) return;
+      groups[groups.length - 1].items.push(it);
+    });
+    const tile = (it) => h('a', {
+      class: 'more-tile' + (cur === it.id ? ' active' : ''), href: '#/' + it.id, dataset: { route: it.id },
+      'aria-current': cur === it.id ? 'page' : null, onClick: () => close()
+    },
+    h('span', { class: 'more-ico' }, CRM.icon(it.icon)),
+    h('span', { class: 'more-label' }, it.label),
+    it.count ? h('span', { class: 'more-count', dataset: { navCount: it.id } }) : null);
+
+    const profile = CRM.store.getSetting('profile', {}) || {};
+    const ini = CRM.utils.initials(profile.name);
+    const avatar = h('span', { class: 'avatar' + (ini ? '' : ' is-empty') }, ini || CRM.icon('user', { size: 'sm' }));
+    const profileLink = h('a', { class: 'more-profile' + (cur === 'profile' ? ' active' : ''), href: '#/profile', onClick: () => close() },
+      avatar, h('span', { class: 'more-profile-text' }, h('span', { class: 'more-profile-name' }, profile.name || 'Мій кабінет'),
+        h('span', { class: 'more-profile-hint' }, profile.name ? 'Мій кабінет' : 'Вкажи своє імʼя')),
+      CRM.icon('chevronRight', { size: 'sm' }));
+
+    const seg = h('div', { class: 'segmented more-theme-seg', role: 'radiogroup', 'aria-label': 'Тема' });
+    const drawTheme = () => {
+      const pref = theme.pref();
+      CRM.ui.mount(seg, [['light', 'Світла'], ['dark', 'Темна'], ['system', 'Як у системі']].map(([id, label]) => h('button', {
+        type: 'button', role: 'radio', class: pref === id ? 'active' : '', 'aria-checked': pref === id ? 'true' : 'false', dataset: { theme: id },
+        onClick: async () => { await theme.set(id); drawTheme(); }
+      }, label)));
+    };
+    drawTheme();
+
+    const sheet = h('section', { class: 'more-sheet', id: 'more-sheet', role: 'dialog', 'aria-label': 'Усі розділи', tabIndex: -1 },
+      h('div', { class: 'more-grab', 'aria-hidden': 'true' }),
+      groups.filter((g) => g.items.length).map((g) => h('div', { class: 'more-group' },
+        h('div', { class: 'more-title' }, g.title),
+        h('div', { class: 'more-grid' }, g.items.map(tile)))),
+      h('div', { class: 'more-foot' }, profileLink,
+        h('div', { class: 'more-theme' }, h('span', { class: 'more-theme-label' }, 'Тема'), seg)));
+    const backdrop = h('div', { class: 'more-backdrop', 'aria-hidden': 'true' });
+    document.body.append(backdrop, sheet);
+    el.moreTab.setAttribute('aria-expanded', 'true');
+    el.moreTab.classList.add('open');
+    el.tabbar.classList.add('more-open');
+    const unregister = CRM.ui.registerLayer({ el: sheet, anchor: el.moreTab, lock: true, outsideClose: true, close: () => close() });
+    function close() {
+      if (closeMore !== close) return;
+      closeMore = null;
+      unregister();
+      sheet.remove();
+      backdrop.remove();
+      el.moreTab.setAttribute('aria-expanded', 'false');
+      el.moreTab.classList.remove('open');
+      el.tabbar.classList.remove('more-open');
+    }
+    closeMore = close;
+    updateShell();
+    try { sheet.focus({ preventScroll: true }); } catch (e) { /* не критично */ }
+  }
+
+  function updateTabs(current) {
+    const name = current ? current.name : '';
+    Object.keys(el.tabs).forEach((id) => {
+      const active = id === name;
+      el.tabs[id].classList.toggle('active', active);
+      if (active) el.tabs[id].setAttribute('aria-current', 'page'); else el.tabs[id].removeAttribute('aria-current');
+    });
+    // Розділ не з нижньої панелі (Тренування, Люди, кабінет…) — підсвічено «Ще»
+    el.moreTab.classList.toggle('active', !!name && !TABS.includes(name));
+    // Назва у верхній панелі
+    const home = name === 'home' || !name;
+    el.title.classList.toggle('is-home', home);
+    el.titleText.textContent = home ? 'Моя CRM' : ((current && current.def && current.def.title) || 'Моя CRM');
+    updateTitleVisibility();
+  }
+
+  /** Назва розділу вгорі — коли великий заголовок сторінки прокручено під верхню панель (як на iPhone). */
+  function updateTitleVisibility() {
+    if (!el.title || el.title.classList.contains('is-home')) return;
+    const h1 = el.page.querySelector('.page-head h1');
+    const top = el.title.closest('.topbar');
+    const limit = top ? top.getBoundingClientRect().bottom : 56;
+    el.title.classList.toggle('show', !h1 || h1.getBoundingClientRect().bottom <= limit + 2);
+  }
+  let titleRaf = 0;
+  window.addEventListener('scroll', () => {
+    if (titleRaf) return;
+    titleRaf = requestAnimationFrame(() => { titleRaf = 0; updateTitleVisibility(); });
+  }, { passive: true });
+
+  // Клавіатура на телефоні відкрита (курсор у полі) — нижню панель і ⚡ ховаємо, щоб не займали місце
+  function editable(t) {
+    if (!t || !t.tagName) return false;
+    if (t.isContentEditable) return true;
+    if (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+    return t.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file|image)$/i.test(t.type || '');
+  }
+  function syncTyping() {
+    document.documentElement.classList.toggle('is-typing', !!(coarseMq && coarseMq.matches && editable(document.activeElement)));
+  }
+  document.addEventListener('focusin', syncTyping);
+  document.addEventListener('focusout', () => setTimeout(syncTyping, 60));
+  // Поле з курсором зникло разом з вікном (браузер тоді не повідомляє про втрату фокуса) — перевірити при дотику
+  document.addEventListener('pointerdown', () => setTimeout(syncTyping, 60), true);
+  if (narrowMq && narrowMq.addEventListener) narrowMq.addEventListener('change', () => { if (!narrowMq.matches && closeMore) closeMore(); });
+
   // ---------- Оновлення каркаса ----------
   function updateShell() {
     const profile = CRM.store.getSetting('profile', {}) || {};
@@ -252,14 +398,18 @@ window.CRM = window.CRM || {};
 
     NAV.forEach((item) => {
       if (!item.count) return;
-      const badge = el.nav.querySelector(`[data-count="${item.id}"]`);
-      if (!badge) return;
+      // Меню, нижня панель і «Ще» (телефон) показують однакові лічильники
+      const badges = Array.from(el.nav.querySelectorAll(`[data-count="${item.id}"]`))
+        .concat(Array.from(document.querySelectorAll(`[data-nav-count="${item.id}"]`)));
+      if (!badges.length) return;
       let c = 0;
       try { c = item.count(); } catch (e) { console.error(e); }
       const o = typeof c === 'number' ? { n: c } : (c || { n: 0 });
-      badge.textContent = o.n ? String(o.n) : '';
-      badge.classList.toggle('hot', !!(o.n && o.hot));
-      if (o.title && o.n) badge.setAttribute('title', o.title); else badge.removeAttribute('title');
+      badges.forEach((badge) => {
+        badge.textContent = o.n ? String(o.n) : '';
+        badge.classList.toggle('hot', !!(o.n && o.hot));
+        if (o.title && o.n) badge.setAttribute('title', o.title); else badge.removeAttribute('title');
+      });
     });
   }
 
@@ -345,7 +495,14 @@ window.CRM = window.CRM || {};
         '. Завантаж на GitHub усі файли з папки CRM, разом з index.html (README, розділ «Як оновити сайт»).', { type: 'error', duration: 20000 }), 600);
     }
 
-    CRM.router.onRender((cur) => updateActiveNav(cur));
+    CRM.router.onRender((cur) => {
+      updateActiveNav(cur);
+      if (closeMore) closeMore();
+      updateTabs(cur);
+      syncTyping();
+      // Сторінка домалювалась (картинки, дані) — перевірити ще раз, чи видно великий заголовок
+      setTimeout(updateTitleVisibility, 120);
+    });
 
     // Зміни даних → оновити каркас і, за потреби, поточну сторінку
     CRM.store.on(null, (changed) => {
@@ -377,6 +534,6 @@ window.CRM = window.CRM || {};
     setInterval(tick, 60 * 1000);
   }
 
-  CRM.app = { boot, ensureDefaults, updateShell };
+  CRM.app = { boot, ensureDefaults, updateShell, openMore: () => openMore(), closeMore: () => closeMore && closeMore() };
   boot();
 })(window.CRM);
