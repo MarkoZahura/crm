@@ -6,9 +6,16 @@
    Дані — лише в браузері й синхронізації (сховище people), не в коді.
 
    Людина: { id, name, group, bday: 'ММ-ДД'|null, bdayYear: рік|null, phone, telegram, instagram, email, notes,
-             dates: [{ id, title, md: 'ММ-ДД', year|null }], gifts: [{ id, text, done, doneAt }],
-             freq: null|7|14|30|90|180 (днів), lastContact: 'РРРР-ММ-ДД'|null }
+             dates: [{ id, title, md: 'ММ-ДД', year|null }],
+             gifts: [{ id, text, done, doneAt, price: орієнтовна ціна|null, txId: витрата в Бюджеті|null }],
+             freq: null|7|14|30|90|180 (днів), lastContact: 'РРРР-ММ-ДД'|null,
+             remindDays: 14|7|3|1|0|-1 (за скільки днів нагадувати про ДН і дати; 0 — лише в день, -1 — ні; немає — 7),
+             greetName: 'як звертатися' ('' — кличний відмінок імені автоматично),
+             greeted: { 'РРРР': 'РРРР-ММ-ДД' } (коли привітали з ДН цього року) }
    Ключі нагадувань: people:soon:<id>:<bday|id дати>:<дата>, people:today:…, people:contact:<id>:<дата, коли настав час>
+   Доробки 29.10 (етап 6): подарунок → витрата (openGiftExpense), «Привітати» (openGreet; свої шаблони —
+   синхронізоване налаштування greetings { templates }), «Повʼязане» в картці (related: події, задачі, Google
+   з імʼям людини в будь-якому відмінку), своє нагадування (remindDays), експорт .vcf (toVcf, openExport).
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -35,10 +42,33 @@ window.CRM = window.CRM || {};
     { v: 90, label: 'Раз на 3 місяці' },
     { v: 180, label: 'Раз на пів року' }
   ];
-  const SOON_DAYS = 7;    // нагадування — за тиждень
+  const SOON_DAYS = 7;    // позначка «ДН через N днів» у списку
   const HOME_DAYS = 14;   // Головна — найближчі 2 тижні
   const PAGE_DAYS = 30;   // сторінка «Люди» — найближчий місяць
   const SORTS = [{ id: 'name', label: 'За імʼям' }, { id: 'bday', label: 'За днем народження' }, { id: 'contact', label: 'Давно не спілкувались' }];
+  // Своє нагадування для людини (доробка 27): за скільки днів до ДН і дат
+  const REMINDS = [
+    { v: 14, label: 'За 2 тижні' }, { v: 7, label: 'За тиждень' }, { v: 3, label: 'За 3 дні' },
+    { v: 1, label: 'За день' }, { v: 0, label: 'Лише в день' }, { v: -1, label: 'Не нагадувати' }
+  ];
+  const DEFAULT_REMIND = 7;
+  const MAX_REMIND = 14;
+  // «Привітати» (доробка 25): готові тексти; {імʼя} — звертання в кличному відмінку
+  const GREETINGS = [
+    '{імʼя}, з днем народження! 🎉 Бажаю здоровʼя, натхнення й побільше приводів усміхатися. Нехай цей рік буде щедрим на добрі події!',
+    'З днем народження, {імʼя}! Щастя, тепла й усього, про що мрієш 🎂',
+    '{імʼя}, вітаю з днем народження! Усього найкращого 🙌',
+    '{імʼя}, щиро вітаю з днем народження! Бажаю міцного здоровʼя, успіхів у справах і гарного настрою.',
+    '{імʼя}, з днем народження! Ти не старієш — ти прокачуєшся до нового рівня 😄 Нехай цей рівень буде найкращим!',
+    '{імʼя}, з днем народження! Дякую, що ти є. Нехай поруч завжди будуть люди, з якими добре, а кожен день приносить щось приємне ❤️'
+  ];
+  const MAX_TEMPLATES = 20;
+  // «Повʼязане» (доробка 26): скільки днів назад і вперед шукати
+  const REL_PAST = 60;
+  const REL_NEXT = 90;
+  const REL_SHOW = 5;
+  // Імена, що є й звичайними словами («роман», «віра», «ігор»), — лише з великої літери
+  const AMBIG = new Set(['віра', 'надія', 'любов', 'люба', 'лев', 'роман', 'слава', 'злата', 'роза', 'лілія', 'калина', 'лука', 'соня', 'влад', 'ігор', 'мила']);
 
   // ---------- Дані ----------
   const list = () => CRM.store.list('people').slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'uk'));
@@ -181,19 +211,591 @@ window.CRM = window.CRM || {};
     return h('span', { class: 'avatar ppl-avatar' + (big ? ' avatar-lg' : ''), style: { background: groupColor(p.group) }, 'aria-hidden': 'true' }, U.initials(p.name || '?') || '?');
   }
 
+  // ---------- Своє нагадування (доробка 27) ----------
+  /** За скільки днів нагадувати про ДН і дати людини: 14, 7, 3, 1, 0 (лише в день), -1 (не нагадувати). */
+  function remindOf(p) {
+    const v = p ? p.remindDays : null;
+    return REMINDS.some((r) => r.v === v) ? v : DEFAULT_REMIND;
+  }
+  const remindLabel = (v) => (REMINDS.find((r) => r.v === v) || REMINDS[1]).label;
+
+  // ---------- Відмінки імені: кличний («Марто») і орудний («з Мартою») ----------
+  const UA_WORD = /^[а-щьюяєіїґ'ʼ’]+$/;
+  const VOC_EXC = { 'тато': 'тату', 'ілля': 'ілле', 'федір': 'федоре', 'яків': 'якове', 'хрещена': 'хрещена', 'хрещений': 'хрещений' };
+  const INS_EXC = { 'ігор': 'ігорем', 'федір': 'федором', 'яків': 'яковом', 'любов': 'любовʼю' };
+  /** Кличний відмінок одного слова в нижньому регістрі (null — не знаємо, лишити як є). */
+  function vocLower(w) {
+    if (VOC_EXC[w]) return VOC_EXC[w];
+    if (w.length < 2 || !UA_WORD.test(w)) return null;
+    if (/(івна|ївна)$/.test(w)) return w.slice(0, -1) + 'о';                 // Петрівна → Петрівно
+    if (/(ович|евич|євич|йович)$/.test(w)) return w + 'у';                    // Петрович → Петровичу
+    const last = w.slice(-1);
+    const b = w.slice(0, -1);
+    if (last === 'а') return b + 'о';                                         // Марта → Марто, мама → мамо
+    if (last === 'я') return /[іi]$/.test(b) ? b + 'є' : b + 'ю';             // Марія → Маріє, Оля → Олю
+    if (last === 'й') return /[ії]$/.test(b) ? b + 'ю' : null;                // Андрій → Андрію
+    if (last === 'о') return /к$/.test(b) ? b + 'у' : b + 'е';                // Марко → Марку, Петро → Петре
+    if (last === 'ь') return b + 'ю';                                         // Василь → Василю, дідусь → дідусю
+    if (last === 'к') return w + 'у';                                         // Ярик → Ярику, Марк → Марку
+    if (last === 'г') return b + 'же';                                        // Олег → Олеже
+    if (/[бвґдзлмнпрстфхцчшщж]/.test(last)) return w + 'е';                   // Іван → Іване, Ігор → Ігоре
+    return null;
+  }
+  /** Орудний відмінок («зустріч з Мартою»). */
+  function insLower(w) {
+    if (INS_EXC[w]) return INS_EXC[w];
+    if (w.length < 2 || !UA_WORD.test(w)) return null;
+    const last = w.slice(-1);
+    const b = w.slice(0, -1);
+    if (last === 'а') return /[жчшщ]$/.test(b) ? b + 'ею' : b + 'ою';         // Марта → Мартою, Даша → Дашею
+    if (last === 'я') return /[іi]$/.test(b) ? b + 'єю' : b + 'ею';           // Марія → Марією, Оля → Олею
+    if (last === 'й') return /[ії]$/.test(b) ? b + 'єм' : null;               // Андрій → Андрієм
+    if (last === 'о') return b + 'ом';                                        // Петро → Петром
+    if (last === 'ь') return b + 'ем';                                        // Василь → Василем
+    if (/[жчшщ]/.test(last)) return w + 'ем';
+    if (/[бвгґдзклмнпрстфхц]/.test(last)) return w + 'ом';                    // Іван → Іваном
+    return null;
+  }
+  /** Застосувати відмінок до слова (зберігаючи велику літеру й частини через дефіс). */
+  function caseWord(word, fn) {
+    return String(word).split('-').map((part) => {
+      if (!part) return part;
+      const lw = part.toLowerCase();
+      const r = fn(lw);
+      if (!r) return part;
+      return part[0] !== lw[0] ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+    }).join('-');
+  }
+  const nameWords = (p) => String((p && p.name) || '').trim().split(/\s+/).filter(Boolean);
+  const firstName = (p) => nameWords(p)[0] || '';
+  /** Звертання: своє з картки або кличний відмінок імені (з по батькові, якщо записано). */
+  function autoAddress(p) {
+    const w = nameWords(p);
+    if (!w.length) return '';
+    const first = caseWord(w[0], vocLower);
+    if (w[1] && /(івна|ївна|ович|евич|євич|йович)$/i.test(w[1])) return first + ' ' + caseWord(w[1], vocLower);
+    return first;
+  }
+  function greetAddress(p) { return String((p && p.greetName) || '').trim() || autoAddress(p); }
+  /** «з Мартою» — для назви нової події. */
+  function withName(p) { const f = firstName(p); return f ? caseWord(f, insLower) : ''; }
+
+  // ---------- «Привітати» (доробка 25) ----------
+  function ownTemplates() {
+    const g = CRM.store.getSetting('greetings', null);
+    return g && Array.isArray(g.templates) ? g.templates.filter((t) => typeof t === 'string' && t.trim()) : [];
+  }
+  function allTemplates() { return ownTemplates().concat(GREETINGS); }
+  /** Підставити звертання замість {імʼя} (також {ім'я}, {імя}, {name}); перша літера — велика. */
+  function fillGreeting(tpl, addr) {
+    let s = String(tpl || '').replace(/\{\s*(ім[ʼ'’]?я|name)\s*\}/gi, addr || '');
+    s = s.replace(/^\s*,\s*/, '').trim();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
+  /** Найближчий (до сьогодні) день народження: { date, year, left } або null. */
+  function greetOcc(p) {
+    if (!p || !p.bday || !validMd(p.bday)) return null;
+    const T = D.today();
+    const y = D.parse(T).y;
+    let best = null;
+    [y - 1, y, y + 1].forEach((yy) => {
+      const d = inYear(p.bday, yy);
+      const left = D.diffDays(T, d);
+      if (!best || Math.abs(left) < Math.abs(best.left) || (Math.abs(left) === Math.abs(best.left) && left > best.left)) best = { date: d, year: yy, left };
+    });
+    return best;
+  }
+  /** Дата, коли привітали з цим днем народження (або null). */
+  function greetedAt(p, occ) {
+    const o = occ || greetOcc(p);
+    return o && p.greeted && p.greeted[o.year] ? p.greeted[o.year] : null;
+  }
+  const isBdayToday = (p) => { const o = greetOcc(p); return !!o && o.left === 0; };
+  /** Посилання в Telegram з уже вписаним текстом: t.me/<username>?text=… або t.me/+<номер>?text=… */
+  function tgLink(p, text) {
+    const q = text ? '?text=' + encodeURIComponent(text) : '';
+    const u = tgUser(p.telegram);
+    if (u) return { href: 'https://t.me/' + u + q, byPhone: false };
+    let d = String(p.phone || '').replace(/\D/g, '');
+    if (d.length === 10 && d[0] === '0') d = '38' + d;      // 067… → 38067…
+    return d.length >= 11 ? { href: 'https://t.me/+' + d + q, byPhone: true } : null;
+  }
+  async function copyText(text, area) {
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (e) { /* далі — запасний спосіб */ }
+    try {
+      area.focus();
+      area.select();
+      return document.execCommand('copy');
+    } catch (e) { return false; }
+  }
+  /** Позначити: привітали (цього року) і поспілкувались сьогодні. Повертає «Скасувати». */
+  async function markGreeted(id, year) {
+    const p = get(id);
+    if (!p) return null;
+    const T = D.today();
+    const before = { greeted: p.greeted ? U.deepClone(p.greeted) : null, lastContact: p.lastContact || null };
+    const greeted = Object.assign({}, p.greeted || {});
+    greeted[year] = T;
+    await save(Object.assign({}, p, { greeted, lastContact: !p.lastContact || p.lastContact < T ? T : p.lastContact }));
+    return async () => { const cur = get(id); if (cur) await save(Object.assign({}, cur, before)); };
+  }
+
+  /** Вікно «Привітати»: готовий текст → «Копіювати», «Telegram», на телефоні «Надіслати…». */
+  function openGreet(id) {
+    const p = get(id);
+    if (!p) { ui.toast('Цієї людини більше немає', { type: 'error' }); return null; }
+    if (!canSave()) return null;
+    const occ = greetOcc(p);
+    const tpls = allTemplates();
+    const own = ownTemplates().length;
+    // Без своїх шаблонів — різним людям різні тексти (сталий вибір для людини й року)
+    let idx = 0;
+    if (!own) {
+      let hs = 0;
+      String(p.id + (occ ? occ.year : '')).split('').forEach((ch) => { hs = (hs * 31 + ch.charCodeAt(0)) >>> 0; });
+      idx = hs % tpls.length;
+    }
+    let edited = false;
+    const auto = autoAddress(p);
+    const addrIn = ui.input({ value: greetAddress(p), maxlength: 60, placeholder: auto, 'aria-label': 'Як звертатися', class: 'input greet-addr' });
+    const textIn = ui.textarea({ rows: 5, maxlength: 2000, 'aria-label': 'Текст привітання', class: 'textarea greet-text' });
+    const countEl = h('span', { class: 'subtle greet-count' });
+    const tgBox = h('span', { class: 'greet-tg-box' });
+    const tgHint = h('div', { class: 'subtle greet-tg-hint' });
+    let done = false;
+
+    function compose() {
+      textIn.value = fillGreeting(tpls[idx], addrIn.value.trim() || auto || firstName(p));
+      edited = false;
+      countEl.textContent = `${idx + 1} з ${tpls.length}` + (idx < own ? ' · мій шаблон' : '');
+      updateLinks();
+    }
+    function updateLinks() {
+      const cur = get(id) || p;
+      const tg = tgLink(cur, textIn.value.trim());
+      ui.mount(tgBox, tg ? h('a', {
+        class: 'btn greet-tg', href: tg.href, target: '_blank', rel: 'noopener',
+        onClick: () => { setTimeout(() => finish('tg'), 0); }
+      }, CRM.icon('external', { size: 'sm' }), h('span', { class: 'btn-label' }, 'Telegram')) : null);
+      tgHint.textContent = tg && tg.byPhone ? 'Telegram за номером телефону відкриє чат, лише якщо людина дозволила знаходити себе за номером. Інакше — «Копіювати».' : '';
+    }
+    let addrTimer = null;
+    addrIn.addEventListener('input', () => {
+      if (!edited) compose();
+      clearTimeout(addrTimer);
+      addrTimer = setTimeout(saveAddr, 500);
+    });
+    async function saveAddr() {
+      clearTimeout(addrTimer);
+      addrTimer = null;
+      const cur = get(id);
+      if (!cur) return;
+      const v = addrIn.value.trim();
+      const want = v && v !== auto ? v : '';
+      if ((cur.greetName || '') !== want) await save(Object.assign({}, cur, { greetName: want }));
+    }
+    textIn.addEventListener('input', () => { edited = true; updateLinks(); });
+
+    async function finish(how) {
+      if (done) return;
+      done = true;
+      if (addrTimer) await saveAddr();
+      dlg.close('force');
+      const undo = await markGreeted(id, occ ? occ.year : D.parse(D.today()).y);
+      const first = firstName(p);
+      const msg = (how === 'copy' ? 'Текст скопійовано — встав його в месенджер. ' : '') + `Позначено: ${first || p.name} — привітано, поспілкувались сьогодні`;
+      ui.toast(msg, { type: 'success', duration: 8000, action: undo ? { label: 'Скасувати', onClick: undo } : null });
+    }
+    const copyBtn = ui.button({
+      label: 'Копіювати', icon: 'copy', variant: 'primary', className: 'greet-copy',
+      onClick: async () => {
+        const ok = await copyText(textIn.value, textIn);
+        if (!ok) { ui.toast('Не вдалося скопіювати — виділи текст і скопіюй вручну.', { type: 'error' }); return; }
+        finish('copy');
+      }
+    });
+    const shareBtn = navigator.share ? ui.button({
+      label: 'Надіслати…', icon: 'upload', className: 'greet-share', title: 'Меню «Поділитися»: Viber, WhatsApp, Повідомлення…',
+      onClick: async () => {
+        try { await navigator.share({ text: textIn.value }); finish('share'); } catch (e) { /* скасовано — нічого не позначаємо */ }
+      }
+    }) : null;
+    const nextBtn = ui.button({ label: 'Інший текст', icon: 'refresh', size: 'sm', className: 'greet-next', onClick: () => { idx = (idx + 1) % tpls.length; compose(); textIn.focus(); } });
+
+    let when = 'День народження не вказано — привітання все одно можна надіслати.';
+    if (occ) {
+      const age = p.bdayYear ? occ.year - p.bdayYear : null;
+      const ageTxt = age != null && age > 0 ? (occ.left < 0 ? ` · виповнилося ${age}` : ` · виповнюється ${age}`) : '';
+      if (occ.left === 0) when = 'Сьогодні день народження' + ageTxt;
+      else if (occ.left === -1) when = 'День народження був учора' + ageTxt;
+      else if (occ.left < 0) when = `День народження був ${dayShort(occ.date)} (${inDays(occ.date)})` + ageTxt;
+      else when = `День народження — ${dayShort(occ.date)} (${inDays(occ.date)})` + ageTxt;
+      const g = greetedAt(p, occ);
+      if (g) when += ` · уже привітано ${fmt.dateShort(g)}`;
+    }
+    const personBtn = ui.button({ label: 'Картка', icon: 'user', size: 'sm', variant: 'ghost', className: 'greet-person', title: 'Відкрити картку людини', onClick: () => { dlg.close('button'); if (!document.querySelector('.ppl-drawer')) openPerson(id); } });
+    const body = h('div', { class: 'stack greet-body' },
+      h('div', { class: 'greet-when' }, CRM.icon('cake', { size: 'sm' }), h('span', { class: 'grow' }, when), personBtn),
+      ui.field({ label: 'Як звертатися', input: addrIn, hint: `Автоматично — «${auto}». Своє звертання запамʼятається для цієї людини.` }),
+      h('div', { class: 'field' },
+        h('div', { class: 'greet-text-head' }, h('span', { class: 'field-label' }, 'Текст'), h('span', { class: 'greet-tools' }, countEl, nextBtn)),
+        textIn,
+        h('div', { class: 'field-hint' }, 'Можна змінити перед надсиланням. Свої шаблони — «Мій кабінет» → «Привітання».')),
+      tgHint);
+    const dlg = ui.modal({
+      title: 'Привітати: ' + p.name, size: 'md', className: 'greet-modal', body,
+      footer: [shareBtn, tgBox, copyBtn],
+      initialFocus: copyBtn,
+      onClose: () => { if (addrTimer) saveAddr(); }
+    });
+    compose();
+    return dlg;
+  }
+
+  // ---------- Подарунок → витрата (доробка 24) ----------
+  function giftAccounts() {
+    try { return CRM.finance.rankedAccounts().map((x) => x.account).filter((a) => a && !a.deletedAt && !a.archived); } catch (e) { return []; }
+  }
+  function giftDefaultAccount(accounts) {
+    const byId = (x) => accounts.find((a) => a.id === x) || null;
+    const qi = CRM.store.getSetting('quickInput', null) || {};
+    const last = CRM.store.getSetting('budget.lastAccount', {}) || {};
+    return byId(qi.accountId) || byId(last.expense) || byId(last.any) ||
+      accounts.find((a) => a.type !== 'savings' && a.currency === 'UAH') || accounts[0] || null;
+  }
+  function expenseCats() {
+    return CRM.store.list('categories').filter((c) => c.kind === 'expense').sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+  /** Категорія для подарунка: «Подарунки» → словник швидкого введення → «Інше». */
+  function giftCategory(cats) {
+    const c = cats.find((x) => U.normalize(x.name) === 'подарунки') || cats.find((x) => /^подарун/.test(U.normalize(x.name)));
+    if (c) return { cat: c, sub: null };
+    try {
+      const g = CRM.quick && CRM.quick.guessCategory ? CRM.quick.guessCategory('expense', 'подарунок', null) : null;
+      if (g && g.cat) return { cat: g.cat, sub: g.sub || null };
+    } catch (e) { /* без швидкого введення */ }
+    const other = cats.find((x) => U.normalize(x.name) === 'інше') || cats[cats.length - 1];
+    return other ? { cat: other, sub: null } : null;
+  }
+  const parseAmount = (s) => {
+    const n = Number(String(s == null ? '' : s).replace(/[\s  ₴]/g, '').replace(',', '.'));
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  };
+  /** Чи можна записати витрату (є рахунки й категорії витрат, бюджет завантажено). */
+  function canGiftExpense() { return !!(CRM.finance && CRM.budget) && giftAccounts().length > 0 && expenseCats().length > 0; }
+  /**
+   * Вікно «Скільки коштував?» після галочки «подаровано».
+   * handlers: { onSaved(txId), onUndo() } — щоб картка людини оновила свій стан.
+   */
+  function openGiftExpense(person, gift, handlers) {
+    const hd = handlers || {};
+    const accounts = giftAccounts();
+    const cats = expenseCats();
+    if (!accounts.length || !cats.length) return null;
+    const acc0 = giftDefaultAccount(accounts);
+    const cat0 = giftCategory(cats);
+    const amountIn = ui.input({ inputmode: 'decimal', value: gift.price ? String(gift.price).replace('.', ',') : '', placeholder: '0', 'aria-label': 'Сума', class: 'input gift-amount', autocomplete: 'off' });
+    const curEl = h('span', { class: 'gift-cur subtle' });
+    const fAmount = ui.field({ label: 'Скільки коштував', required: true, input: h('div', { class: 'gift-amount-row' }, amountIn, curEl) });
+    const accSel = h('select', { class: 'select gift-account', 'aria-label': 'Рахунок' },
+      accounts.map((a) => h('option', { value: a.id, selected: acc0 && a.id === acc0.id }, a.name + (a.currency !== 'UAH' ? ` (${a.currency})` : ''))));
+    const showCur = () => { const a = accounts.find((x) => x.id === accSel.value); curEl.textContent = a ? a.currency : ''; };
+    accSel.addEventListener('change', showCur);
+    showCur();
+    const catSel = h('select', { class: 'select gift-cat', 'aria-label': 'Категорія' });
+    cats.forEach((c) => {
+      catSel.appendChild(h('option', { value: c.id + '|', selected: cat0 && cat0.cat.id === c.id && !cat0.sub }, c.name));
+      (c.subcategories || []).forEach((s) => catSel.appendChild(h('option', { value: c.id + '|' + s.id, selected: cat0 && cat0.sub && cat0.sub.id === s.id }, `${c.name} › ${s.name}`)));
+    });
+    const dateIn = ui.dateInput({ value: gift.doneAt || D.today(), clearable: false, ariaLabel: 'Дата витрати' });
+    const comment = `Подарунок: ${gift.text} — ${person.name}`;
+    const body = h('div', { class: 'form-stack gift-form' },
+      h('p', { class: 'modal-text' }, `Для: ${person.name}. Запишу витрату в «Бюджет» з коментарем «${comment}».`),
+      fAmount,
+      h('div', { class: 'form-grid' }, ui.field({ label: 'Рахунок', input: accSel }), ui.field({ label: 'Категорія', input: catSel })),
+      ui.field({ label: 'Дата', input: dateIn }));
+    async function add() {
+      const amount = parseAmount(amountIn.value);
+      if (!amount) { fAmount.setError('Вкажи суму, більшу за 0'); amountIn.focus(); return; }
+      const [categoryId, sub] = catSel.value.split('|');
+      const rec = {
+        type: 'expense', amount, accountId: accSel.value, toAccountId: null, toAmount: null,
+        categoryId, subcategoryId: sub || null, date: dateIn.dateValue || D.today(), comment,
+        recurringId: null, recurringDate: null, gift: { personId: person.id, giftId: gift.id }
+      };
+      dlg.close('force');
+      const saved = await CRM.store.save('transactions', rec);
+      try { CRM.finance.ensureRatesFor([saved]); } catch (e) { /* курси підвантажаться пізніше */ }
+      const lastAcc = Object.assign({}, CRM.store.getSetting('budget.lastAccount', {}) || {}, { expense: saved.accountId, any: saved.accountId });
+      CRM.store.setSetting('budget.lastAccount', lastAcc);
+      if (hd.onSaved) hd.onSaved(saved.id, amount);
+      const acc = accounts.find((a) => a.id === saved.accountId);
+      ui.toast(`Витрату додано: ${fmt.money(-amount, acc ? acc.currency : 'UAH', { sign: true })} · ${comment}`, {
+        type: 'success',
+        actions: [
+          { label: 'Змінити', onClick: () => CRM.budget.openTxForm({ id: saved.id }) },
+          { label: 'Скасувати', onClick: async () => { await CRM.store.removeForever('transactions', saved.id); if (hd.onUndo) hd.onUndo(saved.id); } }
+        ]
+      });
+    }
+    amountIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    const dlg = ui.modal({
+      title: 'Подаровано: ' + gift.text, size: 'sm', className: 'gift-modal', body,
+      footer: [
+        ui.button({ label: 'Без витрати', className: 'gift-skip', onClick: () => dlg.close('button') }),
+        ui.button({ label: 'Додати витрату', icon: 'receipt', variant: 'primary', className: 'gift-add', onClick: add })
+      ],
+      initialFocus: amountIn
+    });
+    if (amountIn.value) amountIn.select();
+    return dlg;
+  }
+  /** Витрата подарунка (якщо ще існує й не в Кошику). */
+  function giftTx(g) {
+    if (!g || !g.txId) return null;
+    const t = CRM.store.get('transactions', g.txId);
+    return t && !t.deletedAt ? t : null;
+  }
+  function txMoney(t) {
+    const acc = CRM.store.get('accounts', t.accountId);
+    return fmt.money(t.amount, acc ? acc.currency : 'UAH');
+  }
+
+  // ---------- «Повʼязане»: події, задачі й Google з імʼям людини (доробка 26) ----------
+  const TOKEN_SPLIT = /[^0-9A-Za-zА-ЯҐЄІЇа-яґєії'ʼ’]+/;
+  /**
+   * Перевірка тексту: чи згадано людину — імʼя в будь-якому відмінку або прізвище (з великої літери).
+   * Якщо є інша людина з тим самим імʼям, а в тексті — її прізвище, це не про цю людину.
+   */
+  function mentionMatcher(p) {
+    const w = nameWords(p);
+    if (!w.length) return () => false;
+    const first = U.normalize(w[0]).split('-')[0];
+    if (first.length < 2) return () => false;
+    const firstForms = nameForms(first);
+    const strictCase = AMBIG.has(first);
+    const sur = w.length > 1 ? U.normalize(w[w.length - 1]) : null;
+    const surForms = sur && sur.length >= 3 ? nameForms(sur) : null;
+    const otherSur = new Set();
+    list().forEach((o) => {
+      if (o.id === p.id) return;
+      const ow = nameWords(o);
+      if (ow.length < 2 || U.normalize(ow[0]).split('-')[0] !== first) return;
+      const os = U.normalize(ow[ow.length - 1]);
+      if (os !== sur) nameForms(os).forEach((f) => otherSur.add(f));
+    });
+    const upper = (t) => t[0] !== t[0].toLowerCase();
+    return (text) => {
+      if (!text) return false;
+      let hitFirst = false;
+      let hitSur = false;
+      let hitOther = false;
+      String(text).split(TOKEN_SPLIT).forEach((t) => {
+        if (!t) return;
+        const n = U.normalize(t);
+        if (firstForms.has(n) && (!strictCase || upper(t))) hitFirst = true;
+        if (surForms && surForms.has(n) && upper(t)) hitSur = true;
+        if (otherSur.has(n) && upper(t)) hitOther = true;
+      });
+      return hitSur || (hitFirst && !hitOther);
+    };
+  }
+  /**
+   * Події (власні й Google) і задачі, де згадано людину.
+   * → { next: [...], past: [...] }; пункт: { kind: event|task|gcal, key, date, time, title, done, overdue, series, … }
+   */
+  function related(p) {
+    const T = D.today();
+    const from = D.addDays(T, -REL_PAST);
+    const to = D.addDays(T, REL_NEXT);
+    const m = mentionMatcher(p);
+    const next = [];
+    const past = [];
+    // Власні події (з повторами): для кожної — найближчий майбутній і останній минулий день
+    if (CRM.calendar && CRM.calendar.occurrences) {
+      let occ = [];
+      try { occ = CRM.calendar.occurrences(from, to); } catch (e) { console.error(e); }
+      const nx = new Map();
+      const ps = new Map();
+      occ.forEach((o) => {
+        const ev = o.ev;
+        if (!ev || !(m(ev.title) || m(ev.note))) return;
+        const it = {
+          kind: 'event', key: 'e:' + ev.id, id: ev.id, occ: ev.occ || null, date: o.date,
+          time: ev.allDay ? null : ev.start, title: ev.title || 'Подія', series: !!(ev.repeat || ev.occ)
+        };
+        if (o.date >= T) { if (!nx.has(ev.id) || nx.get(ev.id).date > o.date) nx.set(ev.id, it); }
+        else if (!ps.has(ev.id) || ps.get(ev.id).date < o.date) ps.set(ev.id, it);
+      });
+      nx.forEach((it) => next.push(it));
+      ps.forEach((it) => past.push(it));
+    }
+    // Задачі: активні — у «Найближче», виконані за останні 2 місяці — у «Нещодавно»
+    CRM.store.list('tasks').forEach((t) => {
+      if (!(m(t.title) || m(t.description))) return;
+      const it = { kind: 'task', key: 't:' + t.id, id: t.id, title: t.title || 'Задача', done: !!t.done };
+      if (!t.done) {
+        it.date = t.planDate || t.deadline || null;
+        it.time = t.planDate ? t.planStart || null : t.deadlineTime || null;
+        it.overdue = !!it.date && it.date < T;
+        it.what = t.planDate ? 'план' : t.deadline ? 'дедлайн' : null;
+        next.push(it);
+      } else {
+        it.date = t.completedAt ? D.toKyivDate(t.completedAt) : (t.planDate || t.deadline || null);
+        if (it.date && it.date >= from) past.push(it);
+      }
+    });
+    // Google Календар — лише те, що вже завантажено
+    if (CRM.gcal && CRM.gcal.eventsBetween) {
+      let gs = [];
+      try { gs = CRM.gcal.eventsBetween(from, to); } catch (e) { gs = []; }
+      gs.forEach((e) => {
+        if (!m(e.title)) return;
+        const date = e.allDay ? e.start : D.toKyivDate(e.start);
+        const endDay = e.allDay ? D.addDays(e.end, -1) : D.toKyivDate(new Date(Math.max(Date.parse(e.end) - 1, Date.parse(e.start))));
+        const it = { kind: 'gcal', key: 'g:' + e.cal + ':' + e.id, ev: e, date: endDay >= T && date < T ? T : date, time: e.allDay ? null : (CRM.gcal.hhmm ? CRM.gcal.hhmm(e.start) : null), title: e.title };
+        (endDay >= T ? next : past).push(it);
+      });
+    }
+    const key = (x) => (x.date || '9999-99-99') + ' ' + (x.time || '');
+    next.sort((a, b) => key(a).localeCompare(key(b)) || a.title.localeCompare(b.title, 'uk'));
+    past.sort((a, b) => key(b).localeCompare(key(a)) || a.title.localeCompare(b.title, 'uk'));
+    return { next, past };
+  }
+
+  // ---------- Експорт у .vcf (доробка 28) ----------
+  const vEsc = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+  /** Перенесення довгих рядків vCard: не більше 75 байтів у рядку, продовження — з пробілу. */
+  function vFold(line) {
+    const enc = new TextEncoder();
+    const out = [];
+    let cur = '';
+    let bytes = 0;
+    let limit = 75;
+    for (const ch of line) {
+      const b = enc.encode(ch).length;
+      if (bytes + b > limit) { out.push(cur); cur = ''; bytes = 0; limit = 74; }
+      cur += ch;
+      bytes += b;
+    }
+    out.push(cur);
+    return out.join('\r\n ');
+  }
+  function vDateOut(md, year) {
+    return year ? { params: '', value: `${year}-${md}` } : { params: ';X-APPLE-OMIT-YEAR=1604', value: `1604-${md}` };
+  }
+  /** Люди → текст .vcf (vCard 3.0, UTF-8). Ідеї подарунків, частота й нагадування — не експортуються. */
+  function toVcf(people) {
+    const lines = [];
+    (people || []).forEach((p) => {
+      const w = nameWords(p);
+      const given = w[0] || '';
+      const family = w.length > 1 ? w.slice(1).join(' ') : '';
+      lines.push('BEGIN:VCARD', 'VERSION:3.0', 'PRODID:-//Моя CRM//UK', 'FN:' + vEsc(p.name), `N:${vEsc(family)};${vEsc(given)};;;`);
+      if (p.phone) lines.push('TEL;TYPE=CELL:' + vEsc(p.phone));
+      if (p.email) lines.push('EMAIL;TYPE=INTERNET:' + vEsc(p.email));
+      if (p.bday && validMd(p.bday)) { const d = vDateOut(p.bday, p.bdayYear); lines.push('BDAY' + d.params + ':' + d.value); }
+      let n = 0;
+      (p.dates || []).forEach((x) => {
+        if (!x || !validMd(x.md)) return;
+        n++;
+        const d = vDateOut(x.md, x.year);
+        const title = (x.title || '').trim();
+        lines.push(`item${n}.X-ABDATE${d.params}:${d.value}`, `item${n}.X-ABLabel:` + (/^річниця$/i.test(title) ? '_$!<Anniversary>!$_' : vEsc(title || 'Важлива дата')));
+      });
+      if (tgUser(p.telegram)) lines.push('X-SOCIALPROFILE;TYPE=telegram:https://t.me/' + tgUser(p.telegram));
+      if (igUser(p.instagram)) lines.push('X-SOCIALPROFILE;TYPE=instagram:https://instagram.com/' + igUser(p.instagram));
+      if (p.notes) lines.push('NOTE:' + vEsc(p.notes));
+      lines.push('CATEGORIES:' + vEsc(groupOf(p.group).label), 'END:VCARD');
+    });
+    return lines.map(vFold).join('\r\n') + (lines.length ? '\r\n' : '');
+  }
+  function vcfName(s) { return (String(s || '').replace(/[\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'contact') + '.vcf'; }
+  function downloadVcf(people, fileName) {
+    const blob = new Blob([toVcf(people)], { type: 'text/vcard;charset=utf-8' });
+    U.downloadBlob(blob, fileName);
+  }
+  /** Вікно «Експорт .vcf»: вибрати людей (усі / група / пошук) і зберегти файл. */
+  function openExport() {
+    const all = list();
+    if (!all.length) { ui.toast('Ще нікого немає — нема чого зберігати.'); return null; }
+    const rows = all.map((p) => ({ p, on: true }));
+    let q = '';
+    const listEl = h('div', { class: 'ppl-imp-list ppl-exp-list' });
+    const countEl = h('span');
+    const goBtn = ui.button({ label: 'Зберегти', icon: 'download', variant: 'primary', className: 'ppl-exp-go', onClick: run });
+    function updateCount() {
+      const n = rows.filter((r) => r.on).length;
+      countEl.textContent = `Вибрано: ${n} з ${rows.length}`;
+      goBtn.querySelector('.btn-label').textContent = n ? `Зберегти ${n}` : 'Зберегти';
+      goBtn.disabled = !n;
+    }
+    function renderRows() {
+      const vis = rows.filter((r) => !q || U.normalize(r.p.name).includes(U.normalize(q)));
+      ui.mount(listEl, vis.length ? vis.map((r) => {
+        const sub = [groupOf(r.p.group).label, r.p.bday && validMd(r.p.bday) ? 'ДН ' + mdText(r.p.bday, r.p.bdayYear) : null, r.p.phone].filter(Boolean).join(' · ');
+        const box = h('input', { type: 'checkbox', checked: r.on, 'aria-label': r.p.name });
+        box.addEventListener('change', () => { r.on = box.checked; updateCount(); });
+        return h('label', { class: 'ppl-imp-row ppl-exp-row', dataset: { id: r.p.id } }, box,
+          h('span', { class: 'ppl-up-main' }, h('span', { class: 'ppl-up-title' }, r.p.name), h('span', { class: 'ppl-up-sub' }, sub)));
+      }) : h('div', { class: 'subtle ppl-imp-none' }, 'Нікого не знайдено.'));
+      updateCount();
+    }
+    const pick = (fn) => { rows.forEach((r) => { r.on = fn(r); }); renderRows(); };
+    const search = ui.input({ type: 'search', placeholder: 'Пошук…', 'aria-label': 'Пошук людей для експорту', class: 'input ppl-imp-search' });
+    search.addEventListener('input', () => { q = search.value; renderRows(); });
+    const groups = GROUPS.filter((g) => all.some((p) => (p.group || 'other') === g.id));
+    const body = h('div', { class: 'stack ppl-imp ppl-exp' },
+      h('p', { class: 'modal-text' }, 'Вибери, кого зберегти у файл .vcf (його відкриють iPhone, Google Контакти, Outlook). У файл ідуть імʼя, телефон, email, Telegram, Instagram, день народження, інші дати й нотатки. Ідеї подарунків і нагадування лишаються лише в CRM.'),
+      h('div', { class: 'ppl-imp-tools' },
+        h('div', { class: 'btn-row ppl-exp-picks' },
+          ui.button({ label: 'Усі', size: 'sm', className: 'ppl-exp-all', onClick: () => pick(() => true) }),
+          ui.button({ label: 'Нікого', size: 'sm', className: 'ppl-exp-none', onClick: () => pick(() => false) }),
+          groups.length > 1 ? groups.map((g) => ui.button({ label: g.label, size: 'sm', variant: 'ghost', className: 'ppl-exp-group', title: `Лише група «${g.label}»`, onClick: () => pick((r) => (r.p.group || 'other') === g.id) })) : null),
+        search),
+      listEl,
+      h('div', { class: 'ppl-imp-foot' }, h('span', { class: 'subtle' }, countEl)));
+    const dlg = ui.modal({ title: 'Експорт контактів (.vcf)', size: 'lg', className: 'ppl-exp-modal', body, footer: [ui.button({ label: 'Скасувати', onClick: () => dlg.close('button') }), goBtn] });
+    renderRows();
+    function run() {
+      const chosen = rows.filter((r) => r.on).map((r) => r.p);
+      if (!chosen.length) return;
+      const name = `crm-contacts-${D.today()}.vcf`;
+      downloadVcf(chosen, name);
+      dlg.close('force');
+      ui.toast(`Збережено ${fmt.count(chosen.length, ['контакт', 'контакти', 'контактів'])} у файл ${name}`, { type: 'success' });
+    }
+    return dlg;
+  }
+
   // ---------- Рядки ----------
   function giftBadge(n) {
     return n ? h('span', { class: 'ppl-gift', title: 'Ідеї подарунків' }, CRM.icon('gift', { size: 'sm' }), String(n)) : null;
   }
   /** Рядок найближчої дати: число й місяць, хто, скільки років, ідеї подарунків. */
+  /** «Привітати» (у день народження) або «Привітано ✓», якщо вже. */
+  function greetAction(p, small) {
+    const g = greetedAt(p);
+    if (g) return h('span', { class: 'badge badge-success ppl-greeted', title: 'Привітано ' + fmt.dateShort(g) }, CRM.icon('check', { size: 'sm' }), 'Привітано');
+    return ui.button({
+      label: 'Привітати', icon: 'cake', size: 'sm', variant: small ? 'ghost' : 'primary', className: 'ppl-greet-btn',
+      title: 'Готовий текст привітання → «Копіювати» або Telegram', onClick: (ev) => { ev.stopPropagation(); openGreet(p.id); }
+    });
+  }
+  /** Рядок найближчої дати: число й місяць, хто, скільки років, ідеї подарунків; у день народження — «Привітати». */
   function upRow(e) {
     const left = D.diffDays(D.today(), e.date);
-    return h('button', { type: 'button', class: 'ppl-up-row' + (left === 0 ? ' today' : ''), onClick: () => openPerson(e.personId) },
-      h('span', { class: 'ppl-up-date' }, h('b', { class: 'num' }, String(Number(e.date.slice(8)))), h('span', null, CRM.MONTHS_SHORT[Number(e.date.slice(5, 7)) - 1])),
-      h('span', { class: 'ppl-up-main' },
-        h('span', { class: 'ppl-up-title' }, CRM.icon(e.kind === 'birthday' ? 'cake' : 'calendar', { size: 'sm' }), e.kind === 'birthday' ? e.person.name : `${e.person.name} — ${e.ann.title}`),
-        h('span', { class: 'ppl-up-sub' }, [left === 0 ? 'сьогодні' : `${inDays(e.date)} · ${dayShort(e.date)}`, e.yearsText].filter(Boolean).join(' · '))),
-      giftBadge(e.gifts));
+    const open = () => openPerson(e.personId);
+    return h('div', {
+      class: 'ppl-up-row' + (left === 0 ? ' today' : ''), role: 'button', tabIndex: 0, dataset: { id: e.personId }, onClick: open,
+      onKeydown: (ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === ev.currentTarget) { ev.preventDefault(); open(); } }
+    },
+    h('span', { class: 'ppl-up-date' }, h('b', { class: 'num' }, String(Number(e.date.slice(8)))), h('span', null, CRM.MONTHS_SHORT[Number(e.date.slice(5, 7)) - 1])),
+    h('span', { class: 'ppl-up-main' },
+      h('span', { class: 'ppl-up-title' }, CRM.icon(e.kind === 'birthday' ? 'cake' : 'calendar', { size: 'sm' }), e.kind === 'birthday' ? e.person.name : `${e.person.name} — ${e.ann.title}`),
+      h('span', { class: 'ppl-up-sub' }, [left === 0 ? 'сьогодні' : `${inDays(e.date)} · ${dayShort(e.date)}`, e.yearsText].filter(Boolean).join(' · '))),
+    giftBadge(e.gifts),
+    left === 0 && e.kind === 'birthday' ? greetAction(e.person) : null);
   }
   function contactBtn(p, small) {
     return ui.button({
@@ -276,6 +878,7 @@ window.CRM = window.CRM || {};
     fileInput.addEventListener('change', () => { const f = fileInput.files[0]; fileInput.value = ''; if (f) importFile(f); });
     const actions = [
       ui.button({ label: 'Імпорт .vcf', icon: 'upload', className: 'ppl-import-btn', title: 'Завантажити контакти з файлу .vcf (Google Контакти, iPhone)', onClick: () => fileInput.click() }),
+      all.length ? ui.button({ label: 'Експорт .vcf', icon: 'download', className: 'ppl-export-btn', title: 'Зберегти людей у файл .vcf (для iPhone, Google Контактів)', onClick: () => openExport() }) : null,
       ui.button({ label: 'Додати людину', icon: 'plus', variant: 'primary', className: 'ppl-add-btn', onClick: () => openPerson() }),
       fileInput
     ];
@@ -331,8 +934,10 @@ window.CRM = window.CRM || {};
     const p = route && route.params;
     if (p && p.open) {
       const id = p.open;
+      const greet = !!p.greet;
       CRM.router.consumeParam('open');
-      setTimeout(() => openPerson(id), 0);
+      if (greet) CRM.router.consumeParam('greet');
+      setTimeout(() => { if (openPerson(id) && greet) openGreet(id); }, 0);
     }
   }
 
@@ -380,17 +985,28 @@ window.CRM = window.CRM || {};
     st.dates = Array.isArray(st.dates) ? st.dates : [];
     st.gifts = Array.isArray(st.gifts) ? st.gifts : [];
 
+    // Зберігаємо лише поля, змінені в картці (dirty): те, що змінилося деінде (привітання, «Поспілкувались»,
+    // скасування витрати подарунка), не перезаписується старим станом картки.
+    const dirty = new Set();
     let timer = null;
+    let ownSave = false;
     async function persist() {
       clearTimeout(timer);
       timer = null;
-      if (isNew) return;
+      if (isNew || !dirty.size) return;
       const now = CRM.store.get('people', st.id);
       if (!now || now.deletedAt || !st.name.trim()) return;
-      await save(Object.assign({}, now, U.deepClone(st), { name: st.name.trim() }));
+      const patch = {};
+      dirty.forEach((k) => { patch[k] = U.deepClone(st[k]); });
+      if ('name' in patch) patch.name = st.name.trim();
+      dirty.clear();
+      ownSave = true;
+      try { await save(Object.assign({}, now, patch)); } finally { ownSave = false; }
     }
-    function changed() {
+    function changed(...keys) {
+      keys.forEach((k) => dirty.add(k));
       renderInfo();
+      renderGreet();
       if (isNew) return;
       clearTimeout(timer);
       timer = setTimeout(persist, 400);
@@ -399,17 +1015,20 @@ window.CRM = window.CRM || {};
     // Імʼя й група
     const nameIn = ui.input({ value: st.name, maxlength: 100, placeholder: 'Імʼя, напр. Марта Коваленко', 'aria-label': 'Імʼя' });
     const fName = ui.field({ label: 'Імʼя', input: nameIn, required: true });
+    let relTimer = null;
     nameIn.addEventListener('input', () => {
       st.name = nameIn.value;
       if (!st.name.trim()) { fName.setError('Імʼя не може бути порожнім'); return; }
       if (!isNew) dlg.setTitle(st.name.trim());
-      changed();
+      changed('name');
+      clearTimeout(relTimer);
+      relTimer = setTimeout(renderRelated, 350);
     });
     const groupSeg = h('div', { class: 'segmented ppl-groups', role: 'radiogroup', 'aria-label': 'Група' });
     function renderGroups() {
       ui.mount(groupSeg, GROUPS.map((g) => h('button', {
         type: 'button', role: 'radio', class: g.id === st.group ? 'active' : '', 'aria-checked': g.id === st.group ? 'true' : 'false', dataset: { group: g.id },
-        onClick: () => { st.group = g.id; renderGroups(); changed(); }
+        onClick: () => { st.group = g.id; renderGroups(); changed('group'); }
       }, g.label)));
     }
     renderGroups();
@@ -422,26 +1041,53 @@ window.CRM = window.CRM || {};
       const n = st.bdayYear ? D.parse(d).y - st.bdayYear : null;
       info.textContent = `Наступний: ${dayShort(d)} (${inDays(d)})` + (n != null && n > 0 ? ` — виповниться ${n}` : '');
     }
-    const bday = mdPicker(st.bday, st.bdayYear, 'День народження', (md, y) => { st.bday = md; st.bdayYear = md ? y : null; changed(); });
+    const bday = mdPicker(st.bday, st.bdayYear, 'День народження', (md, y) => { st.bday = md; st.bdayYear = md ? y : null; changed('bday', 'bdayYear'); });
     renderInfo();
+
+    // «Привітати» і звертання (доробка 25)
+    const greetNameIn = ui.input({ value: st.greetName || '', maxlength: 60, 'aria-label': 'Як звертатися', class: 'input ppl-greet-name' });
+    greetNameIn.addEventListener('input', () => { st.greetName = greetNameIn.value.trim(); changed('greetName'); });
+    const greetBox = h('div', { class: 'ppl-greet-row' });
+    function renderGreet() {
+      const auto = autoAddress(st);
+      greetNameIn.placeholder = auto ? `${auto} (автоматично)` : 'Напр., Марточко';
+      if (isNew || !st.bday || !validMd(st.bday)) { greetBox.hidden = true; ui.mount(greetBox); return; }
+      greetBox.hidden = false;
+      const occ = greetOcc(st);
+      const g = greetedAt(st, occ);
+      const today = occ && occ.left === 0;
+      ui.mount(greetBox,
+        ui.button({
+          label: 'Привітати', icon: 'cake', size: 'sm', variant: today && !g ? 'primary' : null, className: 'ppl-greet-btn',
+          title: 'Готовий текст привітання → «Копіювати», Telegram або «Надіслати…»',
+          onClick: async () => { await persist(); openGreet(st.id); }
+        }),
+        h('span', { class: 'subtle ppl-greet-note' + (g ? ' greeted' : '') },
+          g ? `Привітано ${fmt.dateShort(g)}` : today ? 'Сьогодні день народження!' : 'Готовий текст → «Копіювати» або Telegram'));
+    }
+
+    // Своє нагадування (доробка 27)
+    const remindSel = h('select', { class: 'select ppl-remind', 'aria-label': 'Нагадувати про день народження й дати' },
+      REMINDS.map((r) => h('option', { value: String(r.v), selected: r.v === remindOf(st) }, r.label)));
+    remindSel.addEventListener('change', () => { st.remindDays = Number(remindSel.value); changed('remindDays'); });
 
     // Контакти
     const contactField = (key, label, ph, mode) => {
       const inp = ui.input({ value: st[key] || '', maxlength: 120, placeholder: ph, 'aria-label': label, inputmode: mode || null, dataset: { field: key } });
-      inp.addEventListener('input', () => { st[key] = inp.value.trim(); changed(); });
+      inp.addEventListener('input', () => { st[key] = inp.value.trim(); changed(key); });
       return ui.field({ label, input: inp });
     };
 
     // Спілкування
     const freqSel = h('select', { class: 'select ppl-freq', 'aria-label': 'Як часто спілкуватися' },
       FREQS.map((f) => h('option', { value: f.v == null ? '' : String(f.v), selected: f.v === (st.freq || null) }, f.label)));
-    freqSel.addEventListener('change', () => { st.freq = freqSel.value ? Number(freqSel.value) : null; changed(); renderContact(); });
+    freqSel.addEventListener('change', () => { st.freq = freqSel.value ? Number(freqSel.value) : null; changed('freq'); renderContact(); });
     const lastIn = ui.dateInput({
       value: st.lastContact, placeholder: 'Ще не позначено', ariaLabel: 'Коли востаннє спілкувались',
       onChange: (v) => {
         if (v && v > D.today()) { lastIn.dateValue = st.lastContact; ui.toast('Дата спілкування не може бути в майбутньому', { type: 'error' }); return; }
         st.lastContact = v || null;
-        changed();
+        changed('lastContact');
         renderContact();
       }
     });
@@ -454,12 +1100,56 @@ window.CRM = window.CRM || {};
     renderContact();
     const todayBtn = ui.button({
       label: 'Сьогодні', icon: 'chat', size: 'sm', className: 'ppl-today-btn', title: 'Поспілкувались сьогодні',
-      onClick: () => { st.lastContact = D.today(); lastIn.dateValue = st.lastContact; changed(); renderContact(); }
+      onClick: () => { st.lastContact = D.today(); lastIn.dateValue = st.lastContact; changed('lastContact'); renderContact(); }
     });
     const lastWrap = h('div', { class: 'ppl-last' }, lastIn, todayBtn);
 
-    // Ідеї подарунків
+    // Ідеї подарунків (+ орієнтовна ціна; «подаровано» → витрата в Бюджеті — доробка 24)
     const giftsBox = h('div', { class: 'ppl-gifts' });
+    async function toggleGift(g) {
+      if (!g.done) {
+        g.done = true;
+        g.doneAt = D.today();
+        changed('gifts');
+        renderGifts();
+        if (isNew || !canGiftExpense()) return;
+        await persist();
+        const person = Object.assign({}, st, { name: st.name.trim() });
+        openGiftExpense(person, g, {
+          onSaved: (txId, amount) => { setGift(g.id, { txId, price: g.price || amount }); },
+          onUndo: () => { setGift(g.id, { txId: null }); }
+        });
+        return;
+      }
+      const tx = giftTx(g);
+      if (tx) {
+        const del = await ui.confirm({
+          title: 'Повернути ідею подарунка?',
+          message: `До неї привʼязано витрату «${tx.comment || 'Подарунок'}» (${txMoney(tx)}). Видалити й витрату? Вона перейде в Кошик.`,
+          confirmText: 'Видалити витрату', cancelText: 'Лишити витрату', danger: true
+        });
+        if (del) {
+          const batch = await CRM.store.softDelete('transactions', tx.id);
+          ui.toast('Витрату на подарунок — у Кошику', { action: { label: 'Скасувати', onClick: async () => { await CRM.store.restoreBatch(batch); setGift(g.id, { txId: tx.id, done: true, doneAt: g.doneAt || D.today() }); } } });
+        }
+      }
+      g.done = false;
+      g.doneAt = null;
+      g.txId = null;
+      changed('gifts');
+      renderGifts();
+    }
+    /** Змінити ідею: у картці (якщо відкрита) або одразу в збереженому записі. */
+    async function setGift(giftId, fields) {
+      if (dlg.isOpen) {
+        const g = st.gifts.find((x) => x.id === giftId);
+        if (g) { Object.assign(g, fields); changed('gifts'); renderGifts(); await persist(); }
+        return;
+      }
+      const now = get(st.id);
+      if (!now) return;
+      await save(Object.assign({}, now, { gifts: (now.gifts || []).map((x) => (x.id === giftId ? Object.assign({}, x, fields) : x)) }));
+    }
     function renderGifts(focusNew) {
       const order = st.gifts.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
       const addIn = ui.input({ placeholder: 'Додати ідею подарунка… (Enter)', maxlength: 200, 'aria-label': 'Нова ідея подарунка', class: 'input ppl-gift-add' });
@@ -468,25 +1158,45 @@ window.CRM = window.CRM || {};
         e.preventDefault();
         const v = addIn.value.trim();
         if (!v) return;
-        st.gifts.push({ id: U.uid(), text: v, done: false, doneAt: null });
-        changed();
+        st.gifts.push({ id: U.uid(), text: v, done: false, doneAt: null, price: null, txId: null });
+        changed('gifts');
         renderGifts(true);
       });
       ui.mount(giftsBox,
         order.map((g) => {
           const text = h('input', { class: 'check-text' + (g.done ? ' done' : ''), value: g.text, maxlength: 200, 'aria-label': 'Ідея подарунка' });
-          text.addEventListener('change', () => { const v = text.value.trim(); if (!v) { text.value = g.text; return; } g.text = v; changed(); });
+          text.addEventListener('change', () => { const v = text.value.trim(); if (!v) { text.value = g.text; return; } g.text = v; changed('gifts'); });
           text.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
-          return h('div', { class: 'check-item ppl-gift-item' + (g.done ? ' done' : '') },
+          let side = null;
+          if (g.done) {
+            const tx = giftTx(g);
+            side = h('span', { class: 'subtle ppl-gift-when' }, 'подаровано' + (g.doneAt ? ' ' + fmt.dateShort(g.doneAt) : ''),
+              tx ? [' · ', h('button', { type: 'button', class: 'link-btn ppl-gift-tx', title: 'Відкрити витрату в Бюджеті', onClick: () => CRM.budget.openTxForm({ id: tx.id }) }, txMoney(tx))] : null);
+          } else {
+            const price = h('input', {
+              class: 'input ppl-gift-price', inputmode: 'decimal', maxlength: 12, placeholder: 'ціна', 'aria-label': 'Орієнтовна ціна, ₴', title: 'Орієнтовна ціна, ₴ — підставиться у витрату, коли позначиш «подаровано»',
+              value: g.price ? String(g.price).replace('.', ',') : ''
+            });
+            price.addEventListener('change', () => {
+              const v = price.value.trim();
+              const n = v ? parseAmount(v) : null;
+              if (v && !n) { price.value = g.price ? String(g.price).replace('.', ',') : ''; return; }
+              g.price = n;
+              changed('gifts');
+            });
+            price.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); price.blur(); } });
+            side = h('span', { class: 'ppl-gift-price-wrap' }, price, h('span', { class: 'subtle' }, '₴'));
+          }
+          return h('div', { class: 'check-item ppl-gift-item' + (g.done ? ' done' : ''), dataset: { gift: g.id } },
             h('button', {
               type: 'button', class: 'task-check small' + (g.done ? ' checked' : ''), role: 'checkbox', 'aria-checked': g.done ? 'true' : 'false',
               title: g.done ? 'Подаровано — натисни, щоб повернути' : 'Позначити подарованим', 'aria-label': g.done ? 'Повернути ідею' : 'Позначити подарованим',
-              onClick: () => { g.done = !g.done; g.doneAt = g.done ? D.today() : null; changed(); renderGifts(); }
+              onClick: () => toggleGift(g)
             }, CRM.icon('check', { size: 'sm' })),
             text,
-            g.done && g.doneAt ? h('span', { class: 'subtle ppl-gift-when' }, 'подаровано ' + fmt.dateShort(g.doneAt)) : null,
+            side,
             h('button', { type: 'button', class: 'check-del', 'aria-label': 'Видалити ідею', title: 'Видалити',
-              onClick: () => { st.gifts = st.gifts.filter((x) => x.id !== g.id); changed(); renderGifts(); } }, CRM.icon('x', { size: 'sm' })));
+              onClick: () => { st.gifts = st.gifts.filter((x) => x.id !== g.id); changed('gifts'); renderGifts(); } }, CRM.icon('x', { size: 'sm' })));
         }),
         addIn);
       if (focusNew) addIn.focus();
@@ -499,33 +1209,97 @@ window.CRM = window.CRM || {};
       ui.mount(datesBox,
         st.dates.map((x) => {
           const t = ui.input({ value: x.title || '', maxlength: 80, placeholder: 'Напр., Річниця весілля', 'aria-label': 'Назва дати', class: 'input ppl-date-title' });
-          t.addEventListener('input', () => { x.title = t.value.trim(); changed(); });
-          const pk = mdPicker(x.md, x.year, 'Дата', (md, y) => { x.md = md; x.year = md ? y : null; changed(); });
+          t.addEventListener('input', () => { x.title = t.value.trim(); changed('dates'); });
+          const pk = mdPicker(x.md, x.year, 'Дата', (md, y) => { x.md = md; x.year = md ? y : null; changed('dates'); });
           return h('div', { class: 'ppl-date-row' },
             h('div', { class: 'ppl-date-line' }, t,
               h('button', { type: 'button', class: 'btn btn-ghost btn-icon btn-sm', 'aria-label': 'Видалити дату', title: 'Видалити',
-                onClick: () => { st.dates = st.dates.filter((y) => y.id !== x.id); changed(); renderDates(); } }, CRM.icon('trash', { size: 'sm' }))),
+                onClick: () => { st.dates = st.dates.filter((y) => y.id !== x.id); changed('dates'); renderDates(); } }, CRM.icon('trash', { size: 'sm' }))),
             pk.el, pk.err);
         }),
         ui.button({ label: 'Додати дату', icon: 'plus', size: 'sm', className: 'ppl-add-date', onClick: () => { st.dates.push({ id: U.uid(), title: '', md: null, year: null }); renderDates(); const ins = datesBox.querySelectorAll('.ppl-date-title'); if (ins.length) ins[ins.length - 1].focus(); } }));
     }
     renderDates();
 
+    // Повʼязане: події, задачі й Google з імʼям людини (доробка 26)
+    const relBox = h('div', { class: 'ppl-rel' });
+    let relAll = { next: false, past: false };
+    function relRow(it) {
+      const T = D.today();
+      const parts = [];
+      if (it.date) {
+        parts.push((it.date === T ? 'Сьогодні' : it.date === D.addDays(T, 1) ? 'Завтра' : it.date === D.addDays(T, -1) ? 'Учора' : dayShort(it.date)) + (it.time ? ', ' + it.time : ''));
+      }
+      if (it.kind === 'task') parts.push(it.done ? 'задача · виконано' : it.what === 'план' ? 'задача в плані дня' : it.what ? `задача · ${it.what}` : 'задача без дати');
+      else if (it.kind === 'gcal') parts.push('Google Календар');
+      else parts.push(it.series ? 'Календар · повторюється' : 'Календар');
+      const icon = it.kind === 'task' ? 'tasks' : it.kind === 'gcal' ? 'external' : it.series ? 'repeat' : 'calendar';
+      const open = () => {
+        if (it.kind === 'gcal') { CRM.gcal.openEvent(it.ev); return; }
+        persist();
+        dlg.close('force');
+        if (it.kind === 'task') CRM.tasks.openTask(it.id);
+        else CRM.calendar.go('day', it.date, { open: it.id, occ: it.occ || null });
+      };
+      return h('button', { type: 'button', class: 'ppl-rel-row' + (it.done ? ' done' : '') + (it.overdue ? ' overdue' : ''), dataset: { kind: it.kind, key: it.key }, onClick: open },
+        h('span', { class: 'ppl-rel-ico' }, CRM.icon(icon, { size: 'sm' })),
+        h('span', { class: 'ppl-up-main' },
+          h('span', { class: 'ppl-rel-title' }, it.title),
+          h('span', { class: 'ppl-up-sub' }, parts.join(' · '))));
+    }
+    function relGroup(label, cls, items, which) {
+      if (!items.length) return null;
+      const shown = relAll[which] ? items : items.slice(0, REL_SHOW);
+      return h('div', { class: 'ppl-rel-group ' + cls },
+        h('div', { class: 'ppl-rel-head' }, label, h('span', { class: 'tab-count' }, String(items.length))),
+        shown.map(relRow),
+        items.length > shown.length ? h('button', { type: 'button', class: 'link-btn ppl-rel-more', onClick: () => { relAll[which] = true; renderRelated(); } }, `Показати всі (${items.length})`) : null);
+    }
+    function renderRelated() {
+      if (!relBox.isConnected && dlg && !dlg.isOpen) return;
+      if (isNew || !st.name.trim()) {
+        ui.mount(relBox, h('p', { class: 'subtle ppl-hint' }, 'Після додавання тут зʼявляться події й задачі, де згадано цю людину.'));
+        return;
+      }
+      const r = related(Object.assign({}, st, { name: st.name.trim() }));
+      const f = firstName(st);
+      const evBtn = CRM.calendar && CRM.calendar.openEditor ? ui.button({
+        label: 'Подія', icon: 'plus', size: 'sm', className: 'ppl-rel-event', title: `Нова подія «Зустріч з ${withName(st)}»`,
+        onClick: () => {
+          const hh = D.kyivParts().hh;
+          CRM.calendar.openEditor(null, { title: `Зустріч з ${withName(st)}`, date: D.today(), allDay: false, start: D.pad(Math.min(23, hh + 1)) + ':00', dur: 60 });
+        }
+      }) : null;
+      const taskBtn = CRM.tasks && CRM.tasks.openNew ? ui.button({
+        label: 'Задача', icon: 'plus', size: 'sm', className: 'ppl-rel-task', title: `Нова задача «${f}: …»`,
+        onClick: () => CRM.tasks.openNew({ title: f + ': ' })
+      }) : null;
+      ui.mount(relBox,
+        r.next.length || r.past.length
+          ? [relGroup('Найближче', 'ppl-rel-next', r.next, 'next'), relGroup('Нещодавно', 'ppl-rel-past', r.past, 'past')]
+          : h('p', { class: 'subtle ppl-hint ppl-rel-none' }, `Подій і задач з «${f}» за 2 місяці назад і 3 вперед немає. Пиши імʼя в назві — напр., «Зустріч з ${withName(st)}».`),
+        h('div', { class: 'btn-row ppl-rel-add' }, evBtn, taskBtn));
+    }
+
     const notesIn = ui.textarea({ value: st.notes || '', rows: 3, maxlength: 4000, placeholder: 'Що любить, про що говорили, важливе…', 'aria-label': 'Нотатки' });
-    notesIn.addEventListener('input', () => { st.notes = notesIn.value; changed(); });
+    notesIn.addEventListener('input', () => { st.notes = notesIn.value; changed('notes'); });
 
     const section = (icon, title, ...content) => h('section', { class: 'ppl-sec' }, h('h3', { class: 'ppl-sec-title' }, CRM.icon(icon, { size: 'sm' }), title), content);
     const body = h('div', { class: 'form-stack ppl-editor' },
       fName,
       h('div', { class: 'field' }, h('div', { class: 'field-label' }, 'Група'), groupSeg),
-      section('cake', 'День народження', bday.el, bday.err, info),
+      section('cake', 'День народження', bday.el, bday.err, info, greetBox,
+        h('div', { class: 'form-grid ppl-greet-grid' },
+          ui.field({ label: 'Як звертатися', input: greetNameIn, hint: 'Для «Привітати». Порожньо — автоматично.' }),
+          ui.field({ label: 'Нагадувати', input: remindSel, hint: 'Про день народження й інші дати.' }))),
       section('phone', 'Контакти', h('div', { class: 'form-grid' },
         contactField('phone', 'Телефон', '+380…', 'tel'), contactField('telegram', 'Telegram', '@username'),
         contactField('instagram', 'Instagram', '@username'), contactField('email', 'Email', 'name@example.com', 'email'))),
       section('chat', 'Спілкування', ui.field({ label: 'Як часто хочу спілкуватися', input: freqSel }),
         h('div', { class: 'field' }, h('div', { class: 'field-label' }, 'Востаннє спілкувались'), lastWrap), contactNote),
-      section('gift', 'Ідеї подарунків', giftsBox),
-      section('calendar', 'Інші важливі дати', h('p', { class: 'subtle ppl-hint' }, 'Річниця, іменини тощо — щороку в Календарі з нагадуванням за тиждень і в день.'), datesBox),
+      section('link', 'Повʼязане', relBox),
+      section('gift', 'Ідеї подарунків', h('p', { class: 'subtle ppl-hint' }, 'Ціна — орієнтовна. Позначиш «подаровано» — CRM запропонує записати витрату в «Бюджет».'), giftsBox),
+      section('calendar', 'Інші важливі дати', h('p', { class: 'subtle ppl-hint' }, 'Річниця, іменини тощо — щороку в Календарі з нагадуванням (як вибрано вище в «Нагадувати»).'), datesBox),
       section('pencil', 'Нотатки', notesIn));
 
     const footer = h('div', { class: 'ppl-foot' });
@@ -538,6 +1312,10 @@ window.CRM = window.CRM || {};
       }
       ui.mount(footer,
         ui.button({ label: 'Видалити', icon: 'trash', variant: 'danger-ghost', className: 'ppl-delete', onClick: remove }),
+        ui.button({
+          label: 'Зберегти контакт', icon: 'download', variant: 'ghost', size: 'sm', className: 'ppl-vcf-one', title: 'Зберегти цю людину у файл .vcf (для iPhone, Google Контактів)',
+          onClick: async () => { await persist(); const p = get(st.id); if (p) { downloadVcf([p], vcfName(p.name)); ui.toast(`Збережено у файл ${vcfName(p.name)}`, { type: 'success' }); } }
+        }),
         h('span', { class: 'grow' }),
         h('span', { class: 'subtle ppl-autosave' }, 'Зміни зберігаються автоматично'));
     }
@@ -552,10 +1330,14 @@ window.CRM = window.CRM || {};
       if (!validate()) { nameIn.focus(); return; }
       if (!canSave()) return;
       st.name = st.name.trim();
-      await save(U.deepClone(st));
+      ownSave = true;
+      try { await save(U.deepClone(st)); } finally { ownSave = false; }
+      dirty.clear();
       isNew = false;
       dlg.setTitle(st.name);
       renderFooter();
+      renderGreet();
+      renderRelated();
       ui.toast(`Додано: ${st.name}`, { type: 'success' });
     }
     async function remove() {
@@ -572,10 +1354,38 @@ window.CRM = window.CRM || {};
     }
     renderFooter();
 
+    // Зміни, зроблені деінде (привітання, «Поспілкувались», інший пристрій), — у поля, яких картка не змінювала
+    function onPeople() {
+      if (ownSave || isNew) return;
+      const now = CRM.store.get('people', st.id);
+      if (!now || now.deletedAt) return;
+      const was = U.deepClone(st);
+      ['greeted', 'lastContact', 'greetName', 'gifts', 'freq', 'remindDays'].forEach((k) => { if (!dirty.has(k)) st[k] = U.deepClone(now[k]); });
+      if (!st.gifts || !Array.isArray(st.gifts)) st.gifts = [];
+      if (was.lastContact !== st.lastContact) { lastIn.dateValue = st.lastContact; renderContact(); }
+      if ((was.greetName || '') !== (st.greetName || '') && document.activeElement !== greetNameIn) greetNameIn.value = st.greetName || '';
+      if (JSON.stringify(was.gifts) !== JSON.stringify(st.gifts) && !giftsBox.contains(document.activeElement)) renderGifts();
+      if (was.freq !== st.freq) { freqSel.value = st.freq ? String(st.freq) : ''; renderContact(); }
+      if (was.remindDays !== st.remindDays) remindSel.value = String(remindOf(st));
+      renderGreet();
+    }
+    const offPeople = CRM.store.on(['people'], onPeople);
+    const offRel = CRM.store.on(['events', 'tasks', 'transactions'], () => { renderRelated(); if (!giftsBox.contains(document.activeElement)) renderGifts(); });
+    const onGcal = () => renderRelated();
+    document.addEventListener('crm:gcalchange', onGcal);
+
     const dlg = ui.drawer({
       title: isNew ? 'Нова людина' : st.name, body, footer, className: 'ppl-drawer',
-      onClose: () => { if (timer) persist(); }
+      onClose: () => {
+        if (timer) persist();
+        clearTimeout(relTimer);
+        offPeople();
+        offRel();
+        document.removeEventListener('crm:gcalchange', onGcal);
+      }
     });
+    renderGreet();
+    renderRelated();
     if (isNew) setTimeout(() => nameIn.focus(), 0);
     return dlg;
   }
@@ -674,8 +1484,11 @@ window.CRM = window.CRM || {};
       };
       const tg = find(/t\.me\/|telegram/i, /telegram/);
       const ig = find(/instagram\.com/i, /instagram/);
+      // CATEGORIES — група (так пише експорт CRM: «Сімʼя», «Друзі»…)
+      const cats = first('CATEGORIES').split(',').map((x) => U.normalize(x));
+      const grp = GROUPS.find((g) => cats.includes(U.normalize(g.label)));
       return {
-        name: name.replace(/\s+/g, ' ').trim(), phone: tel.trim(), email: first('EMAIL'),
+        name: name.replace(/\s+/g, ' ').trim(), phone: tel.trim(), email: first('EMAIL'), group: grp ? grp.id : null,
         telegram: tg ? '@' + tgUser(tg.replace(/^x-apple:|^telegram:/i, '')) : '', instagram: ig ? '@' + igUser(ig) : '',
         bday: bd ? bd.md : null, bdayYear: bd ? bd.year : null, dates, notes: first('NOTE')
       };
@@ -761,7 +1574,7 @@ window.CRM = window.CRM || {};
           return;
         }
         const rec = {
-          id: U.uid(), name: c.name, group, bday: c.bday, bdayYear: c.bdayYear, phone: c.phone, telegram: c.telegram, instagram: c.instagram,
+          id: U.uid(), name: c.name, group: c.group || group, bday: c.bday, bdayYear: c.bdayYear, phone: c.phone, telegram: c.telegram, instagram: c.instagram,
           email: c.email, notes: c.notes, dates: c.dates, gifts: [], freq: null, lastContact: null, source: 'vcf'
         };
         created.push(rec);
@@ -809,25 +1622,38 @@ window.CRM = window.CRM || {};
 
   // Розклад на сьогодні (Головна): дні народження й дати
   if (CRM.home && CRM.home.addScheduleSource) {
-    CRM.home.addScheduleSource((T) => datesBetween(T, T).map((e) => ({
-      time: null, kind: 'people', icon: 'cake', cls: 'ico-goal', title: e.title,
-      sub: [e.yearsText, e.gifts ? `ідей подарунків: ${e.gifts}` : null].filter(Boolean).join(' · ') || 'Люди',
-      onClick: () => openPerson(e.personId)
-    })));
+    CRM.home.addScheduleSource((T) => datesBetween(T, T).map((e) => {
+      const bd = e.kind === 'birthday';
+      const g = bd ? greetedAt(e.person) : null;
+      return {
+        time: null, kind: 'people', icon: 'cake', cls: 'ico-goal', title: e.title,
+        sub: [e.yearsText, e.gifts ? `ідей подарунків: ${e.gifts}` : null].filter(Boolean).join(' · ') || 'Люди',
+        // День народження: клік — «Привітати» (звідти є й «Картка людини»)
+        badge: bd ? (g ? { cls: 'badge-success', text: 'Привітано' } : { cls: 'badge-accent', text: 'Привітати' }) : null,
+        onClick: () => (bd && !g ? openGreet(e.personId) : openPerson(e.personId))
+      };
+    }));
   }
 
   // Нагадування: за 7 днів (або ближче, якщо CRM відкрили пізніше) і в день; «час написати»
   CRM.notify.addRule(() => {
     const out = [];
     const T = D.today();
-    upcoming(SOON_DAYS).forEach((e) => {
+    upcoming(MAX_REMIND).forEach((e) => {
       const left = D.diffDays(T, e.date);
+      const lead = remindOf(e.person);
+      if (lead < 0 || left > lead) return;
       const name = e.person.name;
       const what = e.kind === 'birthday' ? `день народження: ${name}` : `${e.ann.title} — ${name}`;
       const gifts = e.gifts ? `ідей подарунків: ${e.gifts}` : null;
       const target = { store: 'people', id: e.personId };
       if (left === 0) {
-        out.push({ key: `people:today:${e.personId}:${e.ann.id}:${e.date}`, kind: 'people', title: `Сьогодні ${what}`, text: [e.yearsText, gifts].filter(Boolean).join(' · '), target });
+        const bd = e.kind === 'birthday';
+        out.push({
+          key: `people:today:${e.personId}:${e.ann.id}:${e.date}`, kind: 'people', title: `Сьогодні ${what}`,
+          text: [e.yearsText, gifts, bd ? 'натисни, щоб привітати' : null].filter(Boolean).join(' · '),
+          target: bd ? { route: 'people', params: { open: e.personId, greet: '1' } } : target
+        });
       } else {
         const when = left === 1 ? 'Завтра' : `Через ${fmt.count(left, ['день', 'дні', 'днів'])}`;
         out.push({ key: `people:soon:${e.personId}:${e.ann.id}:${e.date}`, kind: 'people', title: `${when} ${what}`, text: [dayShort(e.date), e.yearsText, gifts].filter(Boolean).join(' · '), target });
@@ -881,7 +1707,7 @@ window.CRM = window.CRM || {};
         add(b, ['я', 'ю', 'ем', 'еві']);                                // дідусь → дідуся, дідусем
       } else if (/[бвгґджзклмнпрстфхцчшщ]/.test(last)) {
         add(w, ['а', 'у', 'ом', 'ові', 'е', 'я', 'ю', 'ем', 'еві']);     // Іван → Івана, Ігор → Ігоря
-        const m = /^(.*)і([рн])$/.exec(w);                              // Федір → Федора
+        const m = /^(.*)і([рнв])$/.exec(w);                             // Федір → Федора, Яків → Якова
         if (m) add(m[1] + 'о' + m[2], ['а', 'у', 'ом', 'ові', 'е']);
         if (/ов$/.test(w)) add(w, ['і', "'ю"]);                          // Любов → Любові
       }
@@ -941,9 +1767,68 @@ window.CRM = window.CRM || {};
     }, fields || {});
   }
 
+  // ---------- «Мій кабінет» → «Привітання»: свої шаблони (синхронізуються) ----------
+  async function saveTemplates(list) {
+    const templates = list.map((t) => String(t || '').trim()).filter(Boolean).slice(0, MAX_TEMPLATES);
+    await CRM.store.setSetting('greetings', Object.assign({}, CRM.store.getSetting('greetings', null) || {}, { templates }));
+  }
+  function settingsBlock() {
+    const listEl = h('div', { class: 'greet-tpls' });
+    function render() {
+      const tpls = ownTemplates();
+      const addIn = ui.textarea({ rows: 3, maxlength: 1000, placeholder: 'Напр.: {імʼя}, з днем народження! …', 'aria-label': 'Новий шаблон привітання', class: 'textarea greet-tpl-new' });
+      const err = h('div', { class: 'greet-tpl-err', role: 'alert' });
+      const addBtn = ui.button({
+        label: 'Додати шаблон', icon: 'plus', size: 'sm', className: 'greet-tpl-add',
+        onClick: async () => {
+          const v = addIn.value.trim();
+          if (!v) { err.textContent = 'Напиши текст шаблону'; addIn.focus(); return; }
+          if (tpls.length >= MAX_TEMPLATES) { err.textContent = `Не більше ${MAX_TEMPLATES} шаблонів`; return; }
+          await saveTemplates(tpls.concat(v));
+          ui.toast('Шаблон привітання додано', { type: 'success' });
+          render();
+        }
+      });
+      ui.mount(listEl,
+        tpls.map((t, i) => {
+          const area = ui.textarea({ rows: 2, maxlength: 1000, value: t, 'aria-label': `Мій шаблон ${i + 1}`, class: 'textarea greet-tpl-text' });
+          area.addEventListener('change', async () => {
+            const v = area.value.trim();
+            const next = ownTemplates();
+            if (!v) { area.value = next[i] || t; return; }
+            next[i] = v;
+            await saveTemplates(next);
+            ui.toast('Шаблон збережено', { type: 'success' });
+          });
+          return h('div', { class: 'greet-tpl', dataset: { i: String(i) } }, area,
+            h('button', {
+              type: 'button', class: 'btn btn-ghost btn-icon btn-sm greet-tpl-del', 'aria-label': 'Видалити шаблон', title: 'Видалити шаблон',
+              onClick: async () => {
+                const before = ownTemplates();
+                await saveTemplates(before.filter((_, k) => k !== i));
+                render();
+                ui.toast('Шаблон видалено', { action: { label: 'Скасувати', onClick: async () => { await saveTemplates(before); render(); } } });
+              }
+            }, CRM.icon('trash', { size: 'sm' })));
+        }),
+        h('div', { class: 'greet-tpl-addrow' }, addIn, err, addBtn));
+    }
+    render();
+    return h('div', { class: 'setting-row greet-settings', id: 'greet' },
+      h('div', { class: 'setting-text' },
+        h('div', { class: 'setting-title' }, CRM.icon('cake', { size: 'sm' }), 'Привітання з днем народження'),
+        h('div', { class: 'setting-desc' }, 'Кнопка «Привітати» (у день народження — на Головній і в «Людях», завжди — у картці людини) готує текст: спершу твої шаблони, далі 6 готових («Інший текст» перебирає). {імʼя} — місце для звертання: «Марто», «Андрію» або як вписано в картці людини («Як звертатися»). Шаблони синхронізуються між пристроями.'),
+        listEl,
+        h('details', { class: 'greet-builtin' }, h('summary', null, `Готові тексти (${GREETINGS.length})`),
+          h('ol', null, GREETINGS.map((t) => h('li', null, t))))));
+  }
+
   CRM.people = {
-    GROUPS, FREQS, list, get, annual, datesBetween, upcoming, nextAnnual, nextOf, inYear, contactInfo, dueContacts,
+    GROUPS, FREQS, REMINDS, GREETINGS, list, get, annual, datesBetween, upcoming, nextAnnual, nextOf, inYear, contactInfo, dueContacts,
     markContacted, openPerson, openPage, parseVcf, importFile, openImport, homeCard, groupOf, mdText, writeLink,
-    nameForms, guessName, matchPeople, blank, save, canSave: () => !!CRM.db.SCHEMA.people
+    nameForms, guessName, matchPeople, blank, save, canSave: () => !!CRM.db.SCHEMA.people,
+    remindOf, autoAddress, greetAddress, withName, fillGreeting, allTemplates, ownTemplates, greetOcc, greetedAt, tgLink, openGreet,
+    openGiftExpense, giftCategory, mentionMatcher, related, toVcf, openExport, settingsBlock,
+    vocative: (w) => caseWord(w, vocLower), instrumental: (w) => caseWord(w, insLower)
   };
 })(window.CRM);

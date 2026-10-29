@@ -1814,6 +1814,76 @@ body.has-pwa-bar .toast-stack { bottom: calc(var(--pwa-bar-h, 48px) + 28px + env
   .ppl-md .ppl-month { flex: 1; }
 }
 
+/* ---------- Люди — доробки (29.10): подарунок → витрата, «Привітати», «Повʼязане», нагадування, експорт .vcf ---------- */
+.ppl-up-row > .ppl-greet-btn, .ppl-up-row > .ppl-greeted { flex-shrink: 0; }
+.ppl-greeted { display: inline-flex; align-items: center; gap: 3px; }
+.ppl-greeted .icon { width: 13px; height: 13px; }
+.ppl-greet-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ppl-greet-row[hidden] { display: none; }
+.ppl-greet-note { font-size: 12.5px; }
+.ppl-greet-note.greeted { color: var(--success); }
+.ppl-gift-price-wrap { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12.5px; }
+.ppl-gift-price { width: 84px; height: 30px; padding: 0 8px; text-align: right; }
+.ppl-gift-tx, .ppl-rel-more {
+  border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.ppl-gift-tx:hover, .ppl-rel-more:hover { text-decoration-thickness: 2px; }
+.ppl-rel { display: flex; flex-direction: column; gap: 12px; }
+.ppl-rel-group { display: flex; flex-direction: column; gap: 2px; }
+.ppl-rel-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 0 4px 2px; }
+.ppl-rel-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px;
+  border: 0; border-radius: var(--radius); background: transparent; text-align: left; color: inherit; cursor: pointer;
+}
+.ppl-rel-row:hover { background: var(--surface-2); }
+.ppl-rel-ico {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); color: var(--text-2);
+}
+.ppl-rel-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppl-rel-row.done .ppl-rel-title { text-decoration: line-through; color: var(--text-3); }
+.ppl-rel-row.overdue .ppl-up-sub { color: var(--danger); }
+.ppl-rel-more { align-self: flex-start; margin: 2px 8px 0; font-size: 13px; }
+.ppl-rel-none { margin: 0; }
+.ppl-rel-add { flex-wrap: wrap; }
+.greet-when {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius);
+  background: var(--success-soft); color: var(--text); font-size: 13.5px;
+}
+.greet-when .icon { color: var(--success); flex-shrink: 0; }
+.greet-when .grow { flex: 1; min-width: 0; }
+.greet-when .greet-person { flex-shrink: 0; margin: -4px -6px -4px 0; }
+.greet-modal .modal-footer .greet-tg-box { display: contents; }
+.greet-text-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.greet-tools { display: flex; align-items: center; gap: 8px; }
+.greet-count { font-size: 12px; }
+.greet-text { min-height: 112px; }
+.greet-tg-hint { font-size: 12px; }
+.greet-tg-hint:empty, .greet-tg-box:empty { display: none; }
+.greet-modal .modal-footer { flex-wrap: wrap; }
+.greet-settings .setting-text { flex: 1; }
+.greet-tpls { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.greet-tpl { display: flex; align-items: flex-start; gap: 6px; }
+.greet-tpl-text { flex: 1; min-width: 0; }
+.greet-tpl-addrow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.greet-tpl-new { width: 100%; }
+.greet-tpl-err { color: var(--danger); font-size: 12.5px; }
+.greet-tpl-err:empty { display: none; }
+.greet-builtin { margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.greet-builtin summary { cursor: pointer; }
+.greet-builtin ol { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.gift-amount-row { display: flex; align-items: center; gap: 8px; }
+.gift-amount { flex: 1; min-width: 0; }
+.gift-cur { font-size: 13px; }
+.ppl-exp-picks { flex-wrap: wrap; }
+.ppl-foot { flex-wrap: wrap; row-gap: 6px; }
+@media (max-width: 640px) {
+  .ppl-up-row { flex-wrap: wrap; }
+  .ppl-up-row .ppl-up-main { flex-basis: 150px; }
+  .ppl-up-row > .ppl-greet-btn, .ppl-up-row > .ppl-greeted { margin-left: 54px; }
+  .greet-modal .modal-footer .btn { flex: 1 1 auto; }
+}
+
 /* ---------- Звички (js/habits.js) ---------- */
 .hb-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .hb-head-date { font-size: 13px; font-weight: 400; }

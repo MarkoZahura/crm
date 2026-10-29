@@ -298,12 +298,14 @@ window.CRM = window.CRM || {};
     const services = servicesCard();
     const backupBlock = moduleBlock('backup');
     const quickBlock = moduleBlock('quick');
+    const greetBlock = moduleBlock('people');
     ui.mount(container,
       ui.pageHead({ title: 'Мій кабінет', sub: 'Профіль, вигляд і службові налаштування.' }),
       h('div', { class: 'profile-grid' },
         profileCard(),
         appearance,
         quickBlock ? h('section', { class: 'card' }, quickBlock) : null,
+        greetBlock ? h('section', { class: 'card' }, greetBlock) : null,
         h('div', { class: 'section-title' }, 'Службове'),
         services,
         dataCard(backupBlock),
@@ -314,7 +316,7 @@ window.CRM = window.CRM || {};
     document.addEventListener('crm:themechange', onTheme);
     document.addEventListener('crm:notifpermission', onPerm);
     const focus = route && route.params && route.params.focus;
-    if (focus === 'gcal' || focus === 'backup' || focus === 'sync' || focus === 'pwa' || focus === 'quick') {
+    if (focus === 'gcal' || focus === 'backup' || focus === 'sync' || focus === 'pwa' || focus === 'quick' || focus === 'greet') {
       CRM.router.consumeParam('focus');
       requestAnimationFrame(() => {
         const el = document.getElementById(focus);
