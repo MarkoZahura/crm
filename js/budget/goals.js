@@ -237,7 +237,7 @@ window.CRM = window.CRM || {};
     }[tab];
 
     ui.mount(container,
-      h('div', { class: 'toolbar' }, sub, h('div', { class: 'btn-row' }, controls, ui.button({ label: 'Поставити ціль', icon: 'target', onClick: () => openForm() }))),
+      h('div', { class: 'toolbar' }, sub, h('div', { class: 'btn-row' }, controls, ui.button({ label: 'Поставити ціль', icon: 'target', dataset: { hk: 'add' }, onClick: () => openForm() }))),
       list.length
         ? h('div', { class: 'goal-grid' }, list.map(card))
         : h('div', { class: 'card' }, ui.empty({ icon: 'target', title: empty[0], text: empty[1], action: tab === 'active' ? { label: 'Поставити ціль', icon: 'target', onClick: () => openForm() } : null })),

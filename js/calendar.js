@@ -2862,6 +2862,7 @@ window.CRM = window.CRM || {};
     return h('div', { class: 'segmented kal-views', role: 'radiogroup', 'aria-label': 'Перегляд' },
       VIEWS.map((v) => h('button', {
         type: 'button', role: 'radio', class: v.id === view ? 'active' : '', 'aria-checked': v.id === view ? 'true' : 'false',
+        dataset: { hk: 'view-' + v.id },
         onClick: () => { lsSet('crm.cal.view', v.id); go(v.id, anchor); }
       }, v.label)));
   }
@@ -2901,9 +2902,9 @@ window.CRM = window.CRM || {};
     const sub = view === 'month' ? fmt.month(r.monthStart) : rangeText(r.from, r.to);
     const toolbar = h('div', { class: 'kal-toolbar' },
       h('div', { class: 'kal-nav' },
-        ui.button({ icon: 'chevronLeft', iconOnly: true, size: 'sm', title: 'Назад', ariaLabel: 'Попередній період', onClick: () => go(view, stepDate(view, anchor, -1)) }),
-        ui.button({ label: 'Сьогодні', size: 'sm', disabled: isToday && (view === 'week' || anchor === T), onClick: () => go(view, T) }),
-        ui.button({ icon: 'chevronRight', iconOnly: true, size: 'sm', title: 'Вперед', ariaLabel: 'Наступний період', onClick: () => go(view, stepDate(view, anchor, 1)) }),
+        ui.button({ icon: 'chevronLeft', iconOnly: true, size: 'sm', title: 'Назад', ariaLabel: 'Попередній період', dataset: { hk: 'prev' }, onClick: () => go(view, stepDate(view, anchor, -1)) }),
+        ui.button({ label: 'Сьогодні', size: 'sm', disabled: isToday && (view === 'week' || anchor === T), dataset: { hk: 'today' }, onClick: () => go(view, T) }),
+        ui.button({ icon: 'chevronRight', iconOnly: true, size: 'sm', title: 'Вперед', ariaLabel: 'Наступний період', dataset: { hk: 'next' }, onClick: () => go(view, stepDate(view, anchor, 1)) }),
         // Назва періоду — кнопка «Перейти до дати»
         ui.dateInput({
           value: anchor, clearable: false, className: 'kal-range', text: sub, title: 'Перейти до дати', ariaLabel: `${sub}. Перейти до дати`,

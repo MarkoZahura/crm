@@ -2189,3 +2189,67 @@ button.hb-c:hover { box-shadow: 0 0 0 2px var(--hb, var(--accent)); }
   .imp-list { max-height: none; }
   .imp-footer .imp-sum { width: 100%; }
 }
+
+/* ==========================================================================
+   Гарячі клавіші (keys.js, 29.10)
+   ========================================================================== */
+.kb-key { gap: 3px; min-width: 22px; justify-content: center; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.kb-ua { font-size: 9px; font-weight: 500; color: var(--text-3); opacity: .8; line-height: 1; }
+.kb-combo { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.kb-plus { color: var(--text-3); font-size: 11px; }
+.kb-then, .kb-or { color: var(--text-3); font-size: 12px; }
+.kb-or { margin: 0 4px; }
+.kb-word { color: var(--text-2); font-size: 12px; }
+
+/* Вікно довідки */
+.kb-modal .modal-body { display: flex; flex-direction: column; gap: 12px; }
+.kb-top { position: sticky; top: -1px; z-index: 1; background: var(--surface); padding-bottom: 2px; }
+.kb-search { width: 100%; }
+.kb-note { margin: 0; color: var(--text-3); font-size: 13px; }
+.kb-note-off { color: var(--warning); }
+.kb-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; align-items: start; }
+.kb-group[hidden], .kb-row[hidden], .kb-empty[hidden] { display: none; }
+.kb-gtitle { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: none; }
+.kb-row { display: grid; grid-template-columns: minmax(96px, auto) minmax(0, 1fr); gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid var(--border); }
+.kb-row:first-of-type { border-top: 0; }
+.kb-keys { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.kb-text { font-size: 13px; color: var(--text); }
+.kb-empty { padding: 24px 0; text-align: center; color: var(--text-3); }
+@media (max-width: 720px) {
+  .kb-groups { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Підказка після G */
+.kb-ghint {
+  position: fixed; left: 0; right: 0; bottom: 22px; margin: 0 auto; z-index: 90;
+  width: max-content; max-width: calc(100vw - 32px);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 10px 14px; border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-pop);
+  font-size: 13px; color: var(--text-2);
+  animation: toast-in .14s var(--ease);
+}
+.kb-ghint-title { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--text); }
+.kb-ghint-item { display: inline-flex; align-items: center; gap: 5px; }
+.kb-ghint .kb-key { height: 20px; }
+
+/* Вибрана клавіатурою задача */
+.task-row.kb-sel { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); background: var(--accent-soft-2, var(--surface-2)); }
+
+/* «? Клавіші» внизу меню */
+.sidebar-keys {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin-top: 6px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-3); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.sidebar-keys:hover { background: var(--surface-3); color: var(--text); }
+.sidebar-keys[hidden] { display: none; }
+
+/* Кабінет */
+.kb-settings-row .setting-desc .kbd { height: 18px; padding: 0 4px; vertical-align: 1px; }
+.kb-settings-row .setting-actions { flex-wrap: wrap; }
+
+/* На телефоні й планшеті без мишки — нічого цього не видно */
+@media (hover: none) and (pointer: coarse) {
+  .sidebar-keys, .kb-card { display: none !important; }
+}

@@ -1,6 +1,6 @@
 /* ==========================================================================
    profile.js — «Мій кабінет»: ім'я, пошта, телефон, тема й колір інтерфейсу,
-   службовий блок (сповіщення, застосунок — див. pwa.js, синхронізація,
+   гарячі клавіші (keys.js), службовий блок (сповіщення, застосунок — див. pwa.js, синхронізація,
    Google Календар — див. gcal.js, експорт / імпорт, демо-дані, очищення).
    ========================================================================== */
 window.CRM = window.CRM || {};
@@ -299,6 +299,7 @@ window.CRM = window.CRM || {};
     const backupBlock = moduleBlock('backup');
     const quickBlock = moduleBlock('quick');
     const greetBlock = moduleBlock('people');
+    const keysBlock = moduleBlock('keys');
     ui.mount(container,
       ui.pageHead({ title: 'Мій кабінет', sub: 'Профіль, вигляд і службові налаштування.' }),
       h('div', { class: 'profile-grid' },
@@ -306,6 +307,7 @@ window.CRM = window.CRM || {};
         appearance,
         quickBlock ? h('section', { class: 'card' }, quickBlock) : null,
         greetBlock ? h('section', { class: 'card' }, greetBlock) : null,
+        keysBlock ? h('section', { class: 'card kb-card' }, keysBlock) : null,
         h('div', { class: 'section-title' }, 'Службове'),
         services,
         dataCard(backupBlock),
@@ -316,7 +318,7 @@ window.CRM = window.CRM || {};
     document.addEventListener('crm:themechange', onTheme);
     document.addEventListener('crm:notifpermission', onPerm);
     const focus = route && route.params && route.params.focus;
-    if (focus === 'gcal' || focus === 'backup' || focus === 'sync' || focus === 'pwa' || focus === 'quick' || focus === 'greet') {
+    if (focus === 'gcal' || focus === 'backup' || focus === 'sync' || focus === 'pwa' || focus === 'quick' || focus === 'greet' || focus === 'keys') {
       CRM.router.consumeParam('focus');
       requestAnimationFrame(() => {
         const el = document.getElementById(focus);

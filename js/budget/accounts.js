@@ -52,7 +52,7 @@ window.CRM = window.CRM || {};
       h('div', { class: 'toolbar-note' }, ranked.length
         ? ['Загальний капітал: ', h('strong', { class: 'num' }, fmt.money(cap.total, 'UAH')), cap.missing ? ' (без рахунків, для яких немає курсу)' : '']
         : 'Рахунки: картки, готівка, ощадні, інвестиційні, електронні гаманці.'),
-      ui.button({ label: 'Додати рахунок', icon: 'plus', onClick: () => openAccountForm() }));
+      ui.button({ label: 'Додати рахунок', icon: 'plus', dataset: { hk: 'add' }, onClick: () => openAccountForm() }));
 
     let content;
     if (!ranked.length) {

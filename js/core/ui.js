@@ -67,6 +67,7 @@ window.CRM = window.CRM || {};
       title: o.title,
       'aria-label': o.ariaLabel || (o.iconOnly ? o.title : null),
       disabled: o.disabled,
+      dataset: o.dataset,
       onClick: o.onClick
     },
     o.icon ? CRM.icon(o.icon) : null,
@@ -524,9 +525,12 @@ window.CRM = window.CRM || {};
       o.actions ? h('div', { class: 'page-head-actions' }, o.actions) : null);
   }
 
+  /** Скільки зараз відкрито вікон, панелей і спливних меню (для гарячих клавіш). */
+  function layerCount() { return layers.length; }
+
   CRM.h = h;
   CRM.ui = {
-    h, mount, button, modal, drawer, confirm, popover, registerLayer, toast, empty,
+    h, mount, button, modal, drawer, confirm, popover, registerLayer, layerCount, toast, empty,
     field, input, textarea, select, pageHead, dateInput, timeInput,
     get openLayers() { return layers.length; }
   };

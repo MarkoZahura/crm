@@ -180,7 +180,7 @@ window.CRM = window.CRM || {};
       month !== D.startOfMonth(T) ? h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onClick: () => { month = D.startOfMonth(T); CRM.router.rerender(); } }, 'Сьогодні') : null);
 
     const toolbar = h('div', { class: 'toolbar' }, nav,
-      ui.button({ label: 'Додати платіж', icon: 'plus', onClick: () => openForm(null, month === D.startOfMonth(T) ? T : month) }));
+      ui.button({ label: 'Додати платіж', icon: 'plus', dataset: { hk: 'add' }, onClick: () => openForm(null, month === D.startOfMonth(T) ? T : month) }));
 
     const listCard = h('section', { class: 'card' },
       h('div', { class: 'card-head' }, h('h2', null, `Платежі: ${fmt.month(month).toLowerCase()}`, h('span', { class: 'tab-count' }, String(monthItems.length)))),
