@@ -300,7 +300,7 @@ window.CRM = window.CRM || {};
     if (k === 'greetings') return typeof v === 'object' && Array.isArray(v.templates) && v.templates.length > 0;
     if (k === 'homeLayout') return typeof v === 'object' && (!!v.pc || !!v.phone);
     if (k === 'budgetLimits') return typeof v === 'object' && (!!v.total || Object.keys(v.cats || {}).length > 0 || Object.keys(v.months || {}).length > 0);
-    if (k === 'tutor') return typeof v === 'object' && (!!v.sheetId || !!v.template);
+    if (k === 'tutor') return typeof v === 'object' && (!!v.sheetId || !!v.template || !!v.summaryTemplate);
     if (k === 'bankImport') return typeof v === 'object' && (Object.keys(v.profiles || {}).length > 0 || Object.keys(v.rules || {}).length > 0);
     return true;
   }

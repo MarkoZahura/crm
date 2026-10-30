@@ -2787,10 +2787,101 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 .tu-home .tu-erow-when { width: 70px; }
 .kal-lesson-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; color: var(--text-2); }
 .kal-lesson-note .link-like { font-size: 13px; }
+/* ---------- Репетиторство: гроші (tutor-money.js) ---------- */
+.tm-badge { white-space: nowrap; }
+.tm-badge-debt { background: var(--hot-soft); color: var(--hot); }
+.tm-badge-ahead { background: var(--success-soft); color: var(--success); }
+.tm-badge-even { background: var(--surface-2); color: var(--text-2); }
+.tm-card-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 12px 10px 16px; font-size: 12.5px; }
+.tm-card-line .grow { flex: 1; }
+.tm-bal { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.tm-bal-debt { color: var(--hot); }
+.tm-bal-ahead { color: var(--success); }
+.tm-bal-even { color: var(--text); }
+.tm-since, .tm-price-line { font-size: 12.5px; }
+.tm-bal + .tm-since { margin-top: -6px; }
+.tm-warn { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; color: var(--soon); }
+.tm-warn .icon { flex-shrink: 0; margin-top: 1px; }
+.tm-slist { display: flex; flex-direction: column; padding: 4px 8px 8px; }
+.tm-srow { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto 120px; align-items: center; gap: 10px; padding: 8px; border-radius: var(--radius); font-size: 13px; }
+.tm-srow.clickable { cursor: pointer; }
+.tm-srow.clickable:hover { background: var(--surface-2); }
+.tm-srow:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tm-srow-date { white-space: nowrap; color: var(--text-2); }
+.tm-srow-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-srow-amount { font-weight: 600; white-space: nowrap; text-align: right; }
+.tm-srow-bal { font-size: 12px; white-space: nowrap; text-align: right; }
+.tm-srow-pay .tm-srow-amount, .tm-srow-open .tm-srow-amount.tx-income { color: var(--success); }
+.tm-lesson-sec .tu-sec-title { margin-bottom: -2px; }
+.tm-cost { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; font-size: 13.5px; }
+.tm-cost .link-like { margin-left: 6px; font-size: 13px; }
+.tm-cost-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tm-cost-edit .amount-wrap { width: 140px; }
+.tm-lesson-later { font-size: 12.5px; }
+.tm-lesson-bal { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+.tm-bal-text.tm-bal-debt { color: var(--hot); font-weight: 500; }
+.tm-bal-text.tm-bal-ahead { color: var(--success); font-weight: 500; }
+.tm-lesson-none { font-size: 13px; }
+.tm-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.tm-chips[hidden] { display: none; }
+.tm-pay .field + .tm-chips { margin-top: -6px; }
+.tm-after { font-size: 13px; }
+.tm-price-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tm-price-in { display: flex; gap: 6px; }
+.tm-price-in .input { width: 130px; }
+.tm-price-in .select { width: auto; }
+.tm-open { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.tm-open-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tm-open-row[hidden] { display: none; }
+.tm-open-row .amount-wrap { width: 140px; }
+.tm-prices { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.tm-prices:empty { display: none; }
+.tm-price-hist { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.tm-sum-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tm-month .card-head { flex-wrap: wrap; gap: 8px; }
+.tm-month .card-body { display: flex; flex-direction: column; gap: 10px; }
+.tm-list { display: flex; flex-direction: column; padding: 4px 8px 8px; }
+.tm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px; border-radius: var(--radius); font-size: 13.5px; }
+.tm-row:hover { background: var(--surface-2); }
+.tm-row .grow { flex: 1; }
+.tm-name { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: inherit; text-decoration: none; min-width: 0; }
+.tm-name:hover { color: var(--accent-text); }
+.tm-debt { color: var(--hot); }
+.tm-all-paid { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
+.tm-all-paid .icon { color: var(--success); }
+.tm-debtors, .tm-month, .tm-students, .tm-noprice { margin-bottom: 14px; }
+.tm-table { display: flex; flex-direction: column; padding: 4px 8px 8px; }
+.tm-trow { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 100px 100px 170px 120px; align-items: center; gap: 10px; padding: 8px; border-radius: var(--radius); font-size: 13.5px; }
+.tm-trow:not(.tm-thead):hover { background: var(--surface-2); }
+.tm-thead { font-size: 12px; padding-top: 2px; padding-bottom: 2px; }
+.tm-trow .num { text-align: right; white-space: nowrap; }
+.tm-tc-act { justify-self: end; }
+.tm-tc-now { min-width: 0; }
+.tm-noprice-foot { font-size: 12.5px; }
+.tm-chip-missed { background: var(--soon-soft); color: var(--soon); }
+.tm-missed-row .tu-erow-text { color: var(--text-2); }
+.tu-cancel-modal .modal-footer { flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .tm-trow { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; }
+  .tm-thead { display: none; }
+  .tm-tc-les { grid-column: 1 / -1; order: 3; color: var(--text-2); font-size: 12.5px; }
+  .tm-tc-earned, .tm-tc-paid { order: 4; text-align: left !important; font-size: 12.5px; }
+  .tm-tc-earned::before, .tm-tc-paid::before { content: attr(data-label) ': '; color: var(--text-3); }
+  .tm-tc-now { order: 2; justify-self: end; }
+  .tm-tc-act { order: 5; grid-column: 1 / -1; justify-self: start; }
+}
+@media (max-width: 600px) {
+  .tm-srow { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; }
+  .tm-srow-date { order: 1; font-size: 12px; }
+  .tm-srow-amount { order: 2; }
+  .tm-srow-label { order: 3; }
+  .tm-srow-bal { order: 4; }
+  .tm-bal { font-size: 18px; }
+}
 @media (max-width: 860px) {
   .tu-two { display: flex; flex-direction: column; }
   .tu-col { display: contents; }
-  .tu-up { order: 1; } .tu-slots { order: 2; } .tu-hist { order: 3; } .tu-sheet { order: 4; } .tu-who { order: 5; }
+  .tu-up { order: 1; } .tu-money { order: 2; } .tu-slots { order: 3; } .tu-hist { order: 4; } .tu-stmt { order: 5; } .tu-sheet { order: 6; } .tu-who { order: 7; }
 }
 @media (max-width: 600px) {
   .tu-grid { grid-template-columns: 1fr; }

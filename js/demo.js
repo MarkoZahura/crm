@@ -355,14 +355,19 @@ window.CRM = window.CRM || {};
       const nx = lessonDates(slot.days, D.addDays(T, 1), D.addDays(T, 14))[0];
       if (nx) lessons[nx] = { plan: o.nextPlan };
       delete o.nextPlan;
-      return base(Object.assign({ id, sheetName: '', personId: null, reportTo: 'self', goal: '', examDate: null, notes: '', archived: false, lessons }, o), from);
+      // Гроші (етап 2): ціна з першого дня, підсумок за минулий місяць уже «надіслано» (щоб не було зайвих нагадувань)
+      const pm = D.addMonths(D.startOfMonth(T), -1);
+      const money = { from, currency: 'UAH', opening: o.opening || 0, prices: [{ from, amount: o.price, per: o.per }] };
+      delete o.price; delete o.per; delete o.opening;
+      return base(Object.assign({ id, sheetName: '', personId: null, reportTo: 'self', goal: '', examDate: null, notes: '', archived: false, lessons, money,
+        summaries: { [pm.slice(0, 7)]: { sent: iso(D.startOfMonth(T), '10:00') } } }, o), from);
     };
     const units = ['Present Perfect', 'Past Simple vs Present Perfect', 'Future forms', 'Modal verbs', 'Conditionals', 'Passive voice'];
     const students = [
-      student({ name: 'Софія', color: 'teal', goal: 'НМТ з англійської', notes: 'Любить ігри на уроці, не любить довгих вправ.', nextPlan: 'Перевірка домашнього. Reported speech: питання. Destination B1 — Unit 12: Ex. A–D.' },
+      student({ name: 'Софія', color: 'teal', price: 400, per: 'hour', goal: 'НМТ з англійської', notes: 'Любить ігри на уроці, не любить довгих вправ.', nextPlan: 'Перевірка домашнього. Reported speech: питання. Destination B1 — Unit 12: Ex. A–D.' },
         { days: [1, 3], start: '17:00', dur: 90 }, 22,
         (i) => ({ what: `Перевірили домашнє. ${units[i % units.length]}: пояснення й вправи.`, hw: `H/w: Destination B1 — Unit ${8 + i}: Ex. E–G + Quizlet`, next: `Повторення: ${units[i % units.length]}. Нова тема — ${units[(i + 1) % units.length]}.` })),
-      student({ name: 'Дмитро', color: 'orange', goal: 'IELTS Academic 6.5', examDate: D.addDays(T, 40), notes: 'Слабке місце — Writing Task 1.', nextPlan: 'Writing Task 1: графіки. Лексика для опису трендів.' },
+      student({ name: 'Дмитро', color: 'orange', price: 700, per: 'lesson', opening: 2800, goal: 'IELTS Academic 6.5', examDate: D.addDays(T, 40), notes: 'Слабке місце — Writing Task 1.', nextPlan: 'Writing Task 1: графіки. Лексика для опису трендів.' },
         { days: [5], start: '11:00', dur: 120 }, 22,
         (i) => ({ what: `Reading: True/False/Not Given. Writing Task 2 — план есе (${i + 1}).`, hw: 'H/w: Task 2, 250+ слів, 40 хв', next: 'Розбір есе, Listening Section 3.' }))
     ];

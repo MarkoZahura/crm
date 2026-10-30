@@ -134,6 +134,7 @@ window.CRM = window.CRM || {};
   /**
    * Відкрити форму транзакції.
    * opts: { id } — редагування; або { type, accountId, categoryId, subcategoryId, date, amount, comment } — нова.
+   * tutorStudentId — для доходу одразу вибрати учня в полі «Оплата за уроки» (js/tutor-money.js).
    * Витрату чи дохід можна розділити на кілька категорій (поле splits, див. CRM.finance.txParts).
    */
   function openTxForm(opts) {
@@ -178,6 +179,7 @@ window.CRM = window.CRM || {};
             if (!c || c.kind !== t.id) { st.categoryId = null; st.subcategoryId = null; splitMode = false; splitRows = []; }
           }
           renderType(); renderAccounts(); renderCats(); renderTo();
+          if (tutorBox) tutorBox.show(st.type);
         }
       }, t.label)));
     }
@@ -415,6 +417,16 @@ window.CRM = window.CRM || {};
       };
     }
 
+    // --- Оплата за уроки (js/tutor-money.js): дохід можна привʼязати до учня «Репетиторства» ---
+    const tutorBox = CRM.tutorMoney && CRM.tutorMoney.txField ? CRM.tutorMoney.txField(existing, {
+      studentId: o.tutorStudentId || null,
+      onPick: (sid) => {
+        if (!sid || st.categoryId || splitMode) return;
+        const c = CRM.tutorMoney.findIncomeCategory();
+        if (c) { st.categoryId = c.id; st.subcategoryId = null; fCat.setError(null); renderCats(); }
+      }
+    }) : null;
+
     // --- Дата й коментар ---
     const dateIn = ui.dateInput({ value: st.date, clearable: false, ariaLabel: 'Дата операції', onChange: () => { renderTo(); renderLimit(); } });
     const fDate = ui.field({ label: 'Дата', input: dateIn });
@@ -458,6 +470,10 @@ window.CRM = window.CRM || {};
         comment: commentIn.value.trim(),
         splits: st.type !== 'transfer' && splitMode && splitResult ? splitResult.splits : null
       });
+      if (tutorBox) {
+        const sid = st.type === 'income' ? tutorBox.value() : null;
+        if (sid) rec.tutor = { studentId: sid }; else delete rec.tutor;
+      }
       rec = F().normalizeSplits(rec);
       if (!existing) { rec.recurringId = rec.recurringId || null; rec.recurringDate = rec.recurringDate || null; }
       const saved = await CRM.store.save('transactions', rec);
@@ -489,6 +505,7 @@ window.CRM = window.CRM || {};
       h('div', { class: 'form-grid' },
         fAmount, fAcc, fTo, fToAmount),
       fCat,
+      tutorBox ? tutorBox.el : null,
       h('div', { class: 'form-grid' }, fDate, fComment),
       h('button', { type: 'submit', hidden: true, tabIndex: -1, 'aria-hidden': 'true' }));
 
@@ -496,6 +513,7 @@ window.CRM = window.CRM || {};
     renderAccounts();
     renderCats();
     renderTo();
+    if (tutorBox) tutorBox.show(st.type);
 
     const footer = [
       existing ? ui.button({ label: 'Видалити', icon: 'trash', variant: 'danger-ghost', onClick: remove }) : null,
@@ -549,6 +567,7 @@ window.CRM = window.CRM || {};
       splits: F().isSplit(src) ? CRM.utils.deepClone(src.splits) : null,
       date, comment: src.comment || '', recurringId: null, recurringDate: null
     };
+    if (src.type === 'income' && src.tutor && src.tutor.studentId) rec.tutor = { studentId: src.tutor.studentId };   // оплата уроків того самого учня
     // Переказ між різними валютами — сума зарахування за сьогоднішнім курсом (якщо він є)
     if (rec.type === 'transfer' && rec.toAccountId && F().currencyOf(rec.accountId) !== F().currencyOf(rec.toAccountId)) {
       const conv = CRM.rates.convert(rec.amount, F().currencyOf(rec.accountId), F().currencyOf(rec.toAccountId), date);

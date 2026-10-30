@@ -20,6 +20,7 @@
      habit:<звичка>:<дата>   (нагадування звички, якщо до обраного часу не відмічено)
      limit:<категорія | total>:<РРРР-ММ>:80 | 100   (ліміти Бюджету, js/budget/limits.js)
      tutor:report:<учень>:<дата>   (урок закінчився, звіт ще не надіслано — js/tutor.js)
+     tutor:summary:<учень>:<РРРР-ММ>   (1–7 числа: підсумок за минулий місяць ще не надіслано — js/tutor-money.js)
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -79,6 +80,12 @@ window.CRM = window.CRM || {};
   }
 
   /** «Очистити»: сповіщення ховаються, але їхні ключі пам'ятаються, щоб не з'явитися знову. */
+  /** Прибрати сповіщення з цим ключем (напр., підсумок уже надіслано — js/tutor-money.js). */
+  async function dismissKey(key) {
+    const list = CRM.store.list('notifications').filter((n) => n.key === key && !n.dismissed).map((n) => Object.assign({}, n, { read: true, dismissed: true }));
+    if (list.length) await CRM.store.saveMany('notifications', list);
+  }
+
   async function dismissAll() {
     const list = visible().map((n) => Object.assign({}, n, { read: true, dismissed: true }));
     if (list.length) await CRM.store.saveMany('notifications', list);
@@ -264,7 +271,7 @@ window.CRM = window.CRM || {};
   }
 
   CRM.notify = {
-    KINDS, push, addRule, runRules, markRead, markAllRead, dismissAll, openTarget,
+    KINDS, push, addRule, runRules, markRead, markAllRead, dismissAll, dismissKey, openTarget,
     permission, supported, requestPermission, systemEnabled, test, createBell, init, unreadCount
   };
 })(window.CRM);

@@ -457,7 +457,7 @@ window.CRM = window.CRM || {};
     if (wordsCache.key !== key) wordsCache = { key, map: list.map((x) => ({ s: x, w: nameWords(x) })) };
     const words = String(title || '').split(WORD_SPLIT).map((w) => U.normalize(w)).filter(Boolean);
     const hit = wordsCache.map.find((x) => words.some((w) => x.w.has(w)));
-    return hit ? hit.s : null;
+    return hit ? get(hit.s.id) || hit.s : null;   // свіжий запис (кеш слів — лише за іменами)
   }
   function gMin(iso) { const p = D.kyivParts(new Date(iso)); return p.hh * 60 + p.mm; }
   /**
@@ -882,9 +882,12 @@ window.CRM = window.CRM || {};
       notesIn.addEventListener('input', () => { clearTimeout(notesTimer); notesTimer = setTimeout(() => setLessonData(sid, date, { notes: notesIn.value.trim() }), 500); });
       notesIn.addEventListener('blur', () => { clearTimeout(notesTimer); if (notesIn.value.trim() !== (lessonData(get(sid), date).notes || '')) setLessonData(sid, date, { notes: notesIn.value.trim() }); });
     }
+    // Вартість уроку й оплата (js/tutor-money.js)
+    const moneyBox = CRM.tutorMoney && e.lesson ? CRM.tutorMoney.lessonBox(sid, key) : null;
     const body = h('div', { class: 'form-stack tu-lesson' },
       head,
       isLinked ? sheetBox : ownBox,
+      moneyBox ? moneyBox.el : null,
       notesIn ? ui.field({ label: 'Нотатки для себе', input: notesIn }) : null);
     const L = e.lesson;
     const footer = [
@@ -903,7 +906,7 @@ window.CRM = window.CRM || {};
     const dlg = ui.modal({
       title: `${e.lesson ? 'Урок' : 'Запис уроку'}: ${s0.name}`, size: 'md', className: 'tu-lesson-modal', body, footer,
       initialFocus: 'container',
-      onClose: () => { document.removeEventListener('crm:tutorsheet', onSheet); off(); flush(); }
+      onClose: () => { document.removeEventListener('crm:tutorsheet', onSheet); off(); flush(); if (moneyBox) moneyBox.destroy(); }
     });
     renderHead();
     renderSheet();
@@ -940,12 +943,25 @@ window.CRM = window.CRM || {};
     if (!canSave()) return false;
     const ownPlans = !linked(s) && Object.keys(s.lessons || {}).some((d) => d >= date && hasPlanFields(s.lessons[d]));
     const box = ownPlans ? h('input', { type: 'checkbox', class: 'tu-shift-box', checked: true }) : null;
+    // Етап 2 (js/tutor-money.js): пропуск, що оплачується, — урок зникає з Календаря, але рахується до оплати
+    const TM = CRM.tutorMoney;
+    const costText = TM && TM.hasPrice(s) && TM.mcfg(s).from <= date ? TM.money(TM.lessonCost(s, date, L.dur), TM.curOf(s)) : null;
     const msg = h('div', { class: 'form-stack' },
-      h('p', { class: 'modal-text' }, `Урок ${dayLong(date)}${L.start ? ', ' + L.start : ''} зникне з Календаря й не рахуватиметься.`),
+      h('p', { class: 'modal-text' }, TM
+        ? `Урок ${dayLong(date)}${L.start ? ', ' + L.start : ''} зникне з Календаря.`
+        : `Урок ${dayLong(date)}${L.start ? ', ' + L.start : ''} зникне з Календаря й не рахуватиметься.`),
+      TM ? h('p', { class: 'modal-text subtle tu-cancel-how' }, '«Без оплати» — урок не рахується. «Пропуск — оплачується» — учень платить за нього',
+        costText ? ` (${costText})` : '', ', у підсумку за місяць він буде «пропуском».') : null,
       linked(s) ? h('p', { class: 'modal-text subtle' }, 'План з таблиці сам перейде на наступний урок.') : null,
       box ? h('label', { class: 'check tu-shift' }, box, h('span', null, 'Зсунути план на наступні уроки')) : null);
-    const ok = await ui.confirm({ title: 'Скасувати урок?', message: msg, confirmText: 'Скасувати урок', cancelText: 'Ні', danger: true });
-    if (!ok) return false;
+    const choice = await new Promise((resolve) => {
+      let res = null;
+      const noBtn = ui.button({ label: 'Ні', onClick: () => dlg.close('cancel') });
+      const paidBtn = TM ? ui.button({ label: 'Пропуск — оплачується', className: 'tu-cancel-paid', onClick: () => { res = 'paid'; dlg.close('ok'); } }) : null;
+      const freeBtn = ui.button({ label: TM ? 'Без оплати' : 'Скасувати урок', variant: 'danger', className: 'tu-cancel-free', onClick: () => { res = 'free'; dlg.close('ok'); } });
+      const dlg = ui.modal({ title: 'Скасувати урок?', size: 'sm', center: true, body: msg, footer: [noBtn, paidBtn, freeBtn].filter(Boolean), initialFocus: noBtn, className: 'tu-cancel-modal', onClose: () => resolve(res) });
+    });
+    if (!choice) return false;
     const evBefore = U.deepClone(CRM.store.get('events', L.evId));
     const sBefore = U.deepClone(s);
     let batch = null;
@@ -962,10 +978,11 @@ window.CRM = window.CRM || {};
       const lessons = shiftedLessons(get(sid), date, dates);
       if (lessons) await save(Object.assign({}, get(sid), { lessons }));
     }
-    ui.toast(`Урок ${dayShort(date)} скасовано${box && box.checked ? ' — план зсунуто' : ''}`, {
+    if (choice === 'paid') await setLessonData(sid, date, { missed: TM.missedRecord(L, evBefore) });
+    ui.toast(`Урок ${dayShort(date)} скасовано${choice === 'paid' ? ' — пропуск оплачується' : ''}${box && box.checked ? ' — план зсунуто' : ''}`, {
       action: { label: 'Скасувати', onClick: async () => {
         if (batch) await CRM.store.restoreBatch(batch); else await CRM.store.save('events', evBefore);
-        if (box && box.checked) await save(sBefore);
+        if ((box && box.checked) || choice === 'paid') await save(Object.assign({}, get(sid) || sBefore, { lessons: sBefore.lessons || {} }));
       } }
     });
     return true;
@@ -1373,16 +1390,18 @@ window.CRM = window.CRM || {};
     const onSheet = () => renderStatus();
     document.addEventListener('crm:tutorsheet', onSheet);
     const off = CRM.store.on(['settings', 'students'], renderStatus);
+    const sumSec = CRM.tutorMoney ? CRM.tutorMoney.settingsSection() : null;   // шаблон підсумку за місяць
     const dlg = ui.modal({
       title: 'Налаштування репетиторства', size: 'md', className: 'tu-settings-modal',
       body: h('div', { class: 'form-stack' },
         h('div', { class: 'tu-set-sec' }, h('h3', null, 'Google-таблиця'), h('div', { class: 'tu-url-row' }, fUrl, ui.button({ label: 'Зберегти', className: 'tu-url-save', onClick: saveUrl })), statusBox),
         h('div', { class: 'tu-set-sec' }, h('h3', null, 'Шаблон звіту для батьків'),
           ui.field({ input: tplIn, hint: 'Підстановки: {імʼя}, {дата}, {тривалість}, {що робили}, {домашнє}, {наступного разу}. Рядок, де «що робили», «домашнє» чи «наступного разу» порожнє, у звіт не потрапляє.' }),
-          resetBtn)),
+          resetBtn),
+        sumSec ? sumSec.el : null),
       footer: [ui.button({ label: 'Готово', variant: 'primary', onClick: () => dlg.close('button') })],
       initialFocus: urlIn,
-      onClose: () => { clearTimeout(tplTimer); saveTpl(); document.removeEventListener('crm:tutorsheet', onSheet); off(); }
+      onClose: async () => { clearTimeout(tplTimer); await saveTpl(); if (sumSec) await sumSec.flush(); document.removeEventListener('crm:tutorsheet', onSheet); off(); }
     });
     renderStatus();
     return dlg;
@@ -1412,6 +1431,8 @@ window.CRM = window.CRM || {};
   }
   function tabsNav(cur) {
     const tabs = [{ id: 'students', label: 'Учні', href: '#/tutor', n: active().length }, { id: 'lessons', label: 'Уроки', href: '#/tutor/lessons' }];
+    // «Гроші» (js/tutor-money.js, етап 2)
+    if (CRM.tutorMoney) tabs.push({ id: 'money', label: 'Гроші', href: '#/tutor/money' });
     return h('nav', { class: 'tabs tu-tabs', 'aria-label': 'Репетиторство' }, tabs.map((t) => h('a', {
       href: t.href, class: 'tab' + (t.id === cur ? ' active' : ''), dataset: { tab: t.id }, 'aria-current': t.id === cur ? 'page' : null
     }, t.label, t.n != null ? h('span', { class: 'tab-count' }, String(t.n)) : null)));
@@ -1448,6 +1469,7 @@ window.CRM = window.CRM || {};
         h('span', { class: 'tu-card-when' }, CRM.icon('clock', { size: 'sm' }), `${relDay(nx.date)}${nx.start ? ', ' + nx.start : ''}`),
         h('span', { class: 'tu-card-plan' + (nx.plan ? '' : ' subtle') }, nx.plan ? oneLine(nx.plan, 160) : 'Плану ще немає'))
         : !sl.length && !s.archived ? h('div', { class: 'tu-card-next subtle' }, ui.button({ label: 'Додати розклад', icon: 'plus', size: 'sm', variant: 'ghost', className: 'tu-card-slot', onClick: () => openSlot(s.id) })) : null,
+      CRM.tutorMoney ? CRM.tutorMoney.cardLine(s) : null,
       due ? h('div', { class: 'tu-card-due' }, h('span', null, `Звіт за ${dayShort(due.date)} не надіслано`),
         ui.button({ label: 'Звіт', icon: 'send', size: 'sm', className: 'tu-card-report', onClick: () => openReport(s.id, due.key) })) : null);
   }
@@ -1489,6 +1511,16 @@ window.CRM = window.CRM || {};
     ui.mount(container, h('div', { class: 'page tu-page' }, listHead(), sheetBar(), tabsNav('lessons'), body));
   }
   const histMore = {};
+  /** «Історія» (від нових до старих) + оплачувані пропуски (js/tutor-money.js) — кожен перед першим старішим записом. */
+  function mergeMissed(list, missed) {
+    if (!missed.length) return list;
+    const out = list.slice();
+    missed.slice().sort((a, b) => b.date.localeCompare(a.date)).forEach((m) => {
+      const i = out.findIndex((e) => e.date && e.date < m.date);
+      out.splice(i < 0 ? out.length : i, 0, m);
+    });
+    return out;
+  }
   function renderStudent(container, id) {
     const s = get(id);
     if (!s) {
@@ -1501,7 +1533,7 @@ window.CRM = window.CRM || {};
     const block = tl.block;
     const pl = planningOf(s);
     const up = tl.entries.filter((e) => e.lesson && !ended(e.lesson));
-    const past = tl.entries.filter((e) => !(e.lesson && !ended(e.lesson))).reverse();
+    const past = mergeMissed(tl.entries.filter((e) => !(e.lesson && !ended(e.lesson))).reverse(), CRM.tutorMoney ? CRM.tutorMoney.missedEntries(s) : []);
     const shown = histMore[id] || 10;
     const sl = slots(id);
     const gsl = sl.length ? [] : googleSlots(s);
@@ -1516,9 +1548,11 @@ window.CRM = window.CRM || {};
           : h('div', { class: 'card-body subtle' }, sl.length ? 'Найближчим часом уроків немає.' : 'Розкладу ще немає — додай дні уроків праворуч.')),
       h('section', { class: 'card tu-hist' },
         h('div', { class: 'card-head' }, h('h2', null, 'Історія', past.length ? h('span', { class: 'tab-count' }, String(past.length)) : null)),
-        past.length ? h('div', { class: 'tu-elist' }, past.slice(0, shown).map((e) => entryRow(s, e, {}))) : h('div', { class: 'card-body subtle' }, 'Ще не було уроків.'),
-        past.length > shown ? h('div', { class: 'card-foot' }, ui.button({ label: `Показати ще ${Math.min(10, past.length - shown)}`, size: 'sm', variant: 'ghost', className: 'tu-more', onClick: () => { histMore[id] = shown + 10; CRM.router.rerender(); } })) : null));
+        past.length ? h('div', { class: 'tu-elist' }, past.slice(0, shown).map((e) => (e.missed ? CRM.tutorMoney.missedRow(s, e) : entryRow(s, e, {})))) : h('div', { class: 'card-body subtle' }, 'Ще не було уроків.'),
+        past.length > shown ? h('div', { class: 'card-foot' }, ui.button({ label: `Показати ще ${Math.min(10, past.length - shown)}`, size: 'sm', variant: 'ghost', className: 'tu-more', onClick: () => { histMore[id] = shown + 10; CRM.router.rerender(); } })) : null),
+      CRM.tutorMoney ? CRM.tutorMoney.statementCard(s) : null);
     const right = h('div', { class: 'tu-col' },
+      CRM.tutorMoney ? CRM.tutorMoney.moneyCard(s) : null,
       h('section', { class: 'card tu-slots' },
         h('div', { class: 'card-head' }, h('h2', null, 'Розклад'),
           ui.button({ label: 'День', icon: 'plus', size: 'sm', variant: 'ghost', className: 'tu-slot-add', title: 'Додати день уроків', onClick: () => openSlot(id) })),
@@ -1570,6 +1604,7 @@ window.CRM = window.CRM || {};
     document.addEventListener('crm:tutorsheet', onSheet);
     if (!sub) renderStudents(container);
     else if (sub === 'lessons') renderLessons(container);
+    else if (sub === 'money' && CRM.tutorMoney) CRM.tutorMoney.renderPage(container, route);
     else renderStudent(container, sub);
     if (p.lesson && p.date) {
       const sid = p.lesson;
@@ -1579,6 +1614,9 @@ window.CRM = window.CRM || {};
       setTimeout(() => openLessonOn(sid, date, { report: rep }), 0);
     }
     if (p.open) { const id = p.open; CRM.router.consumeParam('open'); setTimeout(() => openForm(id), 0); }
+    // Підсумок за місяць (дзвіночок) і «Отримав оплату» — js/tutor-money.js
+    if (p.summary && CRM.tutorMoney) { const sid = p.summary; const m = p.month; CRM.router.consumeParam('summary'); CRM.router.consumeParam('month'); setTimeout(() => CRM.tutorMoney.openSummary(sid, m), 0); }
+    if (p.pay && CRM.tutorMoney) { const sid = p.pay; CRM.router.consumeParam('pay'); setTimeout(() => CRM.tutorMoney.openPayment(sid), 0); }
     if (cfg().sheetId && token()) ensureFresh();
     return () => document.removeEventListener('crm:tutorsheet', onSheet);
   }
@@ -1686,6 +1724,9 @@ window.CRM = window.CRM || {};
     blockOf, planningOf, linked, lessonsBetween, lessonsOf, lessonOn, slots, slotText, lessonTitle, fillTemplate, reportText, template,
     openLesson, openLessonOn, openReport, openForm, openSlot, openOneOff, openSettings, cancelLesson, removeStudent, setArchived,
     setLessonData, markSent, homeCard, colorOfEvent, subText, canSave, shiftedLessons, durText,
-    studentOfTitle, isGoogleDuplicate, dupIndex, googleSlots, slotsFromGoogle
+    studentOfTitle, isGoogleDuplicate, dupIndex, googleSlots, slotsFromGoogle,
+    // для js/tutor-money.js (етап 2)
+    lessonData, started, ended, whatOrPlan, reportPerson, wantsReport, copyText, sentText, dayShort, dayLong, relDay, oneLine, hhmm, minOf,
+    usual, lessonCat, colorOf, personOf, listHead, sheetBar, tabsNav
   };
 })(window.CRM);

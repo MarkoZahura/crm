@@ -1466,8 +1466,11 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Варіанти ----------
-  const ORDER = ['habit', 'book', 'contact', 'birthday', 'workout', 'event', 'task', 'transfer', 'expense', 'income', 'meal'];
+  const ORDER = ['habit', 'book', 'tutorpay', 'lesson', 'contact', 'birthday', 'workout', 'event', 'task', 'transfer', 'expense', 'income', 'meal'];
   function primaryKind(P, built) {
+    // Репетиторство (js/tutor-money.js): «Макс оплатив 1600» — оплата; «урок Макс пт 16:00» — разовий урок
+    if (built.tutorpay) return 'tutorpay';
+    if (built.lesson && built.lesson.timed) return 'lesson';
     if (built.contact && built.contact.ok) return 'contact';
     if (built.birthday) return 'birthday';
     if (built.transfer) return 'transfer';
@@ -1515,6 +1518,15 @@ window.CRM = window.CRM || {};
     if (CRM.books && CRM.books.quickOption && !P.repeat) {
       try { built.book = CRM.books.quickOption(P, { dateFor }); } catch (e) { console.error(e); }
       if (built.book) strong = true;
+    }
+    // Репетиторство (js/tutor-money.js): «Макс оплатив 1600», «оплата Макса», «урок Макс пт 16:00»
+    if (CRM.tutorMoney && CRM.tutorMoney.quickOptions && !P.repeat) {
+      try {
+        const accounts = CRM.finance ? ranked().filter((a) => !a.deletedAt && !a.archived) : [];
+        const tq = CRM.tutorMoney.quickOptions(P, { dateFor, account: accounts.length ? accountByWord(P, accounts) : null, accounts });
+        if (tq.tutorpay) { built.tutorpay = tq.tutorpay; strong = true; }
+        if (tq.lesson) { built.lesson = tq.lesson; if (tq.lesson.timed) strong = true; }
+      } catch (e) { console.error(e); }
     }
     built.contact = buildContact(P);
     built.birthday = buildBirthday(P);
@@ -1565,7 +1577,7 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Створення ----------
-  const shortOf = (o) => (/^(expense|income|transfer)$/.test(o.kind) ? `${o.title} ${o.parts[0] || ''}`.trim() : o.title);
+  const shortOf = (o) => (/^(expense|income|transfer|tutorpay)$/.test(o.kind) ? `${o.title} ${o.parts[0] || ''}`.trim() : o.title);
   async function removeRec(store, id) { if (CRM.store.get(store, id)) await CRM.store.removeForever(store, id); }
   /**
    * Виконати варіант без тосту. → { kind, store, id, text, short, undo() } або null.
@@ -1582,6 +1594,7 @@ window.CRM = window.CRM || {};
         undo: () => CRM.habits.restoreDay(r.habitId, r.date, res.before, res.startBefore)
       };
     }
+    if (o.kind === 'tutorpay' || o.kind === 'lesson') return CRM.tutorMoney.quickApply(o);
     if (o.kind === 'book') {
       const r = o.rec;
       const res = await CRM.books.addEntry(r.bookId, { date: r.date, pages: r.pages });
@@ -1753,6 +1766,7 @@ window.CRM = window.CRM || {};
     if (kind === 'meal') return CRM.nutrition.openEntry(id);
     if (kind === 'habit') return CRM.habits.openPage(id);
     if (kind === 'book') return CRM.books.openBook(id);
+    if (kind === 'tutorpay' || kind === 'lesson') return CRM.tutorMoney.openSaved(kind, id);
     if (kind === 'workout') return CRM.training.openForm(id);
     if (kind === 'birthday' || kind === 'contact') return CRM.people.openPerson(id);
     return null;
@@ -1763,6 +1777,7 @@ window.CRM = window.CRM || {};
     const r = o.rec || {};
     if (o.kind === 'habit') return CRM.habits.openPage(r.habitId);
     if (o.kind === 'book') return CRM.books.openBook(r.bookId);
+    if (o.kind === 'tutorpay' || o.kind === 'lesson') return CRM.tutorMoney.details(o);
     if (o.kind === 'event') return CRM.calendar.openEditor(null, r);
     if (o.kind === 'task') {
       const pre = Object.assign({}, r);
