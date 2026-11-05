@@ -2899,15 +2899,15 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
    «Мій рік» (05.11.2026): обкладинка, «Усе разом», історії на весь екран, картка на Головній.
    Кольори груп — насичені градієнти з білим текстом (однаково в обох темах).
    ========================================================================== */
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame) {
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview) {
   --g1: #6d28d9; --g2: #be185d; --g3: #c2410c; --glow: #f472b6; --on-g: #ffffff;
 }
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="health"] { --g1: #15803d; --g2: #065f46; --g3: #064e3b; --glow: #4ade80; }
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="money"] { --g1: #b45309; --g2: #92400e; --g3: #7c2d12; --glow: #fbbf24; }
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="work"] { --g1: #1d4ed8; --g2: #1e40af; --g3: #1e3a8a; --glow: #60a5fa; }
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="books"] { --g1: #7e22ce; --g2: #6b21a8; --g3: #4c1d95; --glow: #c084fc; }
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="records"] { --g1: #be185d; --g2: #b91c1c; --g3: #9a3412; --glow: #fb923c; }
-:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="goals"] { --g1: #0f766e; --g2: #115e59; --g3: #134e4a; --glow: #5eead4; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview)[data-group="health"] { --g1: #15803d; --g2: #065f46; --g3: #064e3b; --glow: #4ade80; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview)[data-group="money"] { --g1: #b45309; --g2: #92400e; --g3: #7c2d12; --glow: #fbbf24; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview)[data-group="work"] { --g1: #1d4ed8; --g2: #1e40af; --g3: #1e3a8a; --glow: #60a5fa; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview)[data-group="books"] { --g1: #7e22ce; --g2: #6b21a8; --g3: #4c1d95; --glow: #c084fc; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview)[data-group="records"] { --g1: #be185d; --g2: #b91c1c; --g3: #9a3412; --glow: #fb923c; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame, .yr-sh-preview)[data-group="goals"] { --g1: #0f766e; --g2: #115e59; --g3: #134e4a; --glow: #5eead4; }
 :is(.yr-slide, .yr-card, .yr-hero, .yr-home) {
   position: relative; overflow: hidden; color: var(--on-g);
   background: radial-gradient(110% 65% at 100% 0%, color-mix(in srgb, var(--glow) 38%, transparent), transparent 62%),
@@ -2942,7 +2942,7 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 .yr-btn:hover { background: rgba(255, 255, 255, .14); }
 .yr-btn-solid { background: #fff; color: #16181d; border-color: #fff; }
 .yr-btn-solid:hover { background: #f1f2f4; }
-.yr-btn:focus-visible, .yr-ask:focus-visible, .yr-close:focus-visible, .yr-nav:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.yr-btn:focus-visible, .yr-ask:focus-visible, .yr-close:focus-visible, .yr-story-share:focus-visible, .yr-nav:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .yr-hint { font-size: 13px; font-weight: 600; opacity: .9; }
 .yr-foot { margin-top: auto; font-size: 12px; font-weight: 650; letter-spacing: .02em; opacity: .85; }
 
@@ -3008,7 +3008,7 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 .yr-top { position: absolute; z-index: 3; top: calc(20px + env(safe-area-inset-top, 0px)); left: 16px; right: 8px; display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 650; font-size: 13px; pointer-events: none; }
 .yr-top .yr-close { pointer-events: auto; }
 .yr-count { margin-left: auto; font-variant-numeric: tabular-nums; }
-.yr-close { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .2); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.yr-close, .yr-story-share { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .2); color: #fff; display: grid; place-items: center; cursor: pointer; }
 .yr-slide {
   position: absolute; inset: 0; display: flex; flex-direction: column; gap: min(3.4cqw, 1.9cqh);
   padding: calc(76px + env(safe-area-inset-top, 0px)) 7cqw calc(min(6cqw, 3.4cqh) + env(safe-area-inset-bottom, 0px));
@@ -3058,6 +3058,35 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 .yr-home .card-head .btn:hover { background: rgba(255, 255, 255, .16); }
 .yr-home-body { display: grid; gap: 10px; justify-items: start; padding: 6px 20px 20px; }
 .yr-home-title { font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+
+/* «Мій рік» — картинки «Поділитися» (05.11.2026, етап 2) */
+.yr-share-btn {
+  margin-left: auto; width: 34px; height: 34px; padding: 0; flex: none; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .18); color: #fff; display: grid; place-items: center; cursor: pointer; letter-spacing: 0;
+  transition: background .15s var(--ease);
+}
+.yr-share-btn:hover { background: rgba(255, 255, 255, .32); }
+.yr-share-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.yr-top .yr-story-share { pointer-events: auto; }
+.yr-all-head .yr-all-share { margin-left: auto; }
+.yr-share-modal .modal-body { display: grid; gap: 14px; }
+.yr-share-modal .modal-footer { flex-wrap: wrap; }
+.yr-sh-preview {
+  position: relative; height: min(56vh, 540px); aspect-ratio: 9 / 16; max-width: 100%; margin: 0 auto; border-radius: 18px; overflow: hidden;
+  background: linear-gradient(158deg, var(--g1), var(--g2) 62%, var(--g3)); box-shadow: var(--shadow-card);
+}
+.yr-sh-img { display: block; width: 100%; height: 100%; object-fit: contain; transition: opacity .15s var(--ease); }
+.yr-sh-preview.is-busy .yr-sh-img { opacity: .55; }
+.yr-sh-wait { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: #fff; font-weight: 600; font-size: 14px; }
+.yr-sh-opt { display: flex; align-items: center; gap: 12px; }
+.yr-sh-opt-text { display: grid; gap: 1px; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.yr-sh-opt-title { font-weight: 600; }
+.yr-sh-opt-sub { font-size: 12.5px; color: var(--text-3); }
+.yr-sh-note { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text-3); }
+@media (max-width: 860px) {
+  .yr-sh-preview { height: min(48vh, 460px); }
+  .yr-share-modal .modal-footer .btn { flex: 1 1 auto; }
+}
 .yr-home .yr-chips { margin-top: 0; }
 
 /* Вікно «Цілі на …» */

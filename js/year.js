@@ -6,6 +6,8 @@
    Перегляд: історії на весь екран (телефон — дотики й свайпи, ПК — вікно у формі телефона,
    ← → / пробіл, Esc) + сторінка «Усе разом» (#/year, #/year?y=2025, ?story=1 — одразу історії).
    Картка «Мій рік» на Головній — з 1 грудня до 31 січня (× — сховати до наступного року).
+   Етап 2 (05.11): картинки «Поділитися» — js/year-share.js (CRM.yearShare); тут — дані карток для картинки
+   (bars, records, goals, money) і cardsFor(y, { hideMoney }) — гроші лише відсотками.
    Налаштування myYear { goals: { 'РРРР': [{ id, text, done: true|false|null }] }, hidden: ['РРРР'] }
    синхронізується; дані — лише в браузері й синхронізації, не в коді.
    ========================================================================== */
@@ -424,9 +426,13 @@ window.CRM = window.CRM || {};
   // ---------- Картки ----------
   /**
    * Картка: { id, group, icon, kicker, value, num ('int'|'money'), big (текст замість числа), unit, cmp,
-   *           lines: [текст], extra: (mode) => вузол, actions: (mode, y) => вузол }
+   *           lines: [текст], extra: (mode) => вузол, actions: (mode, y) => вузол,
+   *           для картинки: bars [{ name, pct, text }], records [{ icon, label, value, sub }], goals { list, ask },
+   *           money (є суми — вимикач «Сховати суми»), shareable (false — нічим ділитися) }
+   * opts.hideMoney — суми замінено відсотками (лише для картинок).
    */
-  function cardsFor(y) {
+  function cardsFor(y, opts) {
+    const hide = !!(opts && opts.hideMoney);
     const b = bounds(y);
     const st = stats(y);
     const pv = y > 2000 ? prevStats(y) : null;
@@ -461,19 +467,33 @@ window.CRM = window.CRM || {};
     }
     if (st.money) {
       const m = st.money;
-      const lines = [`Отримано — ${money(m.income)}`];
-      if (m.income || m.spent) lines.push(m.result >= 0 ? `Лишилось — ${money(m.result)}` : `Витрачено більше, ніж отримано, на ${money(-m.result)}`);
-      if (m.tutor) lines.push(`З уроків — ${money(m.tutor)}`);
-      if (m.missing) lines.push(`${m.missing} ${fmt.plural(m.missing, ['операція', 'операції', 'операцій'])} ще без курсу НБУ — не враховано`);
-      out.push({ id: 'money', group: 'money', icon: 'wallet', kicker: 'Гроші', value: m.spent, num: 'money', unit: 'витрачено',
-        cmp: cmp(m.spent, P('money') && P('money').spent, y, b, { money: true }), lines });
+      const mcmp = cmp(m.spent, P('money') && P('money').spent, y, b, { money: true });
+      const missing = m.missing ? `${m.missing} ${fmt.plural(m.missing, ['операція', 'операції', 'операцій'])} ще без курсу НБУ — не враховано` : null;
+      if (!hide) {
+        const lines = [`Отримано — ${money(m.income)}`];
+        if (m.income || m.spent) lines.push(m.result >= 0 ? `Лишилось — ${money(m.result)}` : `Витрачено більше, ніж отримано, на ${money(-m.result)}`);
+        if (m.tutor) lines.push(`З уроків — ${money(m.tutor)}`);
+        if (missing) lines.push(missing);
+        out.push({ id: 'money', group: 'money', icon: 'wallet', kicker: 'Гроші', value: m.spent, num: 'money', unit: 'витрачено', cmp: mcmp, lines, money: true });
+      } else {
+        // Без сум: яку частку отриманого витрачено, частка уроків у доходах
+        const pct = m.income > 0 ? Math.round(m.spent / m.income * 100) : null;
+        const lines = [];
+        if (pct != null) lines.push(m.result >= 0 ? `Лишилось — ${Math.max(0, 100 - pct)} % отриманого` : 'Витрачено більше, ніж отримано');
+        if (m.tutor && m.income > 0) lines.push(`З уроків — ${Math.round(m.tutor / m.income * 100)} % усіх доходів`);
+        if (missing) lines.push(missing);
+        out.push(pct != null
+          ? { id: 'money', group: 'money', icon: 'wallet', kicker: 'Гроші', value: pct, num: 'pct', unit: 'отриманого витрачено', cmp: mcmp, lines, money: true }
+          : { id: 'money', group: 'money', icon: 'wallet', kicker: 'Гроші', big: 'Витрати за рік', cmp: mcmp, lines, money: true });
+      }
       if (m.cats.length) {
         const c0 = m.cats[0];
         const lines2 = [];
-        if (m.biggest) lines2.push(`Найбільша покупка — ${m.biggest.title}, ${money(m.biggest.amount)} (${fmt.dateShort(m.biggest.date)})`);
+        if (m.biggest) lines2.push(hide ? `Найбільша покупка — ${m.biggest.title} (${fmt.dateShort(m.biggest.date)})` : `Найбільша покупка — ${m.biggest.title}, ${money(m.biggest.amount)} (${fmt.dateShort(m.biggest.date)})`);
         if (m.limits) lines2.push(`Уклався в ліміти ${m.limits.ok} з ${m.limits.total} ${fmt.plural(m.limits.total, ['місяця', 'місяців', 'місяців'])}`);
         out.push({ id: 'spend', group: 'money', icon: 'receipt', kicker: 'На що пішло', value: c0.pct, num: 'pct',
-          unit: `— на «${c0.name}»`, lines: lines2,
+          unit: `— на «${c0.name}»`, lines: lines2, money: true,
+          bars: m.cats.length > 1 ? m.cats.map((c) => ({ name: c.name, pct: c.pct, text: hide ? `${c.pct} %` : `${c.pct} % · ${money(c.amount)}` })) : null,
           extra: m.cats.length > 1 ? () => h('ol', { class: 'yr-bars-list' }, m.cats.map((c) => h('li', null,
             h('span', { class: 'yr-cat-name' }, c.name),
             h('span', { class: 'yr-cat-val' }, `${c.pct} % · ${money(c.amount)}`),
@@ -544,9 +564,10 @@ window.CRM = window.CRM || {};
     if (st.training && st.training.month) rec.push({ icon: 'dumbbell', label: 'Найактивніший місяць тренувань', value: CRM.MONTHS_NOM[st.training.month.m - 1], sub: fmt.count(st.training.month.n, ['тренування', 'тренування', 'тренувань']) });
     if (st.books && st.books.day) rec.push({ icon: 'library', label: 'Найбільше сторінок за день', value: `${int(st.books.day.n)} стор.`, sub: fmt.dateShort(st.books.day.date) });
     if (st.tasks && st.tasks.day) rec.push({ icon: 'checkCircle', label: 'Найбільше задач за день', value: fmt.count(st.tasks.day.n, ['задача', 'задачі', 'задач']), sub: fmt.dateShort(st.tasks.day.date) });
-    if (st.money && st.money.month) rec.push({ icon: 'coins', label: 'Найдорожчий місяць', value: CRM.MONTHS_NOM[st.money.month.m - 1], sub: money(st.money.month.amount) });
+    if (st.money && st.money.month) rec.push({ icon: 'coins', label: 'Найдорожчий місяць', value: CRM.MONTHS_NOM[st.money.month.m - 1], sub: hide ? 'найбільше витрат' : money(st.money.month.amount), money: true });
     if (rec.length) {
       out.push({ id: 'records', group: 'records', icon: 'star', kicker: 'Рекорди року', big: rec.length > 1 ? 'Твої рекорди' : 'Твій рекорд', lines: [],
+        records: rec, money: rec.some((r) => r.money),
         extra: () => h('ul', { class: 'yr-records' }, rec.map((r) => h('li', null,
           h('span', { class: 'yr-rec-ico', 'aria-hidden': 'true' }, CRM.icon(r.icon, { size: 'sm' })),
           h('span', { class: 'yr-rec-text' }, h('span', { class: 'yr-rec-label' }, r.label), h('span', { class: 'yr-rec-sub' }, r.sub)),
@@ -558,7 +579,7 @@ window.CRM = window.CRM || {};
     if (mine.length) {
       const ok = mine.filter((g) => g.done === true).length;
       out.push({ id: 'goals-past', group: 'goals', icon: 'target', kicker: `Цілі на ${y}`, big: `${ok} з ${mine.length}`, unit: 'вдалося', lines: [],
-        extra: () => goalList(y, mine, true) });
+        goals: { list: mine, ask: true }, extra: () => goalList(y, mine, true) });
     }
     // Цілі на наступний рік
     const ny = y + 1;
@@ -566,6 +587,7 @@ window.CRM = window.CRM || {};
       const next = goalsOf(ny);
       out.push({ id: 'goals', group: 'goals', icon: 'flag', kicker: `Цілі на ${ny}`, big: next.length ? `Що далі в ${ny}` : `Що хочеш у ${ny}?`,
         lines: next.length ? [] : [`Запиши 2–5 цілей — у грудні ${ny} «Мій рік» покаже їх і спитає, що вдалося.`],
+        goals: next.length ? { list: next, ask: false } : null, shareable: next.length > 0,
         extra: next.length ? () => goalList(ny, next, false) : null,
         actions: () => (ny >= thisYear() ? h('button', { type: 'button', class: 'yr-btn', onClick: (e) => { e.stopPropagation(); openGoals(ny); } },
           CRM.icon(next.length ? 'pencil' : 'plus', { size: 'sm' }), next.length ? 'Змінити цілі' : 'Записати цілі') : null) });
@@ -634,6 +656,13 @@ window.CRM = window.CRM || {};
     return out.slice(0, 3);
   }
   function partialText(b) { return b.partial ? `поки що — до ${fmt.dateShort(b.to)}` : ''; }
+  /** Обкладинка для картинки: назва, «з …», «поки що — до …», чипи. */
+  function coverInfo(y) {
+    const st = stats(y);
+    return { y, title: `Мій ${y}`, since: sinceText(st), partial: partialText(st.b), chips: st.any ? headline(st) : [], any: !!st.any };
+  }
+  /** Кнопка «Поділитися» (лише якщо підключено js/year-share.js). */
+  const canShare = () => !!(CRM.yearShare && CRM.yearShare.open);
   function coverCard(y) {
     const st = stats(y);
     return { id: 'cover', group: 'cover', cover: true, kicker: 'Моя CRM', big: `Мій ${y}`, st };
@@ -654,7 +683,11 @@ window.CRM = window.CRM || {};
     const kids = [];
     kids.push(h('div', { class: 'yr-kicker' },
       card.icon ? h('span', { class: 'yr-kicker-ico', 'aria-hidden': 'true' }, CRM.icon(card.icon, { size: 'sm' })) : null,
-      h('span', null, card.kicker)));
+      h('span', null, card.kicker),
+      !story && canShare() && card.shareable !== false && !card.cover && !card.end ? h('button', {
+        type: 'button', class: 'yr-share-btn', title: 'Поділитися картинкою', 'aria-label': `Поділитися картинкою: ${card.kicker}`,
+        onClick: (e) => { e.stopPropagation(); CRM.yearShare.open(y, card.id); }
+      }, CRM.icon('share', { size: 'sm' })) : null));
     if (card.cover) {
       const st = card.st;
       const since = sinceText(st);
@@ -729,7 +762,10 @@ window.CRM = window.CRM || {};
     const stage = h('div', { class: 'yr-stage', 'aria-live': 'polite' });
     const counter = h('span', { class: 'yr-count' });
     const closeBtn = h('button', { type: 'button', class: 'yr-close', title: 'Закрити (Esc)', 'aria-label': 'Закрити', onClick: (e) => { e.stopPropagation(); closeStories(); } }, CRM.icon('x'));
-    const frame = h('div', { class: 'yr-frame', tabIndex: -1 }, bars, h('div', { class: 'yr-top' }, h('span', { class: 'yr-top-title' }, `Мій ${y}`), counter, closeBtn), stage);
+    // «Поділитися»: картка — своя картинка, обкладинка й кінець — загальна
+    const shareBtn = canShare() ? h('button', { type: 'button', class: 'yr-story-share', title: 'Поділитися картинкою', 'aria-label': 'Поділитися картинкою',
+      onClick: (e) => { e.stopPropagation(); const c = list[i]; CRM.yearShare.open(y, c.cover || c.end ? null : c.id); } }, CRM.icon('share')) : null;
+    const frame = h('div', { class: 'yr-frame', tabIndex: -1 }, bars, h('div', { class: 'yr-top' }, h('span', { class: 'yr-top-title' }, `Мій ${y}`), counter, shareBtn, closeBtn), stage);
     const prevBtn = h('button', { type: 'button', class: 'yr-nav yr-nav-prev', title: 'Назад (←)', 'aria-label': 'Назад', onClick: () => go(i - 1) }, CRM.icon('chevronLeft'));
     const nextBtn = h('button', { type: 'button', class: 'yr-nav yr-nav-next', title: 'Далі (→)', 'aria-label': 'Далі', onClick: () => go(i + 1) }, CRM.icon('chevronRight'));
     const backdrop = h('div', { class: 'yr-backdrop' });
@@ -753,6 +789,12 @@ window.CRM = window.CRM || {};
       drawBars();
       prevBtn.disabled = i === 0;
       nextBtn.disabled = i === list.length - 1;
+      if (shareBtn) {
+        const whole = card.cover || card.end;
+        shareBtn.hidden = card.shareable === false || (whole && !stats(y).any);
+        shareBtn.title = whole ? 'Поділитися підсумком року (картинка)' : 'Поділитися картинкою';
+        shareBtn.setAttribute('aria-label', shareBtn.title);
+      }
       countUp(el);
     }
     function go(n) {
@@ -884,7 +926,9 @@ window.CRM = window.CRM || {};
       hero,
       h('section', { class: 'yr-all' },
         h('div', { class: 'yr-all-head' }, h('h2', null, 'Усе разом'),
-          dataCards.length ? h('span', { class: 'subtle' }, 'Натисни на картку — відкриється в історіях') : null),
+          dataCards.length ? h('span', { class: 'subtle' }, 'Натисни на картку — відкриється в історіях') : null,
+          dataCards.length && canShare() ? ui.button({ label: 'Загальна картинка', icon: 'share', size: 'sm', className: 'yr-all-share',
+            title: `Одна картинка з головними цифрами ${y} року`, onClick: () => CRM.yearShare.open(y, null) }) : null),
         dataCards.length ? null : h('section', { class: 'card' }, ui.empty({
           icon: 'sparkles', small: true, title: `Даних за ${y} ще немає`,
           text: 'Додавай тренування, витрати, книги, задачі — і тут зʼявиться підсумок року. Те, що було раніше, можна внести заднім числом: книга — «Прочитано» з датою «Дочитав», тренування — з будь-якою датою, гроші — «Імпорт виписки».'
@@ -943,7 +987,7 @@ window.CRM = window.CRM || {};
 
   CRM.year = {
     KEY, MAX_GOALS, GROUPS, cfg, goalsOf, saveGoals, setGoalDone, bounds, prevBounds, defaultYear, homeYear, compute, stats, prevStats, hasData, years,
-    cardsFor, storyList, openStories, closeStories, openGoals, homeShown, homeCard,
+    cardsFor, coverInfo, storyList, openStories, closeStories, openGoals, homeShown, homeCard,
     get storyOpen() { return story ? { y: story.y, index: story.index } : null; }
   };
 })(window.CRM);

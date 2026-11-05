@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.11.05-1';
-const BUILD = 'c89eb8d03529';
+const VERSION = '2026.11.05-2';
+const BUILD = '07bcfa3c9770';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': '67bdc642b5ae5f02',
-  'css/sections.css': '72aa5d78adb23046',
+  'css/sections.css': 'b0b79f0f350da5ae',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -37,8 +37,8 @@ const FILES = {
   'icons/tiles-512.png': 'e9bb21ac87c5e125',
   'icons/tiles-apple-touch-icon.png': '9454b72f51288974',
   'icons/tiles-maskable-512.png': '28ae91bcaf8a45f5',
-  'index.html': 'b30a7140042ce12f',
-  'js/app.js': 'f02a4e49296035b8',
+  'index.html': 'ee11a12f71c31f97',
+  'js/app.js': 'ca79c99d15df6959',
   'js/backup.js': 'd63f11891c0a78e0',
   'js/books.js': '1b2780e22241e102',
   'js/budget/accounts.js': 'be75e3d139369d4d',
@@ -58,7 +58,7 @@ const FILES = {
   'js/core/db.js': '696598c71bb0272f',
   'js/core/defaults.js': '32223999b81941f4',
   'js/core/entities.js': '8e41e276c4d3e33e',
-  'js/core/icons.js': '8b7f77ac9cfeb43a',
+  'js/core/icons.js': '927b0eb93e23e2a1',
   'js/core/rates.js': 'ab9f062afb6292f6',
   'js/core/router.js': '3b4260417c6530e1',
   'js/core/schedule.js': '4f1d1d89f224b8c6',
@@ -77,7 +77,7 @@ const FILES = {
   'js/profile.js': 'a7f18d9b9309da82',
   'js/program.js': '1a7ed7cc42642fac',
   'js/programs.js': '5badb646bc6e27ac',
-  'js/pwa.js': '0b1662ae14c89ee9',
+  'js/pwa.js': '1997d2a6da4cc513',
   'js/quick.js': 'cbecf3d4af9b889a',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',
@@ -88,7 +88,8 @@ const FILES = {
   'js/trash.js': '1a7fed513817f343',
   'js/tutor-money.js': '14159a5148c04ab4',
   'js/tutor.js': '56c73c58ae1ba3e3',
-  'js/year.js': 'd303b7866b7ced04',
+  'js/year-share.js': 'f3b7619c443faaf5',
+  'js/year.js': '948105df5381b6bb',
   'manifest-c.json': '6bec32309f09144a',
   'manifest-tiles.json': 'a5d3ba9581552a4b',
   'manifest.json': '7f3be59507fe8ac5'

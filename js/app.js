@@ -495,6 +495,7 @@ window.CRM = window.CRM || {};
     if (!CRM.limits) missing.push('js/budget/limits.js');
     if (CRM.tutor && !CRM.tutorMoney) missing.push('js/tutor-money.js');
     if (!CRM.year) missing.push('js/year.js');
+    if (CRM.year && !CRM.yearShare) missing.push('js/year-share.js');
     if (CRM.finance && !CRM.finance.isSplit) missing.push('js/budget/finance.js (нова версія)');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));
