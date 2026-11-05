@@ -113,6 +113,7 @@ window.CRM = window.CRM || {};
     { id: 'tutor', label: 'Репетиторство', icon: 'board' },
     { id: 'books', label: 'Книги', icon: 'library' },
     { group: 'Інше' },
+    { id: 'year', label: 'Мій рік', icon: 'sparkles' },
     { id: 'trash', label: 'Кошик', icon: 'trash', count: () => CRM.store.trashItems().length }
   ];
 
@@ -493,6 +494,7 @@ window.CRM = window.CRM || {};
     if (!CRM.bankImport) missing.push('js/budget/import.js');
     if (!CRM.limits) missing.push('js/budget/limits.js');
     if (CRM.tutor && !CRM.tutorMoney) missing.push('js/tutor-money.js');
+    if (!CRM.year) missing.push('js/year.js');
     if (CRM.finance && !CRM.finance.isSplit) missing.push('js/budget/finance.js (нова версія)');
     if (missing.length) {
       console.error('Не завантажено: ' + missing.join(', '));

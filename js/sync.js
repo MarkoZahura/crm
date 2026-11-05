@@ -28,7 +28,7 @@ window.CRM = window.CRM || {};
   // Сховища, що синхронізувалися до появи «Харчування» (для пристроїв, які ввійшли ще тоді)
   const STORES_V1 = ['tasks', 'accounts', 'transactions', 'categories', 'recurring', 'goals', 'workouts', 'courses'];
   // gcal — лише Client ID і вибір календарів; ключ доступу Google (gcalToken) на кожному пристрої свій
-  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget', 'quickInput', 'taskLabels', 'calCategories', 'bankImport', 'greetings', 'homeLayout', 'budgetLimits', 'tutor'];
+  const SETTINGS = ['profile', 'accent', 'trainingProgram', 'trainingProfile', 'gcal', 'driveBackup', 'nutritionProfile', 'nutritionTarget', 'quickInput', 'taskLabels', 'calCategories', 'bankImport', 'greetings', 'homeLayout', 'budgetLimits', 'tutor', 'myYear'];
   // Налаштування, що синхронізувалися з першої версії (для пристроїв, які ввійшли ще тоді)
   const SETTINGS_V1 = ['profile', 'accent', 'trainingProgram', 'trainingProfile'];
   const LS = 'crm.sync.';
@@ -301,6 +301,7 @@ window.CRM = window.CRM || {};
     if (k === 'homeLayout') return typeof v === 'object' && (!!v.pc || !!v.phone);
     if (k === 'budgetLimits') return typeof v === 'object' && (!!v.total || Object.keys(v.cats || {}).length > 0 || Object.keys(v.months || {}).length > 0);
     if (k === 'tutor') return typeof v === 'object' && (!!v.sheetId || !!v.template || !!v.summaryTemplate);
+    if (k === 'myYear') return typeof v === 'object' && (Object.keys(v.goals || {}).some((y) => Array.isArray(v.goals[y]) && v.goals[y].length > 0) || (Array.isArray(v.hidden) && v.hidden.length > 0));
     if (k === 'bankImport') return typeof v === 'object' && (Object.keys(v.profiles || {}).length > 0 || Object.keys(v.rules || {}).length > 0);
     return true;
   }

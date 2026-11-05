@@ -2894,3 +2894,174 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
   .tu-url-row { flex-direction: column; align-items: stretch; }
   .tu-url-row .tu-url-save { margin-bottom: 0; }
 }
+
+/* ==========================================================================
+   «Мій рік» (05.11.2026): обкладинка, «Усе разом», історії на весь екран, картка на Головній.
+   Кольори груп — насичені градієнти з білим текстом (однаково в обох темах).
+   ========================================================================== */
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame) {
+  --g1: #6d28d9; --g2: #be185d; --g3: #c2410c; --glow: #f472b6; --on-g: #ffffff;
+}
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="health"] { --g1: #15803d; --g2: #065f46; --g3: #064e3b; --glow: #4ade80; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="money"] { --g1: #b45309; --g2: #92400e; --g3: #7c2d12; --glow: #fbbf24; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="work"] { --g1: #1d4ed8; --g2: #1e40af; --g3: #1e3a8a; --glow: #60a5fa; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="books"] { --g1: #7e22ce; --g2: #6b21a8; --g3: #4c1d95; --glow: #c084fc; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="records"] { --g1: #be185d; --g2: #b91c1c; --g3: #9a3412; --glow: #fb923c; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home, .yr-frame)[data-group="goals"] { --g1: #0f766e; --g2: #115e59; --g3: #134e4a; --glow: #5eead4; }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home) {
+  position: relative; overflow: hidden; color: var(--on-g);
+  background: radial-gradient(110% 65% at 100% 0%, color-mix(in srgb, var(--glow) 38%, transparent), transparent 62%),
+    linear-gradient(158deg, var(--g1), var(--g2) 62%, var(--g3));
+}
+.yr-deco { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.yr-deco::before, .yr-deco::after { content: ''; position: absolute; border-radius: 50%; }
+.yr-deco::before { width: 78%; aspect-ratio: 1; right: -26%; bottom: -22%; border: 2px solid rgba(255, 255, 255, .13); }
+.yr-deco::after { width: 42%; aspect-ratio: 1; right: -6%; bottom: -8%; background: rgba(255, 255, 255, .07); }
+:is(.yr-slide, .yr-card, .yr-hero, .yr-home) > :not(.yr-deco) { position: relative; }
+
+.yr-kicker { display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; font-size: 12px; }
+.yr-kicker-ico { width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, .2); display: grid; place-items: center; flex: none; }
+.yr-big { font-weight: 800; line-height: .95; letter-spacing: -.03em; font-variant-numeric: tabular-nums; font-size: 54px; white-space: nowrap; }
+.yr-big.is-mid { font-size: 46px; }
+.yr-big.is-long { font-size: 38px; }
+.yr-title { font-weight: 800; line-height: 1.08; letter-spacing: -.02em; font-size: 28px; overflow-wrap: anywhere; }
+.yr-title-cover { font-size: 44px; line-height: 1; }
+.yr-unit { font-size: 17px; font-weight: 600; margin-top: 6px; line-height: 1.25; }
+.yr-cmp { display: inline-flex; align-items: center; margin-top: 10px; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, .22); font-weight: 650; font-size: 13px; }
+.yr-since { margin-top: 8px; font-size: 15px; font-weight: 600; }
+.yr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.yr-chip { padding: 4px 11px; border-radius: 999px; background: rgba(255, 255, 255, .2); font-weight: 650; font-size: 13px; }
+.yr-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; line-height: 1.38; }
+.yr-lines li { padding-left: 14px; position: relative; }
+.yr-lines li::before { content: ''; position: absolute; left: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .7); }
+.yr-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.yr-btn {
+  display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, .75);
+  background: transparent; color: #fff; font: inherit; font-weight: 650; font-size: 14px; cursor: pointer; transition: background .15s var(--ease);
+}
+.yr-btn:hover { background: rgba(255, 255, 255, .14); }
+.yr-btn-solid { background: #fff; color: #16181d; border-color: #fff; }
+.yr-btn-solid:hover { background: #f1f2f4; }
+.yr-btn:focus-visible, .yr-ask:focus-visible, .yr-close:focus-visible, .yr-nav:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.yr-hint { font-size: 13px; font-weight: 600; opacity: .9; }
+.yr-foot { margin-top: auto; font-size: 12px; font-weight: 650; letter-spacing: .02em; opacity: .85; }
+
+/* Категорії витрат, рекорди, цілі */
+.yr-bars-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.yr-bars-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 14px; }
+.yr-cat-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yr-cat-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.yr-cat-bar { grid-column: 1 / -1; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .22); overflow: hidden; }
+.yr-cat-bar i { display: block; height: 100%; width: var(--w); background: #fff; border-radius: inherit; animation: yr-grow .9s var(--ease) both; }
+@keyframes yr-grow { from { width: 0; } }
+.yr-records { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.yr-records li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 14px; background: rgba(255, 255, 255, .15); }
+.yr-rec-ico { width: 30px; height: 30px; border-radius: 50%; background: rgba(255, 255, 255, .22); display: grid; place-items: center; }
+.yr-rec-text { display: grid; min-width: 0; }
+.yr-rec-label { font-weight: 650; font-size: 13px; line-height: 1.25; }
+.yr-rec-sub { font-size: 12px; }
+.yr-rec-val { font-weight: 800; font-size: 16px; text-align: right; white-space: nowrap; }
+.yr-goals { list-style: none; margin: 0; padding: 0; counter-reset: yrg; display: grid; gap: 8px; }
+.yr-goals li { counter-increment: yrg; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: rgba(255, 255, 255, .15); font-size: 14px; font-weight: 600; }
+.yr-goals li::before { content: counter(yrg); width: 24px; height: 24px; border-radius: 50%; background: rgba(255, 255, 255, .25); display: grid; place-items: center; font-weight: 700; font-size: 12px; flex: none; }
+.yr-goal-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.yr-goals li.is-miss .yr-goal-text { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .7); }
+.yr-goal-ask { display: flex; gap: 6px; flex: none; }
+.yr-ask { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .7); background: transparent; color: #fff; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.yr-ask.on { background: #fff; color: var(--g2); border-color: #fff; }
+.yr-quote { margin: 0; display: grid; gap: 12px; }
+.yr-quote blockquote { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 20px; line-height: 1.32; display: -webkit-box; -webkit-line-clamp: 9; -webkit-box-orient: vertical; overflow: hidden; }
+.yr-quote figcaption { font-size: 14px; font-weight: 600; }
+
+/* Сторінка */
+.yr-switch { display: flex; align-items: center; gap: 2px; }
+.yr-switch-label { font-weight: 700; font-size: 16px; min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
+.yr-hero { border-radius: var(--radius-lg); padding: 26px 28px 24px; margin-bottom: 26px; box-shadow: var(--shadow-card); display: grid; gap: 6px; justify-items: start; }
+.yr-hero .yr-title-cover { font-size: clamp(40px, 6vw, 64px); margin-top: 10px; }
+.yr-hero .yr-actions { margin-top: 14px; }
+.yr-all-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.yr-all-head h2 { margin: 0; font-size: 18px; }
+.yr-all > .card { margin-bottom: 14px; }
+.yr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.yr-card { border-radius: var(--radius-lg); padding: 18px 18px 20px; min-height: 210px; display: flex; flex-direction: column; gap: 12px; cursor: pointer; box-shadow: var(--shadow-card); transition: transform .15s var(--ease), box-shadow .15s var(--ease); }
+.yr-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-pop); }
+.yr-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.yr-card .yr-main { margin-top: 2px; }
+.yr-card.is-quote blockquote { font-size: 17px; -webkit-line-clamp: 7; }
+
+/* Історії */
+.yr-stories { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; gap: 22px; }
+.yr-backdrop { position: absolute; inset: 0; background: rgba(8, 9, 12, .84); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.yr-frame {
+  position: relative; height: min(88vh, 860px); aspect-ratio: 9 / 16; max-width: calc(100vw - 150px); border-radius: 26px; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .45); container-type: size; touch-action: none; user-select: none; -webkit-user-select: none;
+  cursor: pointer; background: var(--g3); outline: none;
+}
+.yr-nav { position: relative; z-index: 2; width: 50px; height: 50px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-items: center; cursor: pointer; transition: background .15s var(--ease); }
+.yr-nav:hover:not(:disabled) { background: rgba(255, 255, 255, .26); }
+.yr-nav:disabled { opacity: .28; cursor: default; }
+.yr-stage { position: absolute; inset: 0; }
+.yr-bars { position: absolute; z-index: 3; top: calc(10px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px; display: flex; gap: 4px; }
+.yr-bar { flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .32); overflow: hidden; }
+.yr-bar i { display: block; height: 100%; width: 0; background: #fff; transition: width .3s var(--ease); }
+.yr-bar.done i, .yr-bar.active i { width: 100%; }
+.yr-top { position: absolute; z-index: 3; top: calc(20px + env(safe-area-inset-top, 0px)); left: 16px; right: 8px; display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 650; font-size: 13px; pointer-events: none; }
+.yr-top .yr-close { pointer-events: auto; }
+.yr-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.yr-close { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .2); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.yr-slide {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: min(3.4cqw, 1.9cqh);
+  padding: calc(76px + env(safe-area-inset-top, 0px)) 7cqw calc(min(6cqw, 3.4cqh) + env(safe-area-inset-bottom, 0px));
+}
+.yr-slide .yr-kicker { font-size: min(3.6cqw, 2cqh); }
+.yr-slide .yr-kicker-ico { width: min(8cqw, 4.4cqh); height: min(8cqw, 4.4cqh); }
+.yr-slide .yr-main { margin-top: auto; }
+.yr-slide .yr-big { font-size: min(27cqw, 15cqh); }
+.yr-slide .yr-big.is-mid { font-size: min(19cqw, 10.5cqh); }
+.yr-slide .yr-big.is-long { font-size: min(14cqw, 7.8cqh); }
+.yr-slide.is-quote .yr-quote { margin-top: auto; }
+.yr-slide .yr-title { font-size: min(10cqw, 5.6cqh); }
+.yr-slide .yr-title-cover { font-size: min(18cqw, 10cqh); }
+.yr-slide .yr-unit { font-size: min(6.2cqw, 3.5cqh); }
+.yr-slide .yr-since { font-size: min(4.8cqw, 2.7cqh); }
+.yr-slide .yr-chip, .yr-slide .yr-cmp { font-size: min(3.9cqw, 2.2cqh); }
+.yr-slide .yr-lines { font-size: min(4.5cqw, 2.5cqh); gap: min(2.2cqw, 1.2cqh); }
+.yr-slide .yr-bars-list li, .yr-slide .yr-goals li { font-size: min(4.2cqw, 2.35cqh); }
+.yr-slide .yr-rec-label { font-size: min(3.7cqw, 2.1cqh); }
+.yr-slide .yr-rec-sub { font-size: min(3.4cqw, 1.9cqh); }
+.yr-slide .yr-rec-val { font-size: min(4.6cqw, 2.6cqh); }
+.yr-slide .yr-quote blockquote { font-size: min(7cqw, 3.9cqh); }
+.yr-slide .yr-quote figcaption { font-size: min(4.2cqw, 2.35cqh); }
+.yr-slide .yr-btn { font-size: min(4cqw, 2.3cqh); }
+.yr-slide.is-cover .yr-main { margin-top: auto; }
+.yr-slide.is-cover .yr-hint { margin-top: 6px; }
+.yr-slide.in-next { animation: yr-in-next .34s var(--ease); }
+.yr-slide.in-prev { animation: yr-in-prev .34s var(--ease); }
+@keyframes yr-in-next { from { opacity: 0; transform: translateX(6%); } }
+@keyframes yr-in-prev { from { opacity: 0; transform: translateX(-6%); } }
+@media (max-width: 860px) {
+  .yr-stories { gap: 0; }
+  .yr-frame { height: 100%; width: 100%; max-width: none; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  .yr-nav { display: none; }
+  .yr-hero { padding: 22px 20px 20px; }
+  .yr-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yr-slide.in-next, .yr-slide.in-prev, .yr-cat-bar i { animation: none; }
+  .yr-card, .yr-bar i { transition: none; }
+}
+
+/* Головна */
+.card.yr-home { border-color: transparent; }
+.yr-home .card-head h2 { color: #fff; }
+.yr-home .card-head .btn { color: #fff; }
+.yr-home .card-head .btn:hover { background: rgba(255, 255, 255, .16); }
+.yr-home-body { display: grid; gap: 10px; justify-items: start; padding: 6px 20px 20px; }
+.yr-home-title { font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.yr-home .yr-chips { margin-top: 0; }
+
+/* Вікно «Цілі на …» */
+.yr-goal-edit { display: grid; gap: 8px; margin: 12px 0 8px; }
+.yr-goal-row { display: flex; align-items: center; gap: 8px; }
+.yr-goal-n { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); color: var(--text-2); display: grid; place-items: center; font-weight: 650; font-size: 12px; flex: none; }
+.yr-goal-row .input { flex: 1; min-width: 0; }

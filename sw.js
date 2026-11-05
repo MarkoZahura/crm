@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.10.30-1';
-const BUILD = 'df5f9f90b297';
+const VERSION = '2026.11.05-1';
+const BUILD = 'c89eb8d03529';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': '67bdc642b5ae5f02',
-  'css/sections.css': 'a04d1cafd7ee9190',
+  'css/sections.css': '72aa5d78adb23046',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -37,8 +37,8 @@ const FILES = {
   'icons/tiles-512.png': 'e9bb21ac87c5e125',
   'icons/tiles-apple-touch-icon.png': '9454b72f51288974',
   'icons/tiles-maskable-512.png': '28ae91bcaf8a45f5',
-  'index.html': 'b71bb7074301f115',
-  'js/app.js': '864b441b56476816',
+  'index.html': 'b30a7140042ce12f',
+  'js/app.js': 'f02a4e49296035b8',
   'js/backup.js': 'd63f11891c0a78e0',
   'js/books.js': '1b2780e22241e102',
   'js/budget/accounts.js': 'be75e3d139369d4d',
@@ -68,26 +68,27 @@ const FILES = {
   'js/demo.js': 'a55d7747a226a434',
   'js/gcal.js': '36f021c665da682e',
   'js/habits.js': 'e21f72a841eef3de',
-  'js/home.js': 'f8e6a4ad1714afe5',
-  'js/keys.js': '3075a69032919e9e',
-  'js/learning.js': 'f032d633405e9aff',
+  'js/home.js': '024a6cf6dddea6ec',
+  'js/keys.js': '25d0ea60b5adbb9c',
+  'js/learning.js': '5203ad53f0e58888',
   'js/notifications.js': '2724b57a7846a91e',
   'js/nutrition.js': '92def9b3e17a25a4',
   'js/people.js': '411a3f9797fed3dd',
   'js/profile.js': 'a7f18d9b9309da82',
   'js/program.js': '1a7ed7cc42642fac',
   'js/programs.js': '5badb646bc6e27ac',
-  'js/pwa.js': 'e7dd8adca5b31ce0',
+  'js/pwa.js': '0b1662ae14c89ee9',
   'js/quick.js': 'cbecf3d4af9b889a',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',
   'js/sync-config.js': '6e4963577579c35a',
-  'js/sync.js': 'eafa7c581f6a865e',
+  'js/sync.js': 'a2671d79ea02d100',
   'js/tasks.js': '7de521fc6a3fd0e7',
   'js/training.js': '477b2f5e63a1d32c',
   'js/trash.js': '1a7fed513817f343',
   'js/tutor-money.js': '14159a5148c04ab4',
   'js/tutor.js': '56c73c58ae1ba3e3',
+  'js/year.js': 'd303b7866b7ced04',
   'manifest-c.json': '6bec32309f09144a',
   'manifest-tiles.json': 'a5d3ba9581552a4b',
   'manifest.json': '7f3be59507fe8ac5'

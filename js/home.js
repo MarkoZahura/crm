@@ -279,6 +279,7 @@ window.CRM = window.CRM || {};
     money: { name: 'Гроші сьогодні', sub: 'доходи, витрати, результат', render: () => moneyCard() },
     limits: { name: 'Ліміти', sub: 'скільки лишилось на місяць', has: () => !!CRM.limits, render: () => CRM.limits.homeCard() },
     habits: { name: 'Звички', sub: 'відмітки на сьогодні', has: () => !!CRM.habits, render: () => CRM.habits.homeCard() },
+    year: { name: 'Мій рік', sub: 'підсумок року — у грудні й січні', has: () => !!CRM.year && CRM.year.homeShown(), render: () => CRM.year.homeCard() },
     tutor: { name: 'Уроки сьогодні', sub: 'репетиторство: план і звіт', has: () => !!CRM.tutor && CRM.tutor.all().length > 0, render: () => CRM.tutor.homeCard() },
     books: { name: 'Читаю зараз', sub: 'книги й прогрес у сторінках', has: () => !!CRM.books, render: () => CRM.books.homeCard() },
     training: { name: 'Сьогоднішнє тренування', sub: 'коли за програмою є тренування', has: () => !!CRM.programs, render: () => CRM.programs.homeCard() },
@@ -286,8 +287,8 @@ window.CRM = window.CRM || {};
   };
   const TOP = { pc: ['today', 'quote'], phone: ['quote'] };
   const DEFAULTS = {
-    pc: { left: ['tasks', 'tutor', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
-    phone: { list: ['today', 'tasks', 'tutor', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
+    pc: { left: ['year', 'tasks', 'tutor', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
+    phone: { list: ['today', 'year', 'tasks', 'tutor', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
   };
   const has = (id) => !!BLOCKS[id] && (!BLOCKS[id].has || BLOCKS[id].has());
   const narrowMq = window.matchMedia ? window.matchMedia('(max-width: 860px)') : null;

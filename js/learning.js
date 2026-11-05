@@ -109,6 +109,8 @@ window.CRM = window.CRM || {};
     if (!c || c.deletedAt) return null;
     const before = (c.topics || []).find((t) => t.id === topicId);
     if (!before) return null;
+    // Дата «вивчено» (для «Мого року», з 05.11.2026): ставиться сама, знімається разом із позначкою
+    if ('done' in changes && !('doneAt' in changes)) changes = Object.assign({}, changes, { doneAt: changes.done ? (before.done && before.doneAt) || D.today() : null });
     const topics = c.topics.map((t) => (t.id === topicId ? Object.assign({}, t, changes) : t));
     await CRM.store.patch('courses', courseId, { topics });
     CRM.notify.runRules();
@@ -123,7 +125,7 @@ window.CRM = window.CRM || {};
     const p = c ? progress(c) : null;
     ui.toast(done ? `«${before.title}» — вивчено${p ? ` (${p.done} з ${p.total})` : ''}` : `«${before.title}» — знову не вивчено`, {
       type: done ? 'success' : undefined,
-      action: { label: 'Скасувати', onClick: () => patchTopic(courseId, topicId, { done: !!before.done }) }
+      action: { label: 'Скасувати', onClick: () => patchTopic(courseId, topicId, { done: !!before.done, doneAt: before.doneAt || null }) }
     });
     return true;
   }
@@ -248,6 +250,8 @@ window.CRM = window.CRM || {};
     if (!st.topics) st.topics = [];
 
     async function commit(changes) {
+      // Курс завершено — дата завершення (для «Мого року»)
+      if ('status' in changes && !('doneAt' in changes)) changes = Object.assign({}, changes, { doneAt: changes.status === 'done' ? (st.status === 'done' && st.doneAt) || D.today() : null });
       Object.assign(st, changes);
       if (isNew) return;
       const cur = CRM.store.get('courses', st.id);
@@ -470,7 +474,7 @@ window.CRM = window.CRM || {};
               h('button', {
                 type: 'button', class: 'task-check small' + (t.done ? ' checked' : ''), role: 'checkbox', 'aria-checked': t.done ? 'true' : 'false',
                 'aria-label': t.done ? 'Зняти позначку' : 'Позначити тему вивченою',
-                onClick: () => updTopics(mapTopic(t.id, { done: !t.done }))
+                onClick: () => updTopics(mapTopic(t.id, { done: !t.done, doneAt: !t.done ? D.today() : null }))
               }, CRM.icon('check', { size: 'sm' })),
               text,
               // Значки й дедлайн; на телефоні — другим рядком під назвою (див. CSS)
