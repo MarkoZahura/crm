@@ -13,10 +13,13 @@
 
    Дані: сховище programs, запис = одна програма:
    { id, sourceId, title, kind: 'strength'|'running', durationWeeks, startDate,
-     shifts: [{ id, from, days, createdAt }], color, importedAt, fileName,
+     shifts: [{ id, from, days, fill: 'repeat'|'pause', createdAt }], color, importedAt, fileName,
      plan: { schemaVersion, rules, exercises, warmup, cooldown, sessions } }.
    Дата тренування k (0…) = startDate + k + сума зсувів з from ≤ k. Дні, що
-   звільнилися через зсув, — повтор попередніх тренувань (як радять правила).
+   звільнилися через зсув, — повтор попередніх тренувань (як радять правила) або
+   перерва: якщо у зсуві fill: 'pause' або день уже минув, коли зсув робили.
+   Тренування, виконане до зсуву на дату, що стала перервою, лишається на своїй
+   даті ('h:<дата>' у doneMap), а його день плану знову попереду.
    Виконане визначається за журналом, нічого окремо не зберігається.
    ========================================================================== */
 window.CRM = window.CRM || {};
@@ -293,14 +296,29 @@ window.CRM = window.CRM || {};
 
   // ---------- Графік: дати тренувань із зсувами ----------
   const tlCache = new Map();
-  /** { offs: [зсув від старту для кожного дня k], slots: [{ type: 'session', k } | { type: 'gap', mirror }], total }. */
+  /** День, коли зроблено зсув (за Києвом); старі зсуви без createdAt — '' (усі звільнені дні — повтор). */
+  function shiftDay(s) {
+    if (!s || !s.createdAt) return '';
+    try { return D.toKyivDate(s.createdAt); } catch (e) { return ''; }
+  }
+  /**
+   * { offs: [зсув від старту для кожного дня k],
+   *   slots: [{ type: 'session', k } | { type: 'gap', mirror } | { type: 'gap', mirror: null, pause: true }], total }.
+   */
   function timeline(p) {
     const ss = p.plan.sessions;
     const key = [p.updatedAt, p.startDate, ss.length, JSON.stringify(p.shifts || [])].join('|');
     const cached = tlCache.get(p.id);
     if (cached && cached.key === key) return cached.tl;
     const add = new Map();
-    (p.shifts || []).forEach((s) => { if (s.from >= 0 && s.from < ss.length && s.days > 0) add.set(s.from, (add.get(s.from) || 0) + s.days); });
+    const byFrom = new Map(); // from → зсуви в порядку створення (кожен звільняє свою частину проміжку)
+    (p.shifts || []).forEach((s, idx) => {
+      if (!(s.from >= 0 && s.from < ss.length && s.days > 0)) return;
+      add.set(s.from, (add.get(s.from) || 0) + s.days);
+      if (!byFrom.has(s.from)) byFrom.set(s.from, []);
+      byFrom.get(s.from).push({ s, idx });
+    });
+    byFrom.forEach((list) => list.sort((a, b) => String(a.s.createdAt || '').localeCompare(String(b.s.createdAt || '')) || a.idx - b.idx));
     const offs = new Array(ss.length);
     let acc = 0;
     for (let k = 0; k < ss.length; k++) { acc += add.get(k) || 0; offs[k] = k + acc; }
@@ -313,9 +331,19 @@ window.CRM = window.CRM || {};
       while (!slots[i]) i++;
       const nextK = slots[i].k;
       const len = i - g0;
+      // Хто звільнив кожен день проміжку: перший за часом зсув — початок проміжку, наступні — далі
+      const owners = [];
+      (byFrom.get(nextK) || []).forEach(({ s }) => { for (let n = 0; n < s.days; n++) owners.push(s); });
       // Звільнені дні повторюють тренування, що були перед зсувом (біг: +1 день — повтор учорашнього;
-      // сила: +14 днів — повтор блоку)
-      for (let j = 0; j < len; j++) slots[g0 + j] = { type: 'gap', mirror: nextK - len + j >= 0 ? nextK - len + j : null };
+      // сила: +14 днів — повтор блоку). Перерва — якщо так вибрано у зсуві або день уже минув,
+      // коли зсув робили (минулого не повториш: там лишається перерва, а виконане — на своїх датах).
+      for (let j = 0; j < len; j++) {
+        const own = owners[j] || null;
+        const date = D.addDays(p.startDate, g0 + j);
+        const pause = !!own && (own.fill === 'pause' || date < shiftDay(own));
+        const mirror = nextK - len + j >= 0 ? nextK - len + j : null;
+        slots[g0 + j] = pause || mirror == null ? { type: 'gap', mirror: null, pause: true } : { type: 'gap', mirror };
+      }
     }
     const tl = { offs, slots, total };
     tlCache.set(p.id, { key, tl });
@@ -324,7 +352,10 @@ window.CRM = window.CRM || {};
   function startOf(p) { return p.startDate; }
   function endOf(p) { return D.addDays(p.startDate, timeline(p).total - 1); }
   function dateOfSession(p, k) { return D.addDays(p.startDate, timeline(p).offs[k]); }
-  /** Що в програмі на дату: { type: 'before'|'after'|'session'|'gap', k?, mirror?, s (день плану або null), repeat }. */
+  /**
+   * Що в програмі на дату: { type: 'before'|'after'|'session'|'gap', k?, mirror?, s (день плану або null), repeat, pause }.
+   * pause — перерва після зсуву (тренування немає).
+   */
   function slotAt(p, date) {
     const tl = timeline(p);
     const i = D.diffDays(p.startDate, date);
@@ -333,18 +364,32 @@ window.CRM = window.CRM || {};
     const sl = tl.slots[i];
     const ss = p.plan.sessions;
     if (sl.type === 'session') return { type: 'session', k: sl.k, s: ss[sl.k], repeat: false, date };
-    return { type: 'gap', mirror: sl.mirror, k: sl.mirror, s: sl.mirror != null ? ss[sl.mirror] : null, repeat: true, date };
+    if (sl.pause || sl.mirror == null) return { type: 'gap', mirror: null, k: null, s: null, repeat: true, pause: true, date };
+    return { type: 'gap', mirror: sl.mirror, k: sl.mirror, s: ss[sl.mirror], repeat: true, date };
   }
   const doneKey = (slot) => (slot.repeat ? 'r:' + slot.date : 's:' + slot.s.week + '-' + slot.s.day);
-  /** Записи журналу, привʼязані до програми: ключ дня → тренування. */
+  /**
+   * Записи журналу, привʼязані до програми: ключ дня → тренування.
+   * 's:<тиждень>-<день>' — день плану, 'r:<дата>' — повтор, 'h:<дата>' — тренування, виконане до зсуву,
+   * чия дата тепер у перерві (лишається на своїй даті, а сам день плану знову попереду).
+   */
   function doneMap(p) {
     const map = new Map();
     CRM.store.list('workouts').forEach((w) => {
       const l = w.program;
       if (!l || l.id !== p.id || !l.week) return;
-      map.set(l.repeat ? 'r:' + l.date : 's:' + l.week + '-' + l.day, w);
+      if (l.repeat) { map.set('r:' + l.date, w); return; }
+      if (l.date && (p.shifts || []).length && slotAt(p, l.date).pause) { map.set('h:' + l.date, w); return; }
+      map.set('s:' + l.week + '-' + l.day, w);
     });
     return map;
+  }
+  /** Тренування, виконане до зсуву, на дату перерви: { w, s } або null. */
+  function historyOn(p, date, done) {
+    const w = (done || doneMap(p)).get('h:' + date);
+    if (!w) return null;
+    const s = p.plan.sessions.find((x) => x.week === w.program.week && x.day === w.program.day) || null;
+    return s ? { w, s } : null;
   }
   function progress(p, done) {
     const ss = p.plan.sessions;
@@ -386,7 +431,7 @@ window.CRM = window.CRM || {};
   }
   /** «Класичні підтягування (прямий хват) 4×4 · Віджимання на стійках 4×12». */
   function headline(p, s) {
-    if (!s) return 'Пауза в графіку';
+    if (!s) return 'Перерва в графіку';
     if (s.rest) return 'Відпочинок';
     const ex = exMap(p);
     return s.main.map((m) => `${(ex.get(m.exerciseId) || { name: 'Вправа' }).name} ${mainDose(m)}`.trim()).join(' · ');
@@ -608,12 +653,24 @@ window.CRM = window.CRM || {};
     list().forEach((p) => {
       const slot = slotAt(p, date);
       if (slot.type === 'before' || slot.type === 'after') return;
+      const hist = slot.pause ? historyOn(p, date) : null;
+      if (hist) {
+        // Перерва, але цього дня тренування вже було виконано (до зсуву графіка)
+        out.push({
+          key: p.id, color: colorOf(p), icon: kindOf(p).icon, progTitle: shortTitle(p),
+          weekText: `тиждень ${hist.s.week} з ${p.durationWeeks}`,
+          title: `Тиждень ${hist.s.week} · день ${hist.s.day} · до перерви`,
+          detail: headline(p, hist.s), rest: false, pause: false, repeat: false, history: true, done: hist.w,
+          open: () => openDay(p.id, date), mark: () => CRM.training.openForm(hist.w.id)
+        });
+        return;
+      }
       const s = slot.s;
       const done = s && !s.rest ? doneMap(p).get(doneKey(slot)) || null : null;
       out.push({
         key: p.id, color: colorOf(p), icon: kindOf(p).icon, progTitle: shortTitle(p),
         weekText: `тиждень ${s ? s.week : currentWeek(p, date)} з ${p.durationWeeks}`,
-        title: !s ? 'Пауза в графіку' : s.rest ? 'Відпочинок' : `Тиждень ${s.week} · день ${s.day}${slot.repeat ? ' · повтор' : ''}`,
+        title: !s ? 'Перерва в графіку' : s.rest ? 'Відпочинок' : `Тиждень ${s.week} · день ${s.day}${slot.repeat ? ' · повтор' : ''}`,
         detail: s && !s.rest ? headline(p, s) : '', rest: !s || s.rest, pause: !s, repeat: slot.repeat, done,
         open: () => openDay(p.id, date), mark: () => markDone(p, date)
       });
@@ -677,7 +734,7 @@ window.CRM = window.CRM || {};
 
   function todayLine(entry) {
     if (!entry) return null;
-    if (entry.rest) return { text: entry.pause ? 'пауза в графіку' : 'відпочинок' };
+    if (entry.rest) return { text: entry.pause ? 'перерва в графіку' : 'відпочинок' };
     return { text: entry.detail, badge: entry.done ? 'Виконано' : null };
   }
 
@@ -808,7 +865,7 @@ window.CRM = window.CRM || {};
     return D.addDays(dateOfSession(p, from), -same);
   }
   function shiftsText(p) {
-    return (p.shifts || []).map((s) => `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(p, s))}`).join(', ');
+    return (p.shifts || []).map((s) => `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(p, s))}${s.fill === 'pause' ? ' (перерва)' : ''}`).join(', ');
   }
 
   function videoLink(ex) {
@@ -862,20 +919,29 @@ window.CRM = window.CRM || {};
         h('div', { class: 'prog-date' }, h('span', { class: 'prog-date-main' }, `${fmt.date(date).replace(/ \d{4}$/, '')}, ${wdName}`), date === T ? h('span', { class: 'badge badge-accent' }, 'сьогодні') : null),
         h('button', { type: 'button', class: 'btn btn-icon btn-sm', 'aria-label': 'Наступний день програми', disabled: date >= end, onClick: () => go(1) }, CRM.icon('chevronRight', { size: 'sm' })))
     ];
-    const ph = s ? phaseOf(s.phase) : null;
-    const titleText = !s ? 'Пауза в графіку' : s.rest ? 'Відпочинок' + (slot.repeat ? ' (повтор)' : '') : `Тиждень ${s.week} · день ${s.day}${slot.repeat ? ' · повтор' : ''}`;
-    parts.push(h('h3', { class: 'prog-title' }, h('span', { class: 'prog-dot', style: { '--ph': ph ? CRM.dict.categoryColor(ph.color) : null }, hidden: !s || s.rest }), titleText));
-    if (s) {
-      const est = estimateMinutes(p, s);
+    // Перерва, але цього дня тренування виконано ще до зсуву — показуємо його
+    const hist = slot.pause ? historyOn(p, date, done) : null;
+    const shown = hist ? hist.s : s;
+    const ph = shown ? phaseOf(shown.phase) : null;
+    const titleText = hist ? `Тиждень ${hist.s.week} · день ${hist.s.day} · до перерви`
+      : !s ? 'Перерва' : s.rest ? 'Відпочинок' + (slot.repeat ? ' (повтор)' : '') : `Тиждень ${s.week} · день ${s.day}${slot.repeat ? ' · повтор' : ''}`;
+    parts.push(h('h3', { class: 'prog-title' }, h('span', { class: 'prog-dot', style: { '--ph': ph ? CRM.dict.categoryColor(ph.color) : null }, hidden: !shown || shown.rest }), titleText));
+    if (shown) {
+      const est = hist ? null : estimateMinutes(p, s);
       parts.push(h('div', { class: 'prog-facts' },
-        h('span', null, `Тиждень ${s.week} з ${p.durationWeeks}`),
+        h('span', null, `Тиждень ${shown.week} з ${p.durationWeeks}`),
         h('span', null, `Фаза: ${ph.name.toLowerCase()}`),
         est ? h('span', null, `≈${est} хв з розминкою й заминкою`) : null));
     }
-    if (slot.repeat) {
-      parts.push(h('div', { class: 'callout' }, CRM.icon('info'), h('span', null, s
-        ? `Графік зсунуто: цей день — повтор ${s.rest ? 'дня відпочинку' : 'тренування'} ${fmt.dateShort(dateOfSession(p, slot.mirror))} (тиждень ${s.week}, день ${s.day}), як радять правила програми.`
-        : 'Графік зсунуто на початку програми — цього дня тренування немає.')));
+    if (hist) {
+      const k = p.plan.sessions.indexOf(hist.s);
+      parts.push(h('div', { class: 'callout ip-history' }, CRM.icon('info'), h('span', null,
+        `Це тренування ти виконав до перерви. Графік зсунуто, тож за новим графіком тиждень ${hist.s.week}, день ${hist.s.day} — ${fmt.dateShort(dateOfSession(p, k))}.`)));
+    } else if (slot.pause) {
+      parts.push(h('div', { class: 'callout ip-pause' }, CRM.icon('info'), h('span', null, 'Графік зсунуто — тут перерва, тренування за програмою цього дня немає.')));
+    } else if (slot.repeat) {
+      parts.push(h('div', { class: 'callout' }, CRM.icon('info'), h('span', null,
+        `Графік зсунуто: цей день — повтор ${s.rest ? 'дня відпочинку' : 'тренування'} ${fmt.dateShort(dateOfSession(p, slot.mirror))} (тиждень ${s.week}, день ${s.day}), як радять правила програми.`)));
     }
     if (s && !s.rest) {
       const w = done.get(doneKey(slot));
@@ -894,6 +960,7 @@ window.CRM = window.CRM || {};
         h('div', { class: 'prog-ex-list' }, s.main.map((m) => exBlock(ex.get(m.exerciseId), mainDose(m), m.restSec ? `Відпочинок між підходами ${secLabel(m.restSec)}.` : null)))));
       parts.push(partBlock(p, 'cooldown', 'Заминка'));
     } else {
+      if (hist) parts.push(doneView(hist.w));
       const tl = timeline(p);
       const i0 = D.diffDays(start, date);
       let next = null;
@@ -915,27 +982,36 @@ window.CRM = window.CRM || {};
     for (let k = 0; k < 7; k++) cells.push(h('div', { class: 'prog-wd' }, CRM.WEEKDAYS_SHORT[D.weekday(D.addDays(start, k))]));
     const phases = new Map();
     let gaps = false;
+    let pauses = false;
     let lastLabel = '';
     for (let r = 0; r < rows; r++) {
-      // Підпис рядка — тиждень програми (після зсуву рядки й тижні можуть не збігатися — тоді без повторів)
+      // Підпис рядка — тиждень програми (після зсуву рядки й тижні можуть не збігатися — тоді без повторів;
+      // після рядка без тренувань, напр. перерви, підпис зʼявляється знову)
       let label = '';
-      for (let c = 0; c < 7; c++) {
+      for (let c = 0; c < 7 && !label; c++) {
         const i = r * 7 + c;
-        if (i < tl.total && tl.slots[i].type === 'session') { label = `Т${p.plan.sessions[tl.slots[i].k].week}`; break; }
+        if (i < tl.total && tl.slots[i].type === 'session') label = `Т${p.plan.sessions[tl.slots[i].k].week}`;
+      }
+      for (let c = 0; c < 7 && !label; c++) {
+        const i = r * 7 + c;
+        const hs = i < tl.total && tl.slots[i].pause ? historyOn(p, D.addDays(start, i), done) : null;
+        if (hs) label = `Т${hs.s.week}`;
       }
       cells.push(h('div', { class: 'prog-wk' }, label === lastLabel ? '' : label));
-      if (label) lastLabel = label;
+      lastLabel = label;
       for (let c = 0; c < 7; c++) {
         const i = r * 7 + c;
         if (i >= tl.total) { cells.push(h('div')); continue; }
         const date = D.addDays(start, i);
         const slot = slotAt(p, date);
-        const s = slot.s;
+        const hist = slot.pause ? historyOn(p, date, done) : null;
+        const s = hist ? hist.s : slot.s;
         const rest = !s || s.rest;
-        const isDone = !rest && done.has(doneKey(slot));
+        const isDone = !!hist || (!rest && done.has(doneKey(slot)));
         const cls = ['prog-cell'];
         if (rest) cls.push('rest');
-        if (slot.repeat) { cls.push('gap'); gaps = true; }
+        if (slot.pause) { cls.push('pause'); pauses = true; } else if (slot.repeat) { cls.push('gap'); gaps = true; }
+        if (hist) cls.push('history');
         if (isDone) cls.push('done');
         if (date === T) cls.push('today');
         if (date === sel) cls.push('sel');
@@ -946,12 +1022,12 @@ window.CRM = window.CRM || {};
         cells.push(h('button', {
           type: 'button', class: cls.join(' '),
           style: rest ? null : { '--ph': CRM.dict.categoryColor(ph.color) },
-          'aria-label': `${fmt.date(date)}: ${headline(p, s)}${slot.repeat ? ' (повтор)' : ''}${isDone ? ', виконано' : ''}`,
+          'aria-label': `${fmt.date(date)}: ${headline(p, s)}${hist ? ' (до перерви)' : slot.repeat && !slot.pause ? ' (повтор)' : ''}${isDone ? ', виконано' : ''}`,
           'aria-pressed': date === sel ? 'true' : 'false',
           onClick: () => { selected.set(p.id, date); CRM.router.rerender(); }
         },
         h('span', { class: 'prog-cell-date' }, `${pd.d}.${String(pd.m).padStart(2, '0')}`),
-        h('span', { class: 'prog-cell-code' }, slot.repeat && !rest ? '↻' : cellCode(s)),
+        h('span', { class: 'prog-cell-code' }, slot.repeat && !slot.pause && !rest ? '↻' : cellCode(s)),
         isDone ? h('span', { class: 'prog-cell-check' }, CRM.icon('check', { size: 'sm' })) : null));
       }
     }
@@ -959,6 +1035,7 @@ window.CRM = window.CRM || {};
       Array.from(phases.values()).map((ph) => h('span', null, h('i', { style: { '--ph': CRM.dict.categoryColor(ph.color) } }), ph.name)),
       h('span', null, h('i', { class: 'rest' }), 'Відпочинок'),
       gaps ? h('span', null, '↻ повтор (зсув графіка)') : null,
+      pauses ? h('span', null, h('i', { class: 'pause' }), 'Перерва (зсув графіка)') : null,
       p.kind === 'running' ? h('span', null, 'Б/Х — біг-ходьба; числа — км') : h('span', null, 'Числа — підходи × повторення першої вправи'));
     return h('div', { class: 'prog-cal' }, h('div', { class: 'prog-grid', role: 'group', 'aria-label': `Календар програми, ${fmt.count(rows, ['тиждень', 'тижні', 'тижнів'])}` }, cells), legend);
   }
@@ -1004,8 +1081,13 @@ window.CRM = window.CRM || {};
     });
   }
 
-  /** Зсув: тренування з дати from і всі наступні — на days днів пізніше. */
-  async function addShift(p, fromDate, days) {
+  /**
+   * Зсув: тренування з дати from і всі наступні — на days днів пізніше.
+   * opts.fill: 'repeat' (звільнені дні — повтор попередніх, як радять правила) або 'pause' (перерва).
+   * Дні, що вже минули, — завжди перерва (timeline).
+   */
+  async function addShift(p, fromDate, days, opts) {
+    const fill = opts && opts.fill === 'pause' ? 'pause' : 'repeat';
     const cur = get(p.id) || p;
     const ss = cur.plan.sessions;
     let slot = slotAt(cur, fromDate);
@@ -1022,7 +1104,7 @@ window.CRM = window.CRM || {};
       from = tl.slots[i].k;
     }
     if (from >= ss.length) throw new Error('Після цієї дати тренувань у програмі немає.');
-    const shifts = (cur.shifts || []).concat([{ id: CRM.utils.uid(), from, days, createdAt: new Date().toISOString() }]);
+    const shifts = (cur.shifts || []).concat([{ id: CRM.utils.uid(), from, days, fill, createdAt: new Date().toISOString() }]);
     return CRM.store.save(STORE, Object.assign({}, cur, { shifts }));
   }
   async function removeShift(p, shiftId) {
@@ -1037,24 +1119,48 @@ window.CRM = window.CRM || {};
     const end = endOf(p);
     const def = sel < start ? start : sel > end ? T : sel;
     const dateIn = ui.dateInput({ value: def, clearable: false, ariaLabel: 'Починаючи з' });
-    const daysIn = h('input', { class: 'input input-num', type: 'number', min: 1, max: 60, step: 1, value: p.kind === 'strength' ? 14 : 1, 'aria-label': 'На скільки днів' });
+    const ruleDays = p.kind === 'strength' ? 14 : 1;
+    const daysIn = h('input', { class: 'input input-num', type: 'number', min: 1, max: 60, step: 1, value: ruleDays, 'aria-label': 'На скільки днів' });
     const fDays = ui.field({ label: 'На скільки днів', input: daysIn });
     const fDate = ui.field({ label: 'Починаючи з тренування', input: dateIn });
+    // Що в дні, що звільнилися: за правилами програми — повтор; інша кількість днів — зазвичай перерва
+    let fill = 'repeat';
+    let fillTouched = false;
+    const FILLS = [{ id: 'repeat', label: 'Повтор попередніх' }, { id: 'pause', label: 'Перерва' }];
+    const fillSeg = h('div', { class: 'segmented ip-fill', role: 'radiogroup', 'aria-label': 'Дні, що звільнилися' });
+    const fillHint = h('span');
+    function renderFill() {
+      ui.mount(fillSeg, FILLS.map((x) => h('button', {
+        type: 'button', role: 'radio', class: fill === x.id ? 'active' : '', 'aria-checked': fill === x.id ? 'true' : 'false', dataset: { fill: x.id },
+        onClick: () => { fill = x.id; fillTouched = true; renderFill(); }
+      }, x.label)));
+      fillHint.textContent = fill === 'pause'
+        ? 'Без тренувань — програма продовжиться з того самого дня плану.'
+        : `Повтор тренувань, що були перед зсувом (${p.kind === 'strength' ? 'як радять правила: +14 днів — повтор блоку' : 'як радять правила: +1 день — повтор учорашньої дистанції'}).`;
+    }
+    renderFill();
+    daysIn.addEventListener('input', () => {
+      if (fillTouched) return;
+      fill = Number(daysIn.value) === ruleDays ? 'repeat' : 'pause';
+      renderFill();
+    });
+    const fFill = ui.field({ label: 'Дні, що звільнилися', input: fillSeg, hint: fillHint, className: 'ip-fill-field' });
     const listBox = h('div', { class: 'ip-shifts' });
     function renderList() {
       const cur = get(p.id) || p;
       const shifts = cur.shifts || [];
       ui.mount(listBox, shifts.length ? [h('div', { class: 'field-label' }, 'Уже зсунуто'),
         shifts.map((s) => h('div', { class: 'ip-shift' },
-          h('span', null, `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(cur, s))} (тренування тижня ${cur.plan.sessions[Math.min(s.from, cur.plan.sessions.length - 1)].week}, дня ${cur.plan.sessions[Math.min(s.from, cur.plan.sessions.length - 1)].day} і далі)`),
+          h('span', null, `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(cur, s))} (тренування тижня ${cur.plan.sessions[Math.min(s.from, cur.plan.sessions.length - 1)].week}, дня ${cur.plan.sessions[Math.min(s.from, cur.plan.sessions.length - 1)].day} і далі)${s.fill === 'pause' ? ' · перерва' : ''}`),
           h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'aria-label': 'Скасувати зсув', onClick: async () => { await removeShift(cur, s.id); renderList(); ui.toast('Зсув скасовано'); } }, CRM.icon('x', { size: 'sm' }), 'Скасувати')))] : null);
     }
     renderList();
     const dlg = ui.modal({
       title: 'Зсунути графік',
       body: h('div', { class: 'stack', style: { gap: '14px' } },
-        h('p', { class: 'modal-text' }, 'Тренування з обраної дати й усі наступні перенесуться на N днів пізніше. Дні, що звільнилися, показуються як повтор попередніх тренувань — як радять правила програми (біг: +1 день за повтор учорашньої дистанції; підтягування: +14 днів за повтор блоку).'),
+        h('p', { class: 'modal-text' }, 'Тренування з обраної дати й усі наступні перенесуться на N днів пізніше. Дні, що звільнилися, — на вибір: повтор попередніх тренувань (як радять правила програми) або перерва. Дні, що вже минули, завжди стають перервою, а виконані тоді тренування лишаються на своїх датах.'),
         h('div', { class: 'form-grid' }, fDate, fDays),
+        fFill,
         listBox),
       footer: h('div', { class: 'btn-row' },
         ui.button({ label: 'Закрити', onClick: () => dlg.close('button') }),
@@ -1062,7 +1168,7 @@ window.CRM = window.CRM || {};
           const n = Number(daysIn.value);
           if (!Number.isInteger(n) || n < 1 || n > 60) { fDays.setError('Від 1 до 60 днів'); return; }
           try {
-            await addShift(p, dateIn.dateValue || def, n);
+            await addShift(p, dateIn.dateValue || def, n, { fill });
           } catch (e) { fDate.setError(e.message); return; }
           dlg.close('force');
           ui.toast(`Графік зсунуто на ${fmt.count(n, ['день', 'дні', 'днів'])}`, { type: 'success' });
@@ -1132,7 +1238,7 @@ window.CRM = window.CRM || {};
 
   CRM.programs = {
     SCHEMA_VERSION, validate, jsonErrorText, importProgram, importFile, importButton,
-    list, get, timeline, slotAt, dateOfSession, endOf, doneMap, progress, statusText, currentWeek,
+    list, get, timeline, slotAt, dateOfSession, endOf, doneMap, historyOn, progress, statusText, currentWeek,
     headline, presetFor, markDone, planMet, addShift, removeShift, entriesOn, openDay, badgeText, shortTitle,
     listView, pageView, homeCard
   };

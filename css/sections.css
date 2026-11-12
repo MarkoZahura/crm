@@ -1271,6 +1271,11 @@
 .prog-video.unverified { color: var(--text-2); }
 .prog-cell.gap { box-shadow: inset 0 -3px 0 var(--ph), inset 0 0 0 1px var(--border-strong); }
 .prog-cell.gap.rest { box-shadow: inset 0 0 0 1px var(--border-strong); }
+/* Перерва після зсуву графіка: порожня клітинка з пунктиром; виконане до зсуву — як звичайне виконане */
+.prog-cell.pause.rest { background: transparent; box-shadow: none; border: 1px dashed var(--border-strong); }
+.prog-cell.pause.rest .prog-cell-code { opacity: .6; }
+.prog-legend i.pause { background: transparent; border: 1px dashed var(--border-strong); }
+.ip-fill-field .segmented { align-self: flex-start; }
 .ip-shifts { display: flex; flex-direction: column; gap: 6px; }
 .ip-shifts:empty { display: none; }
 .ip-shift { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; padding: 6px 10px; border-radius: var(--radius); background: var(--surface-2); }
