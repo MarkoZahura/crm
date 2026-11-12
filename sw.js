@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.11.13-1';
-const BUILD = 'c6fceccc15e2';
+const VERSION = '2026.11.13-2';
+const BUILD = 'c323b77a5cfc';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': '67bdc642b5ae5f02',
-  'css/sections.css': '2d968dd959365f15',
+  'css/sections.css': 'c236b855bb33c5ff',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -75,16 +75,16 @@ const FILES = {
   'js/nutrition.js': '92def9b3e17a25a4',
   'js/people.js': '411a3f9797fed3dd',
   'js/profile.js': 'a7f18d9b9309da82',
-  'js/program.js': '1a7ed7cc42642fac',
-  'js/programs.js': 'ad40979be1f71afd',
-  'js/pwa.js': 'c028e6d4673f082c',
+  'js/program.js': 'e494a90a106525b7',
+  'js/programs.js': 'd588a83ecaa3cbf3',
+  'js/pwa.js': 'eb8f1a9dfe25ccf0',
   'js/quick.js': 'cbecf3d4af9b889a',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',
   'js/sync-config.js': '6e4963577579c35a',
   'js/sync.js': 'a2671d79ea02d100',
   'js/tasks.js': '7de521fc6a3fd0e7',
-  'js/training.js': '477b2f5e63a1d32c',
+  'js/training.js': '92445ff899cdf2da',
   'js/trash.js': '1a7fed513817f343',
   'js/tutor-money.js': '14159a5148c04ab4',
   'js/tutor.js': '56c73c58ae1ba3e3',

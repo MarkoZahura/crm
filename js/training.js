@@ -108,7 +108,7 @@ window.CRM = window.CRM || {};
     if (!w.program) return null;
     if (w.program.week && CRM.programs) return CRM.programs.badgeText(w);
     if (w.program.week) return `Програма · тиждень ${w.program.week}, день ${w.program.day}`;
-    return `Програма · день ${w.program.day}`;
+    return `Програма · день ${w.program.day}${w.program.repeat ? ' · повтор' : ''}`;
   }
 
   function summaryText(w) {
@@ -462,5 +462,113 @@ window.CRM = window.CRM || {};
   }
 
   CRM.router.register('training', { title: 'Тренування', stores: ['workouts', 'programs'], render });
-  CRM.training = { openForm, stats, tonnage, pace, durationText, durationInput, parseDuration, durSec, secToMin };
+  // ---------- Вікно «Зсунути графік» (спільне для «Верх тіла» і програм з JSON) ----------
+  /**
+   * o: { defDate — дата за замовчуванням («Починаючи з тренування»),
+   *      resolve(date) → дата тренування, яке переноситься (сама дата або найближче тренування після неї; кидає Error з текстом),
+   *      defaultDays(датаТренування) → число, defaultFill(днів) → 'repeat'|'pause', repeatHint, intro,
+   *      describe(датаТренування) → підпис тренування (необовʼязково),
+   *      list() → [{ id, text }], add(date, days, fill) → Promise, remove(id) → Promise }.
+   * Поля «На скільки днів» і «Перенести на дату» повʼязані: зміниш одне — друге порахується само.
+   */
+  function shiftDialog(o) {
+    const MAX = 60;
+    const daysWord = (n) => fmt.count(n, ['день', 'дні', 'днів']);
+    let from = o.defDate;
+    const session = () => { try { return o.resolve(from); } catch (e) { return null; } };
+    const clamp = (n) => Math.max(1, Math.min(MAX, Math.round(Number(n) || 1)));
+    const a0 = session();
+    const daysIn = h('input', { class: 'input input-num', type: 'number', min: 1, max: MAX, step: 1, value: clamp(o.defaultDays ? o.defaultDays(a0 || from) : 1), 'aria-label': 'На скільки днів' });
+    const days = () => { const n = Number(daysIn.value); return Number.isInteger(n) && n >= 1 && n <= MAX ? n : null; };
+    const fDays = ui.field({ label: 'На скільки днів', input: daysIn });
+    const dateIn = ui.dateInput({ value: from, clearable: false, ariaLabel: 'Починаючи з', onChange: (v) => { if (v) from = v; checkFrom(); syncTo(); } });
+    const fDate = ui.field({ label: 'Починаючи з тренування', input: dateIn });
+    const toIn = ui.dateInput({ value: null, clearable: false, placeholder: 'Оберіть дату', ariaLabel: 'Перенести на дату', onChange: (v) => {
+      const a = session();
+      if (!a || !v) { syncTo(); return; }
+      const n = D.diffDays(a, v);
+      if (n < 1 || n > MAX) {
+        syncTo();
+        fTo.setError(n < 1 ? `Має бути пізніше за ${fmt.dateShort(a)}` : `Не далі ніж на ${MAX} днів`);
+        return;
+      }
+      daysIn.value = String(n);
+      fDays.setError(null);
+      autoFill();
+      syncTo();
+    } });
+    const fTo = ui.field({ label: 'Перенести на дату', input: toIn });
+    const sum = h('div', { class: 'ip-shift-sum', 'aria-live': 'polite' });
+    function checkFrom() {
+      try { o.resolve(from); fDate.setError(null); } catch (e) { fDate.setError(e.message); }
+    }
+    /** Нова дата тренування й підсумок — з дати тренування та кількості днів. */
+    function syncTo() {
+      const a = session();
+      const n = days();
+      fTo.setError(null);
+      toIn.dateValue = a && n ? D.addDays(a, n) : null;
+      if (!a || !n) { sum.textContent = ''; return; }
+      const what = o.describe ? o.describe(a) : '';
+      sum.textContent = `${a !== from ? 'Найближче тренування — ' : 'Тренування '}${fmt.dateShort(a)}${what ? ` (${what})` : ''} й усі наступні — на ${daysWord(n)} пізніше: тепер ${fmt.dateShort(D.addDays(a, n))}.`;
+    }
+
+    // Що в дні, що звільнилися
+    let fill = o.defaultFill ? o.defaultFill(days() || 1) : 'pause';
+    let fillTouched = false;
+    const FILLS = [{ id: 'repeat', label: 'Повтор попередніх' }, { id: 'pause', label: 'Перерва' }];
+    const fillSeg = h('div', { class: 'segmented ip-fill', role: 'radiogroup', 'aria-label': 'Дні, що звільнилися' });
+    const fillHint = h('span');
+    function renderFill() {
+      ui.mount(fillSeg, FILLS.map((x) => h('button', {
+        type: 'button', role: 'radio', class: fill === x.id ? 'active' : '', 'aria-checked': fill === x.id ? 'true' : 'false', dataset: { fill: x.id },
+        onClick: () => { fill = x.id; fillTouched = true; renderFill(); }
+      }, x.label)));
+      fillHint.textContent = fill === 'pause' ? 'Без тренувань — програма продовжиться з того самого дня плану.' : (o.repeatHint || 'Повтор тренувань, що були перед зсувом.');
+    }
+    function autoFill() {
+      if (fillTouched || !o.defaultFill) return;
+      fill = o.defaultFill(Number(daysIn.value));
+      renderFill();
+    }
+    renderFill();
+    daysIn.addEventListener('input', () => { autoFill(); syncTo(); });
+    const fFill = ui.field({ label: 'Дні, що звільнилися', input: fillSeg, hint: fillHint, className: 'ip-fill-field' });
+
+    const listBox = h('div', { class: 'ip-shifts' });
+    function renderList() {
+      const items = o.list();
+      ui.mount(listBox, items.length ? [h('div', { class: 'field-label' }, 'Уже зсунуто'),
+        items.map((it) => h('div', { class: 'ip-shift' },
+          h('span', null, it.text),
+          h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'aria-label': 'Скасувати зсув', onClick: async () => { await o.remove(it.id); renderList(); checkFrom(); syncTo(); ui.toast('Зсув скасовано'); } }, CRM.icon('x', { size: 'sm' }), 'Скасувати')))] : null);
+    }
+    renderList();
+    checkFrom();
+    syncTo();
+
+    const dlg = ui.modal({
+      title: 'Зсунути графік',
+      body: h('div', { class: 'stack', style: { gap: '14px' } },
+        h('p', { class: 'modal-text' }, o.intro),
+        h('div', { class: 'form-grid' }, fDate, fTo),
+        h('div', { class: 'form-grid ip-shift-days' }, fDays, sum),
+        fFill,
+        listBox),
+      footer: h('div', { class: 'btn-row' },
+        ui.button({ label: 'Закрити', onClick: () => dlg.close('button') }),
+        ui.button({ label: 'Зсунути', icon: 'calendar', variant: 'primary', onClick: async () => {
+          const n = days();
+          if (!n) { fDays.setError(`Від 1 до ${MAX} днів`); return; }
+          try {
+            await o.add(from, n, fill);
+          } catch (e) { fDate.setError(e.message); return; }
+          dlg.close('force');
+          ui.toast(`Графік зсунуто на ${daysWord(n)}`, { type: 'success' });
+        } }))
+    });
+    return dlg;
+  }
+
+  CRM.training = { openForm, stats, tonnage, pace, durationText, durationInput, parseDuration, durSec, secToMin, shiftDialog };
 })(window.CRM);

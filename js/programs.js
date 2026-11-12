@@ -646,8 +646,9 @@ window.CRM = window.CRM || {};
       out.push({
         key: CRM.program.PROGRAM_ID, color: CRM.dict.categoryColor(CRM.program.COLOR), icon: 'dumbbell',
         progTitle: CRM.program.NAME, weekText: `тиждень ${up.week} з 12`,
-        title: up.title, detail: up.rest ? '' : up.items.join(' · '), rest: up.rest, pause: false, repeat: false, done: up.done,
-        open: () => CRM.program.openDay(up.d), mark: () => CRM.program.recordDay(up.d)
+        title: up.title, detail: up.rest ? '' : up.items.join(' · '), rest: up.rest, pause: !!up.pause, repeat: !!up.repeat, history: !!up.history, done: up.done,
+        open: () => (CRM.program.openDate ? CRM.program.openDate(date) : CRM.program.openDay(up.d)),
+        mark: () => (CRM.program.recordDate ? CRM.program.recordDate(date) : CRM.program.recordDay(up.d))
       });
     }
     list().forEach((p) => {
@@ -1081,16 +1082,10 @@ window.CRM = window.CRM || {};
     });
   }
 
-  /**
-   * Зсув: тренування з дати from і всі наступні — на days днів пізніше.
-   * opts.fill: 'repeat' (звільнені дні — повтор попередніх, як радять правила) або 'pause' (перерва).
-   * Дні, що вже минули, — завжди перерва (timeline).
-   */
-  async function addShift(p, fromDate, days, opts) {
-    const fill = opts && opts.fill === 'pause' ? 'pause' : 'repeat';
-    const cur = get(p.id) || p;
+  /** День плану (номер у sessions), який переносить зсув з дати fromDate: саме тренування або найближче після перерви чи повтору. */
+  function shiftFrom(cur, fromDate) {
     const ss = cur.plan.sessions;
-    let slot = slotAt(cur, fromDate);
+    const slot = slotAt(cur, fromDate);
     let from;
     if (slot.type === 'before') from = 0;
     else if (slot.type === 'after') throw new Error('Ця дата вже після кінця програми.');
@@ -1104,6 +1099,17 @@ window.CRM = window.CRM || {};
       from = tl.slots[i].k;
     }
     if (from >= ss.length) throw new Error('Після цієї дати тренувань у програмі немає.');
+    return from;
+  }
+  /**
+   * Зсув: тренування з дати from і всі наступні — на days днів пізніше.
+   * opts.fill: 'repeat' (звільнені дні — повтор попередніх, як радять правила) або 'pause' (перерва).
+   * Дні, що вже минули, — завжди перерва (timeline).
+   */
+  async function addShift(p, fromDate, days, opts) {
+    const fill = opts && opts.fill === 'pause' ? 'pause' : 'repeat';
+    const cur = get(p.id) || p;
+    const from = shiftFrom(cur, fromDate);
     const shifts = (cur.shifts || []).concat([{ id: CRM.utils.uid(), from, days, fill, createdAt: new Date().toISOString() }]);
     return CRM.store.save(STORE, Object.assign({}, cur, { shifts }));
   }
@@ -1112,67 +1118,35 @@ window.CRM = window.CRM || {};
     return CRM.store.save(STORE, Object.assign({}, cur, { shifts: (cur.shifts || []).filter((s) => s.id !== shiftId) }));
   }
 
+  /** Вікно «Зсунути графік» — спільне з «Верх тіла» (CRM.training.shiftDialog). */
   function shiftDialog(p) {
+    if (!(CRM.training && CRM.training.shiftDialog)) { ui.toast('Сайт оновлено не повністю — онови сторінку.', { type: 'error' }); return; }
     const T = D.today();
     const sel = selected.get(p.id) || T;
     const start = startOf(p);
     const end = endOf(p);
     const def = sel < start ? start : sel > end ? T : sel;
-    const dateIn = ui.dateInput({ value: def, clearable: false, ariaLabel: 'Починаючи з' });
     const ruleDays = p.kind === 'strength' ? 14 : 1;
-    const daysIn = h('input', { class: 'input input-num', type: 'number', min: 1, max: 60, step: 1, value: ruleDays, 'aria-label': 'На скільки днів' });
-    const fDays = ui.field({ label: 'На скільки днів', input: daysIn });
-    const fDate = ui.field({ label: 'Починаючи з тренування', input: dateIn });
-    // Що в дні, що звільнилися: за правилами програми — повтор; інша кількість днів — зазвичай перерва
-    let fill = 'repeat';
-    let fillTouched = false;
-    const FILLS = [{ id: 'repeat', label: 'Повтор попередніх' }, { id: 'pause', label: 'Перерва' }];
-    const fillSeg = h('div', { class: 'segmented ip-fill', role: 'radiogroup', 'aria-label': 'Дні, що звільнилися' });
-    const fillHint = h('span');
-    function renderFill() {
-      ui.mount(fillSeg, FILLS.map((x) => h('button', {
-        type: 'button', role: 'radio', class: fill === x.id ? 'active' : '', 'aria-checked': fill === x.id ? 'true' : 'false', dataset: { fill: x.id },
-        onClick: () => { fill = x.id; fillTouched = true; renderFill(); }
-      }, x.label)));
-      fillHint.textContent = fill === 'pause'
-        ? 'Без тренувань — програма продовжиться з того самого дня плану.'
-        : `Повтор тренувань, що були перед зсувом (${p.kind === 'strength' ? 'як радять правила: +14 днів — повтор блоку' : 'як радять правила: +1 день — повтор учорашньої дистанції'}).`;
-    }
-    renderFill();
-    daysIn.addEventListener('input', () => {
-      if (fillTouched) return;
-      fill = Number(daysIn.value) === ruleDays ? 'repeat' : 'pause';
-      renderFill();
-    });
-    const fFill = ui.field({ label: 'Дні, що звільнилися', input: fillSeg, hint: fillHint, className: 'ip-fill-field' });
-    const listBox = h('div', { class: 'ip-shifts' });
-    function renderList() {
-      const cur = get(p.id) || p;
-      const shifts = cur.shifts || [];
-      ui.mount(listBox, shifts.length ? [h('div', { class: 'field-label' }, 'Уже зсунуто'),
-        shifts.map((s) => h('div', { class: 'ip-shift' },
-          h('span', null, `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(cur, s))} (тренування тижня ${cur.plan.sessions[Math.min(s.from, cur.plan.sessions.length - 1)].week}, дня ${cur.plan.sessions[Math.min(s.from, cur.plan.sessions.length - 1)].day} і далі)${s.fill === 'pause' ? ' · перерва' : ''}`),
-          h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'aria-label': 'Скасувати зсув', onClick: async () => { await removeShift(cur, s.id); renderList(); ui.toast('Зсув скасовано'); } }, CRM.icon('x', { size: 'sm' }), 'Скасувати')))] : null);
-    }
-    renderList();
-    const dlg = ui.modal({
-      title: 'Зсунути графік',
-      body: h('div', { class: 'stack', style: { gap: '14px' } },
-        h('p', { class: 'modal-text' }, 'Тренування з обраної дати й усі наступні перенесуться на N днів пізніше. Дні, що звільнилися, — на вибір: повтор попередніх тренувань (як радять правила програми) або перерва. Дні, що вже минули, завжди стають перервою, а виконані тоді тренування лишаються на своїх датах.'),
-        h('div', { class: 'form-grid' }, fDate, fDays),
-        fFill,
-        listBox),
-      footer: h('div', { class: 'btn-row' },
-        ui.button({ label: 'Закрити', onClick: () => dlg.close('button') }),
-        ui.button({ label: 'Зсунути', icon: 'calendar', variant: 'primary', onClick: async () => {
-          const n = Number(daysIn.value);
-          if (!Number.isInteger(n) || n < 1 || n > 60) { fDays.setError('Від 1 до 60 днів'); return; }
-          try {
-            await addShift(p, dateIn.dateValue || def, n, { fill });
-          } catch (e) { fDate.setError(e.message); return; }
-          dlg.close('force');
-          ui.toast(`Графік зсунуто на ${fmt.count(n, ['день', 'дні', 'днів'])}`, { type: 'success' });
-        } }))
+    const cur = () => get(p.id) || p;
+    const last = (c) => c.plan.sessions.length - 1;
+    CRM.training.shiftDialog({
+      defDate: def,
+      resolve: (date) => { const c = cur(); return dateOfSession(c, shiftFrom(c, date)); },
+      defaultDays: () => ruleDays,
+      // За правилами програми — повтор; інша кількість днів — зазвичай перерва
+      defaultFill: (n) => (n === ruleDays ? 'repeat' : 'pause'),
+      repeatHint: `Повтор тренувань, що були перед зсувом (${p.kind === 'strength' ? 'як радять правила: +14 днів — повтор блоку' : 'як радять правила: +1 день — повтор учорашньої дистанції'}).`,
+      intro: 'Тренування з обраної дати й усі наступні перенесуться на N днів пізніше — впиши кількість днів або вибери нову дату, друге порахується само. Дні, що звільнилися, — на вибір: повтор попередніх тренувань (як радять правила програми) або перерва. Дні, що вже минули, завжди стають перервою, а виконані тоді тренування лишаються на своїх датах.',
+      describe: (date) => { const c = cur(); const sl = slotAt(c, date); return sl.s ? `тиждень ${sl.s.week}, день ${sl.s.day}` : ''; },
+      list: () => {
+        const c = cur();
+        return (c.shifts || []).map((s) => {
+          const ses = c.plan.sessions[Math.min(s.from, last(c))];
+          return { id: s.id, text: `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(c, s))} (тренування тижня ${ses.week}, дня ${ses.day} і далі)${s.fill === 'pause' ? ' · перерва' : ''}` };
+        });
+      },
+      add: (date, n, fill) => addShift(p, date, n, { fill }),
+      remove: (id) => removeShift(cur(), id)
     });
   }
 

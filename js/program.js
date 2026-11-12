@@ -3,8 +3,9 @@
 
    • План на кожен день: адаптація (Ф1/Ф2), основа (A → B → C → відпочинок),
      розвантаження, ускладнення, тести сили.
-   • Картка на сторінці «Тренування»: день, вправи з підходами, розминка,
-     підказки техніки й відео, календар 12 тижнів із позначками виконаного.
+   • Картка на сторінці «Тренування»: день, розминка → основна частина → заминка
+     (кожна вправа — з підказками техніки й відео), календар із позначками виконаного,
+     смужка прогресу, «Факт» під виконаним тренуванням.
    • «Записати тренування» відкриває форму журналу з уже вписаними вправами.
      Виконане визначається за записами журналу (поле program { run, day }),
      тож видалення / відновлення з Кошика одразу змінює позначки.
@@ -13,7 +14,12 @@
      #/training/program/upper30); програма також дає дані для тижневого списку
      й «Сьогоднішнього тренування» (dayInfo, summary) — див. programs.js.
 
-   Налаштування: trainingProgram = { id, run, startDate } (потрапляє в експорт).
+   • Зсув графіка (з 13.11.2026): меню «⋯» → «Зсунути графік» — тренування з обраного дня
+     й усі наступні переносяться на N днів; звільнені дні — перерва або повтор попередніх
+     (як у програмах з JSON, див. programs.js). Виконане до зсуву лишається на своїх датах.
+
+   Налаштування: trainingProgram = { id, run, startDate, shifts: [{ id, from (день плану 1…84),
+   days, fill: 'pause'|'repeat', createdAt }] } (потрапляє в експорт і синхронізацію).
    Особисті параметри (вік, зріст, вага, стартові результати) користувач вписує
    сам у «Мої параметри» — вони зберігаються лише в його браузері (налаштування
    trainingProfile, потрапляє в резервну копію), а не в коді сайту.
@@ -40,13 +46,13 @@ window.CRM = window.CRM || {};
       'Руки прямі весь час, рухаються лише лопатки.',
       'Тягни плечі вниз, «від вух», і злегка зведи лопатки.',
       '1 с утримання вгорі, повільне повернення у вис.'] },
-    pull: { n: 'Підтягування прямим хватом', c: [
+    pull: { n: 'Підтягування прямим хватом', v: 'https://www.youtube.com/watch?v=iBtL9nX2qOs', c: [
       'Хват трохи ширший за плечі, долоні від себе.',
       'Перед рухом «встанови» лопатки вниз, як у скапулярних.',
       'Думай «тягну лікті до ребер», а не «тягну себе руками».',
       'Підборіддя над перекладиною, груди тягнуться до турніка.',
       'Внизу повністю випрямляй руки. Без розгойдування і ривків ногами.'] },
-    chin: { n: 'Підтягування зворотним хватом', c: [
+    chin: { n: 'Підтягування зворотним хватом', v: 'https://www.youtube.com/watch?v=ykPUIEj4-W0', c: [
       'Долоні до себе, хват на ширині плечей.',
       'Більше працює біцепс — відчуй його скорочення вгорі.',
       'Лікті йдуть вниз і трохи назад, корпус не розгойдується.'] },
@@ -54,19 +60,19 @@ window.CRM = window.CRM || {};
       'Застрибни або стань на стілець так, щоб підборіддя було над перекладиною.',
       'Опускайся рівно 5 с (рахуй уголос), рівномірно, без «падіння» в кінці.',
       'Лопатки тримай зведеними і опущеними до самого низу.'] },
-    pausepull: { n: 'Підтягування з паузою 2 с вгорі', c: [
+    pausepull: { n: 'Підтягування з паузою 2 с вгорі', v: 'https://www.youtube.com/watch?v=XAJuZIIGYjM', c: [
       'Звичайне підтягування, але вгорі зупинка на 2 с з підборіддям над перекладиною.',
       'Під час паузи груди тягнуться до турніка, плечі не піднімаються до вух.'] },
-    weightpull: { n: 'Підтягування з гантеллю між стопами', c: [
+    weightpull: { n: 'Підтягування з гантеллю між стопами', v: 'https://www.youtube.com/watch?v=CQX8tDQdMlo', c: [
       'Затисни одну гантель між стопами (схрести гомілки) і перевір, що тримається надійно.',
       'Техніка як у звичайних підтягуваннях: лопатки вниз, лікті до ребер, підборіддя над перекладиною.',
       'Якщо гантель вислизає або з\'являються ривки — повертайся до підтягувань без ваги.'] },
-    push: { n: 'Віджимання класичні', c: [
+    push: { n: 'Віджимання класичні', v: 'https://www.youtube.com/watch?v=WDIpL0pjun0', c: [
       'Долоні трохи ширші за плечі, під плечима або трохи нижче.',
       'Тіло — пряма лінія: сідниці і прес напружені, таз не провисає і не задирається.',
       'Лікті під кутом ≈45° до корпусу, а не в сторони.',
       'Груди опускаються майже до підлоги, вгорі руки повністю випрямлені.'] },
-    narrow: { n: 'Вузькі віджимання', c: [
+    narrow: { n: 'Вузькі віджимання', v: 'https://www.youtube.com/watch?v=aWixj7ey758', c: [
       'Долоні вужче за плечі (можна трикутником — «алмазні», якщо зап\'ястям комфортно).',
       'Лікті ковзають вздовж корпусу, назад.',
       'Фокус на трицепсі: вгорі повністю випрямляй руки і відчуй його скорочення.'] },
@@ -75,7 +81,7 @@ window.CRM = window.CRM || {};
       'Опускай голову вперед, трохи попереду долонь: голова і руки утворюють трикутник.',
       'Лікті не розводь сильно в сторони.',
       'Навантаження — на плечі.'] },
-    decline: { n: 'Віджимання з ногами на підвищенні', c: [
+    decline: { n: 'Віджимання з ногами на підвищенні', v: 'https://www.youtube.com/watch?v=VCfB2oUZzAA', c: [
       'Стопи на стільці або дивані (≈40–50 см).',
       'Пряма лінія тіла, особливо не провисай у попереку.',
       'Акцент на верх грудей і передню частину плечей.'] },
@@ -89,7 +95,7 @@ window.CRM = window.CRM || {};
       'Тягни лікоть назад до стегна дугою, а не прямо вгору до плеча.',
       'Вгорі стисни спину; внизу повністю розтягни руку, дай лопатці піти вперед.',
       'Корпус не розвертається під час руху.'] },
-    press: { n: 'Жим гантелей стоячи', c: [
+    press: { n: 'Жим гантелей стоячи', v: 'https://www.youtube.com/watch?v=bj53-0DYKFo', c: [
       'Прес і сідниці напружені, поперек не прогинається.',
       'Старт: гантелі на рівні плечей, лікті трохи попереду корпусу.',
       'Вижимай вгору, наприкінці гантелі трохи сходяться над головою.',
@@ -104,28 +110,59 @@ window.CRM = window.CRM || {};
       'Руки розводяться в сторони дугою, лікті трохи зігнуті.',
       'Фокус на задній частині плеча; лопатки сильно не зводь.',
       'Шию не задирай, дивись у підлогу.'] },
-    curl: { n: 'Підйом гантелей на біцепс', c: [
+    curl: { n: 'Підйом гантелей на біцепс', sn: 'підйом на біцепс', v: 'https://www.youtube.com/watch?v=2TiEnyiDwfM', c: [
       'Лікті притиснуті до корпусу і нерухомі.',
       'Під час підйому розвертай долоню вгору, вгорі стисни біцепс.',
       'Опускання 2–3 с до повного випрямлення руки.',
       'Корпус не розгойдується.'] },
-    hammer: { n: 'Молоткові підйоми', c: [
+    hammer: { n: 'Молоткові підйоми', sn: 'молоткові підйоми', v: 'https://www.youtube.com/watch?v=CFBZ4jN1CMI', c: [
       'Долоні дивляться одна на одну весь рух.',
       'Лікті нерухомі, піднімай до рівня плеча.',
       'Працюють плечовий м\'яз і передпліччя — руки виглядають «товщими».'] },
-    french: { n: 'Французький жим однією гантеллю двома руками', v: 'https://www.youtube.com/watch?v=X-iV-cG8cYs', c: [
+    french: { n: 'Французький жим однією гантеллю двома руками', sn: 'французький жим', v: 'https://www.youtube.com/watch?v=X-iV-cG8cYs', c: [
       'Тримай гантель за верхній диск обома долонями над головою.',
       'Лікті дивляться вперед і не розходяться в сторони.',
       'Опускай гантель за голову до глибокого розтягнення трицепса, піднімай до повного випрямлення.',
       'Прес напружений, поперек не прогинається. Можна виконувати сидячи.'] }
   };
 
+  // ---------- Розминка й заминка ----------
+  /** Розминка: e — вправа з бібліотеки (підказки й відео беруться звідти), n — своя назва, s — доза. */
   const WARMUP = [
-    'Скапулярні підтягування — 1×10',
-    'Легкі віджимання — 1×8, повільно',
-    'Жим гантелей стоячи — 1×8, без зусиль',
-    'Розведення гантелей у нахилі — 1×10'
+    { e: 'scap', s: '1×10' },
+    { e: 'push', n: 'Легкі віджимання', s: '1×8', note: 'Повільно, далеко від утоми — лише розігріти груди, плечі й лікті.' },
+    { e: 'press', s: '1×8', note: 'Без зусиль: якщо гантелі важкі для розминки — зроби рух без них.' },
+    { e: 'rear', s: '1×10', note: 'Легко, з повною амплітудою.' }
   ];
+  const WARMUP_MIN = 4;
+  /** Заминка після кожного тренування: розтяжка верху тіла, ≈5 хв. */
+  const COOLDOWN = [
+    { n: 'Вис на турніку', s: '30–40 с', v: 'https://www.youtube.com/watch?v=3CEmHJXbNpc', c: [
+      'Хват на ширині плечей, руки прямі, тіло розслаблене.',
+      'Дай плечам піднятися до вух: під вагою тіла розтягуються спина й плечі.',
+      'Дихай спокійно. Важко втримати — постав носки на стілець і зніми частину ваги.'] },
+    { n: 'Розтяжка грудей у дверному отворі', s: '30 с на кожен бік', v: 'https://www.youtube.com/watch?v=bZ-eaBPOGiM', c: [
+      'Передпліччя на одвірку, лікоть на рівні плеча або трохи нижче.',
+      'Зроби невеликий крок уперед і мʼяко подай груди вперед — тягне груди й передню частину плеча.',
+      'Поперек не прогинай, плече не піднімай до вуха.'] },
+    { n: 'Розтяжка плеча: рука через груди', s: '30 с на кожну руку', v: 'https://www.youtube.com/watch?v=aIq0fLi8iak', c: [
+      'Пряму руку заведи перед грудьми, другою притисни її до себе вище ліктя.',
+      'Плече опущене, корпус не розвертається.',
+      'Тягне задню частину плеча.'] },
+    { n: 'Розтяжка трицепса за головою', s: '30 с на кожну руку', v: 'https://www.youtube.com/watch?v=cPTrm13hSSo', c: [
+      'Підніми руку, зігни й опусти долоню між лопаток.',
+      'Другою рукою мʼяко потягни лікоть за голову.',
+      'Голову не нахиляй уперед, поперек не прогинай.'] },
+    { n: 'Розтяжка біцепса й передпліччя біля стіни', s: '30 с на кожну руку', v: 'https://www.youtube.com/watch?v=7WiSuaPAorU', c: [
+      'Стань боком до стіни, пряму руку постав долонею на стіну на рівні плеча, пальцями назад.',
+      'Повільно розвертай корпус від стіни, доки не потягне біцепс, передпліччя й груди.',
+      'Лікоть прямий, але не «заблокований»; у плечі не має бути болю.'] },
+    { n: 'Поза дитини з витягнутими руками', s: '60 с', v: 'https://www.youtube.com/watch?v=GRUbJjv8tBs', c: [
+      'Сядь на пʼяти, коліна трохи розведи, тягнися руками вперед по підлозі, лоб униз.',
+      'Дихай повільно: вдих носом на 4 рахунки, видих на 6 — пульс заспокоюється.',
+      'Щоб сильніше потягнути спину, переведи обидві долоні трохи вбік — по 15–20 с у кожен бік.'] }
+  ];
+  const COOLDOWN_MIN = 5;
 
   // ---------- План ----------
   /** Пункт плану: e — ключ вправи або [ключі] для суперсету; s — підходи, r — відпочинок. */
@@ -263,7 +300,7 @@ window.CRM = window.CRM || {};
     if (type === 'F1' || type === 'F2') { dur = '20–25 хв'; minutes = 25; } else if (type === 'T') { dur = '≈15 хв'; minutes = 15; } else if (type !== 'R') {
       if (trainPhase === 'deload') { dur = '15–20 хв'; minutes = 20; } else { dur = '25–30 хв'; minutes = 30; }
     }
-    const on = (n) => (start ? fmt.dateShort(D.addDays(start, n - 1)) : `дня ${n}`);
+    const on = (n) => (start ? fmt.dateShort(dateOfDay(n) || D.addDays(start, n - 1)) : `дня ${n}`);
     const notes = [];
     if (d === 1) notes.push('Старт! Перед тренуванням зроби фото і заміри: рука, груди, плечі.');
     if (d === 14) notes.push('Перший тест: максимум чистих підтягувань і віджимань за один підхід. Ці цифри — твоя стартова точка.');
@@ -291,8 +328,8 @@ window.CRM = window.CRM || {};
     return { n, reps: new Array(count).fill(num(rest)) };
   }
 
-  /** Заготовка для форми журналу. */
-  function presetFor(plan, date) {
+  /** Заготовка для форми журналу. slot — день графіка ({ date, repeat }), щоб запис памʼятав свою дату в плані. */
+  function presetFor(plan, date, slot) {
     const exercises = [];
     (plan.items || []).forEach((x) => {
       const keys = Array.isArray(x.e) ? x.e : [x.e];
@@ -302,28 +339,153 @@ window.CRM = window.CRM || {};
       });
     });
     const c = cfg();
+    const link = { id: PROGRAM_ID, run: c.run, day: plan.d };
+    if (slot && slot.date) link.date = slot.date;
+    if (slot && slot.repeat) link.repeat = true;
     return {
       type: 'home', date, title: TITLES[plan.type], durationMin: plan.minutes, distanceKm: null,
-      exercises, note: '', program: { id: PROGRAM_ID, run: c.run, day: plan.d }
+      exercises, note: '', program: link
     };
   }
 
   // ---------- Стан ----------
   function cfg() { const c = CRM.store.getSetting(SETTING, null); return c && c.id === PROGRAM_ID && c.startDate ? c : null; }
-  function dayIndex(date) { const c = cfg(); return c ? D.diffDays(c.startDate, date) + 1 : null; }
-  function dateOfDay(d) { const c = cfg(); return c ? D.addDays(c.startDate, d - 1) : null; }
+
+  // ---------- Графік: дати днів плану зі зсувами ----------
+  /** Зсуви з налаштування: { id, from (день плану 1…84), days, fill: 'pause'|'repeat', createdAt }. */
+  function shiftsOf(c) {
+    return ((c && c.shifts) || []).filter((s) => s && s.from >= 1 && s.from <= DAYS && s.days > 0);
+  }
+  /** День, коли зроблено зсув (за Києвом). */
+  function shiftDay(s) {
+    if (!s || !s.createdAt) return '';
+    try { return D.toKyivDate(s.createdAt); } catch (e) { return ''; }
+  }
+  let tlCache = null;
+  /**
+   * { offs: [,зсув від старту для дня плану d = 1…84], slots: [{ d } | { gap, mirror } | { gap, pause }], total }.
+   * День d припадає на startDate + offs[d]; між зсунутими днями — проміжки: повтор попередніх днів або перерва.
+   */
+  function timeline() {
+    const c = cfg();
+    if (!c) return null;
+    const key = c.startDate + '|' + JSON.stringify(c.shifts || []);
+    if (tlCache && tlCache.key === key) return tlCache.tl;
+    const add = new Map();
+    const byFrom = new Map(); // день плану → зсуви в порядку створення (кожен звільняє свою частину проміжку)
+    shiftsOf(c).forEach((s, idx) => {
+      add.set(s.from, (add.get(s.from) || 0) + s.days);
+      if (!byFrom.has(s.from)) byFrom.set(s.from, []);
+      byFrom.get(s.from).push({ s, idx });
+    });
+    byFrom.forEach((list) => list.sort((a, b) => String(a.s.createdAt || '').localeCompare(String(b.s.createdAt || '')) || a.idx - b.idx));
+    const offs = new Array(DAYS + 1).fill(0);
+    let acc = 0;
+    for (let d = 1; d <= DAYS; d++) { acc += add.get(d) || 0; offs[d] = d - 1 + acc; }
+    const total = offs[DAYS] + 1;
+    const slots = new Array(total).fill(null);
+    for (let d = 1; d <= DAYS; d++) slots[offs[d]] = { d };
+    for (let i = 0; i < total;) {
+      if (slots[i]) { i++; continue; }
+      const g0 = i;
+      while (!slots[i]) i++;
+      const nextD = slots[i].d;
+      const len = i - g0;
+      const owners = [];
+      (byFrom.get(nextD) || []).forEach(({ s }) => { for (let n = 0; n < s.days; n++) owners.push(s); });
+      // Звільнені дні: повтор днів, що були перед зсувом, або перерва. Дні, що вже минули, коли зсув робили,
+      // — завжди перерва (минулого не повториш), а виконане тоді лишається на своїх датах (doneMap).
+      for (let j = 0; j < len; j++) {
+        const own = owners[j] || null;
+        const date = D.addDays(c.startDate, g0 + j);
+        const pause = !own || own.fill !== 'repeat' || date < shiftDay(own);
+        const mirror = nextD - len + j >= 1 ? nextD - len + j : null;
+        slots[g0 + j] = pause || mirror == null ? { gap: true, pause: true, mirror: null } : { gap: true, pause: false, mirror };
+      }
+    }
+    const tl = { offs, slots, total };
+    tlCache = { key, tl };
+    return tl;
+  }
+  function endDate() { const c = cfg(); return c ? D.addDays(c.startDate, timeline().total - 1) : null; }
+  /** Дата дня плану d (з урахуванням зсувів). */
+  function dateOfDay(d) { const c = cfg(); return c && d >= 1 && d <= DAYS ? D.addDays(c.startDate, timeline().offs[d]) : null; }
+  /**
+   * Що в програмі на дату: { type: 'before'|'after'|'day'|'gap', date, d, plan, repeat, pause }.
+   * day — день плану; gap — звільнений зсувом день: повтор дня d (repeat) або перерва (pause, plan = null).
+   */
+  function slotAt(date) {
+    const c = cfg();
+    if (!c) return null;
+    const tl = timeline();
+    const i = D.diffDays(c.startDate, date);
+    if (i < 0) return { type: 'before', date, d: null, plan: null, repeat: false, pause: false };
+    if (i >= tl.total) return { type: 'after', date, d: null, plan: null, repeat: false, pause: false };
+    const sl = tl.slots[i];
+    if (!sl.gap) return { type: 'day', date, d: sl.d, plan: planFor(sl.d, c.startDate), repeat: false, pause: false };
+    if (sl.pause) return { type: 'gap', date, d: null, plan: null, repeat: true, pause: true };
+    return { type: 'gap', date, d: sl.mirror, plan: planFor(sl.mirror, c.startDate), repeat: true, pause: false };
+  }
+  const doneKey = (sl) => (sl.repeat ? 'r:' + sl.date : sl.d);
+  /**
+   * Записи журналу, привʼязані до програми: ключ → тренування.
+   * число d — день плану; 'r:<дата>' — повтор; 'h:<дата>' — тренування, виконане до зсуву,
+   * чия дата тепер у перерві (лишається на своїй даті, а сам день плану знову попереду).
+   */
   function doneMap() {
     const c = cfg();
     const map = new Map();
     if (!c) return map;
+    const shifted = shiftsOf(c).length > 0;
     CRM.store.list('workouts').forEach((w) => {
-      if (w.program && w.program.id === PROGRAM_ID && w.program.run === c.run) map.set(w.program.day, w);
+      const l = w.program;
+      if (!l || l.id !== PROGRAM_ID || l.run !== c.run) return;
+      if (l.repeat) { map.set('r:' + l.date, w); return; }
+      if (shifted) {
+        // Давніші записи не мають program.date — тоді дата самого тренування
+        const on = l.date || w.date;
+        const sl = on ? slotAt(on) : null;
+        if (sl && sl.pause) { map.set('h:' + on, w); return; }
+      }
+      map.set(l.day, w);
     });
     return map;
   }
+  /** Тренування, виконане до зсуву, на дату перерви: { w, plan } або null. */
+  function historyOn(date, done) {
+    const w = (done || doneMap()).get('h:' + date);
+    if (!w) return null;
+    const d = w.program.day;
+    if (!(d >= 1 && d <= DAYS)) return null;
+    return { w, plan: planFor(d, cfg().startDate) };
+  }
   const trainingDays = () => { const out = []; for (let d = 1; d <= DAYS; d++) if (planFor(d).type !== 'R') out.push(d); return out; };
+  const doneCountOf = (done) => trainingDays().filter((d) => done.has(d)).length;
+  /** Найближче тренування після дати: { date, plan, repeat } або null. */
+  function nextTraining(date) {
+    const end = endDate();
+    for (let x = D.addDays(date, 1); x <= end; x = D.addDays(x, 1)) {
+      const sl = slotAt(x);
+      if (sl.plan && sl.plan.type !== 'R') return sl;
+    }
+    return null;
+  }
+  /** Найближчий день плану від дати (сам день або перший після проміжку) — його й переносить зсув. */
+  function shiftTarget(date) {
+    const c = cfg();
+    if (!c) throw new Error('Програму не додано.');
+    const sl = slotAt(date);
+    if (sl.type === 'before') return 1;
+    if (sl.type === 'after') throw new Error('Ця дата вже після кінця програми.');
+    if (sl.type === 'day') return sl.d;
+    const tl = timeline();
+    let i = D.diffDays(c.startDate, date);
+    while (i < tl.total && tl.slots[i].gap) i++;
+    if (i >= tl.total) throw new Error('Після цієї дати тренувань у програмі немає.');
+    return tl.slots[i].d;
+  }
 
-  let selDay = null;
+  let selDate = null; // вибрана на сторінці дата (null — сьогодні)
 
   function inDays(n) {
     if (n === 0) return 'сьогодні';
@@ -353,7 +515,7 @@ window.CRM = window.CRM || {};
           const start = dateIn.dateValue || defaultStart();
           const next = editing && c ? Object.assign({}, c, { startDate: start }) : { id: PROGRAM_ID, run: CRM.utils.uid(), startDate: start };
           await CRM.store.setSetting(SETTING, next);
-          selDay = null;
+          selDate = null;
           dlg.close('force');
           CRM.router.rerender();
           ui.toast(editing ? 'Дату старту змінено' : `Програму додано: старт ${fmt.date(start)}`, { type: 'success' });
@@ -369,7 +531,7 @@ window.CRM = window.CRM || {};
     });
     if (!ok) return;
     await CRM.store.setSetting(SETTING, null);
-    selDay = null;
+    selDate = null;
     CRM.router.rerender();
     ui.toast('Програму прибрано');
   }
@@ -388,9 +550,11 @@ window.CRM = window.CRM || {};
           h('p', null, 'Якщо в усіх підходах вправи зробив верхню межу повторень з правильною технікою — наступного разу ускладни: +1 повторення, довша пауза або повільніше опускання.'),
           h('p', null, 'Гантелі фіксованої ваги, тому навантаження росте за рахунок повторень, пауз, повільного опускання і роботи однією рукою. Коли в тязі й жимі легко виходить понад 20 повторень навіть з паузами — час для важчих або розбірних гантелей.')),
         sec('Пропуски, втома, біль', ul([
-          'Пропустив тренування — не переганяй: зроби пропущене наступного дня.',
+          'Пропустив тренування — не переганяй: зроби пропущене наступного дня. Меню «⋯» → «Зсунути графік» перенесе його й усі наступні тренування.',
           'Печіння в м\'язах — нормально. Гострий біль у суглобах (плече, лікоть, зап\'ясток) — зупинись і заміни вправу на легшу. Якщо біль повторюється — покажись лікарю.',
           'Сильна втома кілька днів поспіль — додай ще один день відпочинку.'])),
+        sec('Розминка й заминка',
+          h('p', null, 'Перед тренуванням — розминка ≈4 хв: ті самі рухи, але легко. Після — заминка ≈5 хв: розтяжка грудей, плечей, рук і спини. Тягни без ривків і без болю, до помірного натягу, і спокійно дихай.')),
         sec('Щоб результат був помітним', ul([
           'Записуй повторення в кожному підході — так видно прогрес.',
           'Фото і заміри (рука, груди, плечі) у дні 1, 29, 57 і 84: одне освітлення, та сама поза, зранку.',
@@ -496,15 +660,17 @@ window.CRM = window.CRM || {};
       h('button', { type: 'button', role: 'menuitem', class: 'menu-item', onClick: () => { pop.close(); rulesDialog(); } }, 'Правила програми'),
       h('button', { type: 'button', role: 'menuitem', class: 'menu-item', onClick: () => { pop.close(); profileDialog(); } }, 'Мої параметри'),
       h('button', { type: 'button', role: 'menuitem', class: 'menu-item', onClick: () => { pop.close(); startDialog(true); } }, 'Змінити дату старту'),
+      h('button', { type: 'button', role: 'menuitem', class: 'menu-item', onClick: () => { pop.close(); shiftDialog(); } }, 'Зсунути графік'),
       h('button', { type: 'button', role: 'menuitem', class: 'menu-item danger', onClick: () => { pop.close(); finish(); } }, 'Прибрати програму')),
     { align: 'end' });
   }
 
-  function record(plan) {
-    const date = dateOfDay(plan.d);
-    const done = doneMap().get(plan.d);
+  /** Записати тренування дня графіка sl (або відкрити вже записане). */
+  function record(sl) {
+    const done = doneMap().get(doneKey(sl));
     if (done) { CRM.training.openForm(done.id); return; }
-    CRM.training.openForm(null, presetFor(plan, date > D.today() ? D.today() : date));
+    const T = D.today();
+    CRM.training.openForm(null, presetFor(sl.plan, sl.date > T ? T : sl.date, sl));
   }
 
   // ---------- Картка на сторінці «Тренування» ----------
@@ -517,118 +683,231 @@ window.CRM = window.CRM || {};
       ui.button({ label: 'Додати програму', icon: 'plus', size: 'sm', onClick: () => startDialog(false) }));
   }
 
+  // ---------- Вправи: підказки техніки й відео ----------
+  const videoLink = (url, label) => h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', class: 'prog-video' }, CRM.icon('external', { size: 'sm' }), label);
+  /** «На чому зосередитись» + відео поруч (як у програмах з JSON — відео видно одразу). */
+  function extras(parts) {
+    const tips = parts.filter((p) => p.c && p.c.length);
+    const vids = parts.filter((p) => p.v);
+    if (!tips.length && !vids.length) return null;
+    return h('div', { class: 'ip-ex-extra' },
+      tips.length ? h('details', { class: 'prog-tips' },
+        h('summary', null, 'На чому зосередитись'),
+        tips.map((p) => h('div', { class: 'prog-tip' },
+          parts.length > 1 ? h('div', { class: 'prog-tip-name' }, p.n) : null,
+          h('ul', null, p.c.map((c) => h('li', null, c)))))) : null,
+      vids.map((p) => videoLink(p.v, parts.length > 1 ? `Відео: ${p.sn || p.n.charAt(0).toLowerCase() + p.n.slice(1)}` : 'Відео техніки')));
+  }
   function exerciseBlock(x) {
     const keys = Array.isArray(x.e) ? x.e : [x.e];
     const name = x.t || EX[keys[0]].n;
-    const tips = h('details', { class: 'prog-tips' },
-      h('summary', null, 'На чому зосередитись'),
-      keys.map((k) => h('div', { class: 'prog-tip' },
-        keys.length > 1 ? h('div', { class: 'prog-tip-name' }, EX[k].n) : null,
-        h('ul', null, EX[k].c.map((c) => h('li', null, c))),
-        EX[k].v ? h('a', { href: EX[k].v, target: '_blank', rel: 'noopener noreferrer', class: 'prog-video' }, CRM.icon('external', { size: 'sm' }), 'Відео техніки') : null)));
     const meta = [x.r ? `Відпочинок ${x.r}.` : '', x.note].filter(Boolean).join(' ');
     return h('div', { class: 'prog-ex' },
       h('div', { class: 'prog-ex-head' }, h('span', { class: 'prog-ex-name' }, name), h('span', { class: 'prog-ex-sets num' }, x.s)),
       meta ? h('div', { class: 'prog-ex-meta' }, meta) : null,
-      tips);
+      extras(keys.map((k) => EX[k])));
+  }
+  /** Вправа розминки чи заминки: { e (з бібліотеки) | n, c, v; s — доза; note }. */
+  function partItem(it) {
+    const base = it.e ? EX[it.e] : it;
+    return h('div', { class: 'prog-ex' },
+      h('div', { class: 'prog-ex-head' }, h('span', { class: 'prog-ex-name' }, it.n || base.n), h('span', { class: 'prog-ex-sets num' }, it.s)),
+      it.note ? h('div', { class: 'prog-ex-meta' }, it.note) : null,
+      extras([{ n: it.n || base.n, c: base.c, v: base.v }]));
+  }
+  function partBlock(key, title, items, minutes, lead) {
+    return h('details', { class: 'prog-warm ip-part', dataset: { part: key } },
+      h('summary', null, `${title} · ${fmt.count(items.length, ['вправа', 'вправи', 'вправ'])} · ≈${minutes} хв`),
+      lead ? h('p', { class: 'subtle prog-small prog-part-lead' }, lead) : null,
+      h('div', { class: 'prog-ex-list' }, items.map(partItem)));
   }
 
-  function dayDetail(plan, done) {
+  function progressBar(done, total) {
+    const pct = total ? Math.round(done / total * 100) : 0;
+    return h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(done), 'aria-label': `Виконано ${done} з ${total}` },
+      h('div', { class: 'progress-bar', style: { width: pct + '%' } }));
+  }
+  /** «Підтягування прямим хватом: 5·5·5·4·4 · Тяга гантелі однією рукою: 12·12·12» — що зроблено насправді. */
+  function factText(w) {
+    return (w.exercises || []).map((e) => `${e.name}: ${(e.sets || []).map((s) => (s.reps != null && s.reps !== '' ? s.reps : '—')).join('·') || '—'}`).join(' · ');
+  }
+  function doneView(w) {
+    return h('div', { class: 'ip-done' },
+      h('div', { class: 'prog-done' },
+        h('span', { class: 'badge badge-success' }, CRM.icon('check', { size: 'sm' }), 'Виконано'),
+        h('span', { class: 'subtle' }, `${fmt.dateShort(w.date)} · ${CRM.training && CRM.training.durationText ? CRM.training.durationText(w.durationMin) : w.durationMin + ' хв'}`),
+        ui.button({ label: 'Відкрити запис', size: 'sm', variant: 'ghost', onClick: () => CRM.training.openForm(w.id) })),
+      h('div', { class: 'ip-fact subtle' }, 'Факт: ', factText(w) || '—'));
+  }
+
+  const titleOf = (plan) => (plan.type === 'R' ? 'Відпочинок' : TITLES[plan.type]);
+
+  function dayDetail(sl, done) {
     const c = cfg();
     const T = D.today();
-    const date = dateOfDay(plan.d);
+    const date = sl.date;
+    const start = c.startDate;
+    const end = endDate();
     const isToday = date === T;
+    const go = (n) => { selDate = D.addDays(date, n); CRM.router.rerender(); };
     const wdName = ['понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота', 'неділя'][D.weekday(date)];
     const nav = h('div', { class: 'prog-nav' },
-      h('button', { type: 'button', class: 'btn btn-icon btn-sm', 'aria-label': 'Попередній день програми', disabled: plan.d === 1, onClick: () => { selDay = plan.d - 1; CRM.router.rerender(); } }, CRM.icon('chevronLeft', { size: 'sm' })),
+      h('button', { type: 'button', class: 'btn btn-icon btn-sm', 'aria-label': 'Попередній день програми', disabled: date <= start, onClick: () => go(-1) }, CRM.icon('chevronLeft', { size: 'sm' })),
       h('div', { class: 'prog-date' }, h('span', { class: 'prog-date-main' }, `${fmt.date(date).replace(/ \d{4}$/, '')}, ${wdName}`), isToday ? h('span', { class: 'badge badge-accent' }, 'сьогодні') : null),
-      h('button', { type: 'button', class: 'btn btn-icon btn-sm', 'aria-label': 'Наступний день програми', disabled: plan.d === DAYS, onClick: () => { selDay = plan.d + 1; CRM.router.rerender(); } }, CRM.icon('chevronRight', { size: 'sm' })));
+      h('button', { type: 'button', class: 'btn btn-icon btn-sm', 'aria-label': 'Наступний день програми', disabled: date >= end, onClick: () => go(1) }, CRM.icon('chevronRight', { size: 'sm' })));
 
-    const facts = h('div', { class: 'prog-facts' },
-      h('span', null, `День ${plan.d} з ${DAYS}`),
-      h('span', null, `Тиждень ${plan.w}`),
-      h('span', null, `Фаза: ${PHASE[plan.trainPhase].name}`),
-      plan.dur ? h('span', null, plan.dur) : null,
-      plan.items && plan.type !== 'T' ? h('span', null, `ЗП ${RIR[plan.trainPhase]}`) : null);
-
+    // Перерва, але цього дня тренування виконано ще до зсуву — показуємо його
+    const hist = sl.pause ? historyOn(date, done) : null;
+    const plan = hist ? hist.plan : sl.plan;
+    const rest = !plan || plan.type === 'R';
+    const titleText = hist ? `${TITLES[plan.type]} · до перерви`
+      : !plan ? 'Перерва'
+        : rest ? 'Відпочинок' + (sl.repeat ? ' (повтор)' : '')
+          : TITLES[plan.type] + (sl.repeat ? ' · повтор' : '');
     const parts = [nav,
-      h('h3', { class: 'prog-title' }, h('span', { class: 'prog-dot', style: { '--ph': CRM.dict.categoryColor(PHASE[plan.phase].color) }, hidden: plan.type === 'R' }), plan.type === 'R' ? 'Відпочинок' : TITLES[plan.type]),
-      facts];
-    if (plan.note) parts.push(h('div', { class: 'callout' }, CRM.icon('info'), h('span', null, plan.note)));
+      h('h3', { class: 'prog-title' }, h('span', { class: 'prog-dot', style: { '--ph': plan ? CRM.dict.categoryColor(PHASE[plan.phase].color) : null }, hidden: rest }), titleText)];
+    if (plan) {
+      parts.push(h('div', { class: 'prog-facts' },
+        h('span', null, sl.repeat && !hist ? `Повтор дня ${plan.d}` : `День ${plan.d} з ${DAYS}`),
+        h('span', null, `Тиждень ${plan.w}`),
+        h('span', null, `Фаза: ${PHASE[plan.trainPhase].name}`),
+        plan.dur ? h('span', null, plan.dur) : null,
+        plan.items && plan.type !== 'T' ? h('span', null, `ЗП ${RIR[plan.trainPhase]}`) : null));
+    }
+    if (hist) {
+      parts.push(h('div', { class: 'callout ip-history' }, CRM.icon('info'), h('span', null,
+        `Це тренування ти виконав до перерви. Графік зсунуто, тож за новим графіком день ${plan.d} — ${fmt.dateShort(dateOfDay(plan.d))}.`)));
+    } else if (sl.pause) {
+      parts.push(h('div', { class: 'callout ip-pause' }, CRM.icon('info'), h('span', null, 'Графік зсунуто — тут перерва, тренування за програмою цього дня немає.')));
+    } else if (sl.repeat) {
+      parts.push(h('div', { class: 'callout ip-repeat' }, CRM.icon('info'), h('span', null,
+        `Графік зсунуто: цей день — повтор ${rest ? 'дня відпочинку' : 'тренування'} ${fmt.dateShort(dateOfDay(plan.d))} (день ${plan.d}).`)));
+    } else if (plan.note) {
+      parts.push(h('div', { class: 'callout' }, CRM.icon('info'), h('span', null, plan.note)));
+    }
 
-    if (plan.items) {
+    if (plan && plan.items && !hist) {
+      const w = done.get(doneKey(sl));
       let action;
-      if (done) {
-        action = h('div', { class: 'prog-done' },
-          h('span', { class: 'badge badge-success' }, CRM.icon('check', { size: 'sm' }), 'Виконано'),
-          h('span', { class: 'subtle' }, `${fmt.dateShort(done.date)} · ${CRM.training && CRM.training.durationText ? CRM.training.durationText(done.durationMin) : done.durationMin + ' хв'}`),
-          ui.button({ label: 'Відкрити запис', size: 'sm', variant: 'ghost', onClick: () => CRM.training.openForm(done.id) }));
+      if (w) {
+        action = doneView(w);
       } else if (date > T) {
         action = h('div', { class: 'prog-done subtle' }, `Ще попереду — ${inDays(D.diffDays(T, date))}`);
       } else {
         action = ui.button({
           label: isToday ? 'Записати тренування' : 'Записати (пропущений день)', icon: 'plus', variant: isToday ? 'primary' : null,
-          className: 'prog-record', onClick: () => record(plan)
+          className: 'prog-record', onClick: () => record(sl)
         });
       }
       parts.push(action);
-      parts.push(h('details', { class: 'prog-warm' },
-        h('summary', null, 'Розминка, 4 хв'),
-        h('ol', null, WARMUP.map((x) => h('li', null, x))),
-        h('a', { href: EX.scap.v, target: '_blank', rel: 'noopener noreferrer', class: 'prog-video' }, CRM.icon('external', { size: 'sm' }), 'Відео: скапулярні підтягування')));
-      parts.push(h('div', { class: 'prog-ex-list' }, plan.items.map(exerciseBlock)));
+      parts.push(partBlock('warmup', 'Розминка', WARMUP, WARMUP_MIN));
+      parts.push(h('section', { class: 'ip-part ip-main', dataset: { part: 'main' } },
+        h('h4', { class: 'ip-part-title' }, 'Основна частина'),
+        h('div', { class: 'prog-ex-list' }, plan.items.map(exerciseBlock))));
       if (plan.type === 'T') parts.push(h('p', { class: 'subtle prog-small' }, 'Відпочинок між підходами тесту — 3–5 хв. Запиши обидва результати в журнал.'));
+      parts.push(partBlock('cooldown', 'Заминка', COOLDOWN, COOLDOWN_MIN, 'Розтяжка без ривків і без болю: тягни до помірного натягу, тримай і спокійно дихай.'));
     } else {
-      const next = plan.d < DAYS ? planFor(plan.d + 1, c.startDate) : null;
-      parts.push(h('p', { class: 'subtle prog-small' }, next ? `Наступного дня: ${next.type === 'R' ? 'відпочинок' : TITLES[next.type]}.` : 'Це останній день програми.'));
+      if (hist) parts.push(doneView(hist.w));
+      const tomorrow = date < end ? slotAt(D.addDays(date, 1)) : null;
+      let text;
+      if (!tomorrow) text = 'Це останній день програми.';
+      else if (!hist && !sl.pause && tomorrow.plan) text = `Наступного дня: ${tomorrow.plan.type === 'R' ? 'відпочинок' : TITLES[tomorrow.plan.type]}${tomorrow.repeat ? ' (повтор)' : ''}.`;
+      else {
+        const next = nextTraining(date);
+        text = next ? `Наступне тренування: ${fmt.dateShort(next.date)} — ${TITLES[next.plan.type]}${next.repeat ? ' (повтор)' : ''}.` : 'Далі тренувань за цією програмою немає.';
+      }
+      parts.push(h('p', { class: 'subtle prog-small' }, text));
     }
     return h('div', { class: 'prog-day' }, parts);
   }
 
-  function calendar(selected, done) {
+  function calendar(sel, done) {
     const c = cfg();
     const T = D.today();
+    const tl = timeline();
+    const rows = Math.ceil(tl.total / 7);
     const cells = [h('div')];
     for (let k = 0; k < 7; k++) cells.push(h('div', { class: 'prog-wd' }, CRM.WEEKDAYS_SHORT[D.weekday(D.addDays(c.startDate, k))]));
-    for (let w = 1; w <= 12; w++) {
-      cells.push(h('div', { class: 'prog-wk' }, `Т${w}`));
+    let gaps = false;
+    let pauses = false;
+    let lastLabel = '';
+    for (let r = 0; r < rows; r++) {
+      // Підпис рядка — тиждень програми (після зсуву рядки й тижні можуть не збігатися — тоді без повторів;
+      // після рядка без тренувань, напр. перерви, підпис зʼявляється знову)
+      let label = '';
+      for (let k = 0; k < 7 && !label; k++) {
+        const i = r * 7 + k;
+        if (i < tl.total && !tl.slots[i].gap) label = `Т${Math.ceil(tl.slots[i].d / 7)}`;
+      }
+      for (let k = 0; k < 7 && !label; k++) {
+        const i = r * 7 + k;
+        const hs = i < tl.total && tl.slots[i].pause ? historyOn(D.addDays(c.startDate, i), done) : null;
+        if (hs) label = `Т${hs.plan.w}`;
+      }
+      cells.push(h('div', { class: 'prog-wk' }, label === lastLabel ? '' : label));
+      lastLabel = label;
       for (let k = 0; k < 7; k++) {
-        const d = (w - 1) * 7 + k + 1;
-        const p = planFor(d);
-        const date = D.addDays(c.startDate, d - 1);
-        const isDone = done.has(d);
+        const i = r * 7 + k;
+        if (i >= tl.total) { cells.push(h('div')); continue; }
+        const date = D.addDays(c.startDate, i);
+        const sl = slotAt(date);
+        const hist = sl.pause ? historyOn(date, done) : null;
+        const p = hist ? hist.plan : sl.plan;
+        const rest = !p || p.type === 'R';
+        const isDone = !!hist || (!rest && done.has(doneKey(sl)));
         const cls = ['prog-cell'];
-        if (p.type === 'R') cls.push('rest');
+        if (rest) cls.push('rest');
+        if (sl.pause) { cls.push('pause'); pauses = true; } else if (sl.repeat) { cls.push('gap'); gaps = true; }
+        if (hist) cls.push('history');
         if (isDone) cls.push('done');
         if (date === T) cls.push('today');
-        if (d === selected) cls.push('sel');
-        if (p.type !== 'R' && date < T && !isDone) cls.push('missed');
+        if (date === sel) cls.push('sel');
+        if (!rest && date < T && !isDone) cls.push('missed');
         const pd = D.parse(date);
+        const what = !p ? 'перерва в графіку' : rest ? 'відпочинок' : TITLES[p.type];
         cells.push(h('button', {
-          type: 'button', class: cls.join(' '),
-          style: p.type === 'R' ? null : { '--ph': CRM.dict.categoryColor(PHASE[p.phase].color) },
-          'aria-label': `${fmt.date(date)}: ${p.type === 'R' ? 'відпочинок' : TITLES[p.type]}${isDone ? ', виконано' : ''}`,
-          'aria-pressed': d === selected ? 'true' : 'false',
-          onClick: () => { selDay = d; CRM.router.rerender(); }
+          type: 'button', class: cls.join(' '), dataset: { date },
+          style: rest ? null : { '--ph': CRM.dict.categoryColor(PHASE[p.phase].color) },
+          'aria-label': `${fmt.date(date)}: ${what}${hist ? ' (до перерви)' : sl.repeat && !sl.pause ? ' (повтор)' : ''}${isDone ? ', виконано' : ''}`,
+          'aria-pressed': date === sel ? 'true' : 'false',
+          onClick: () => { selDate = date; CRM.router.rerender(); }
         },
         h('span', { class: 'prog-cell-date' }, `${pd.d}.${String(pd.m).padStart(2, '0')}`),
-        h('span', { class: 'prog-cell-code' }, CODE[p.type]),
+        h('span', { class: 'prog-cell-code' }, !p ? '·' : sl.repeat && !rest && !hist ? '↻' : CODE[p.type]),
         isDone ? h('span', { class: 'prog-cell-check' }, CRM.icon('check', { size: 'sm' })) : null));
       }
     }
     const legend = h('div', { class: 'prog-legend' },
       PHASES.map((p) => h('span', null, h('i', { style: { '--ph': CRM.dict.categoryColor(p.color) } }), p.name)),
-      h('span', null, h('i', { class: 'rest' }), 'Відпочинок'));
-    return h('div', { class: 'prog-cal' }, h('div', { class: 'prog-grid', role: 'group', 'aria-label': 'Календар програми, 12 тижнів' }, cells), legend);
+      h('span', null, h('i', { class: 'rest' }), 'Відпочинок'),
+      gaps ? h('span', null, '↻ повтор (зсув графіка)') : null,
+      pauses ? h('span', null, h('i', { class: 'pause' }), 'Перерва (зсув графіка)') : null);
+    return h('div', { class: 'prog-cal' }, h('div', { class: 'prog-grid', role: 'group', 'aria-label': `Календар програми, ${fmt.count(rows, ['тиждень', 'тижні', 'тижнів'])}` }, cells), legend);
+  }
+
+  /** Тиждень програми на дату (у перерві — тиждень найближчого дня плану далі). */
+  function weekAt(date) {
+    const sl = slotAt(date);
+    if (!sl || sl.type === 'before') return 1;
+    if (sl.type === 'after') return 12;
+    if (sl.plan) return sl.plan.w;
+    try { return Math.ceil(shiftTarget(date) / 7); } catch (e) { return 12; }
   }
 
   function statusText() {
     const c = cfg();
     if (!c) return '';
-    const idx = dayIndex(D.today());
-    if (idx < 1) return `старт ${fmt.dateShort(c.startDate)} — ${inDays(1 - idx)}`;
-    if (idx > DAYS) return `завершено ${fmt.dateShort(D.addDays(c.startDate, DAYS - 1))}`;
-    return `день ${idx} з ${DAYS} · тиждень ${Math.ceil(idx / 7)} · ${PHASE[phaseOfWeek(Math.ceil(idx / 7))].name.toLowerCase()}`;
+    const T = D.today();
+    const sl = slotAt(T);
+    if (sl.type === 'before') return `старт ${fmt.dateShort(c.startDate)} — ${inDays(D.diffDays(T, c.startDate))}`;
+    if (sl.type === 'after') return `завершено ${fmt.dateShort(endDate())}`;
+    if (!sl.plan) {
+      let next = null;
+      try { next = shiftTarget(T); } catch (e) { /* далі днів плану немає */ }
+      return 'перерва в графіку' + (next ? ` · далі день ${next} з ${DAYS} — ${fmt.dateShort(dateOfDay(next))}` : '');
+    }
+    const w = sl.plan.w;
+    return `${sl.repeat ? 'повтор дня' : 'день'} ${sl.d} з ${DAYS} · тиждень ${w} · ${PHASE[phaseOfWeek(w)].name.toLowerCase()}`;
   }
 
   // ---------- Дані для вкладки «Програми», тижня й Головної ----------
@@ -636,45 +915,130 @@ window.CRM = window.CRM || {};
   function summary() {
     const c = cfg();
     if (!c) return null;
-    const done = doneMap();
     return {
-      name: PROGRAM_NAME, startDate: c.startDate, endDate: D.addDays(c.startDate, DAYS - 1), status: statusText(),
-      doneCount: Array.from(done.keys()).filter((d) => d >= 1 && d <= DAYS).length, total: trainingDays().length,
-      weeks: 12, week: Math.min(12, Math.max(1, Math.ceil(dayIndex(D.today()) / 7)))
+      name: PROGRAM_NAME, startDate: c.startDate, endDate: endDate(), status: statusText(),
+      doneCount: doneCountOf(doneMap()), total: trainingDays().length,
+      weeks: 12, week: weekAt(D.today())
     };
   }
-  /** План на дату: { d, week, rest, title, items: ['Підтягування прямим хватом 3×4', …], done } або null. */
+  const itemTexts = (p) => (p.items || []).map((x) => `${x.t || EX[Array.isArray(x.e) ? x.e[0] : x.e].n} ${x.s}`);
+  /**
+   * План на дату: { d, date, week, rest, pause, repeat, history, title, items: ['Підтягування прямим хватом 3×4', …], plan, done }
+   * або null (до старту, після кінця, програму не додано). pause — перерва після зсуву; repeat — повтор дня d;
+   * history — тренування, виконане до зсуву (дата тепер у перерві).
+   */
   function dayInfo(date) {
-    const c = cfg();
-    if (!c) return null;
-    const d = D.diffDays(c.startDate, date) + 1;
-    if (d < 1 || d > DAYS) return null;
-    const p = planFor(d, c.startDate);
-    const items = (p.items || []).map((x) => `${x.t || EX[Array.isArray(x.e) ? x.e[0] : x.e].n} ${x.s}`);
-    return { d, date, week: p.w, rest: p.type === 'R', title: p.type === 'R' ? 'Відпочинок' : TITLES[p.type], items, plan: p, done: doneMap().get(d) || null };
+    const sl = slotAt(date);
+    if (!sl || sl.type === 'before' || sl.type === 'after') return null;
+    const done = doneMap();
+    if (sl.pause) {
+      const hist = historyOn(date, done);
+      if (hist) {
+        const p = hist.plan;
+        return { d: p.d, date, week: p.w, rest: false, pause: false, repeat: false, history: true, title: `${TITLES[p.type]} · до перерви`, items: itemTexts(p), plan: p, done: hist.w };
+      }
+      return { d: null, date, week: weekAt(date), rest: true, pause: true, repeat: false, history: false, title: 'Перерва в графіку', items: [], plan: null, done: null };
+    }
+    const p = sl.plan;
+    const rest = p.type === 'R';
+    return {
+      d: sl.d, date, week: p.w, rest, pause: false, repeat: sl.repeat, history: false,
+      title: rest ? 'Відпочинок' + (sl.repeat ? ' (повтор)' : '') : TITLES[p.type] + (sl.repeat ? ' · повтор' : ''),
+      items: itemTexts(p), plan: p, done: rest ? null : done.get(doneKey(sl)) || null
+    };
   }
-  /** Відкрити сторінку програми на дні d. */
+  /** Відкрити сторінку програми на дні плану d (null — сьогодні). */
   function openDay(d) {
-    selDay = d;
+    selDate = d ? dateOfDay(d) : null;
     CRM.router.go('training/program/' + PROGRAM_ID);
   }
-  /** «Виконано» / «Записати тренування» для дня d. */
+  /** Відкрити сторінку програми на даті. */
+  function openDate(date) {
+    selDate = date || null;
+    CRM.router.go('training/program/' + PROGRAM_ID);
+  }
+  /** «Виконано» / «Записати тренування» для дня плану d. */
   function recordDay(d) {
+    const date = dateOfDay(d);
+    if (date) recordDate(date);
+  }
+  /** «Виконано» / «Записати тренування» для дати (день плану, повтор або виконане до перерви). */
+  function recordDate(date) {
+    const sl = slotAt(date);
+    if (!sl) return;
+    const hist = sl.pause ? historyOn(date) : null;
+    if (hist) { CRM.training.openForm(hist.w.id); return; }
+    if (!sl.plan || !sl.plan.items) return;
+    record(sl);
+  }
+
+  // ---------- Зсув графіка ----------
+  /** Дата, з якої почався зсув (перший звільнений день). */
+  function shiftStart(s) {
+    const same = shiftsOf(cfg()).filter((x) => x.from === s.from).reduce((t, x) => t + x.days, 0);
+    return D.addDays(dateOfDay(s.from), -same);
+  }
+  const daysWord = (n) => fmt.count(n, ['день', 'дні', 'днів']);
+  function shiftsText() {
+    return shiftsOf(cfg()).map((s) => `+${daysWord(s.days)} з ${fmt.dateShort(shiftStart(s))}${s.fill === 'repeat' ? ' (повтор)' : ' (перерва)'}`).join(', ');
+  }
+  /**
+   * Зсув: день плану, що припадає на fromDate (або найближчий після неї), і всі наступні — на days днів пізніше.
+   * opts.fill: 'pause' (перерва — за замовчуванням) або 'repeat' (звільнені дні повторюють попередні).
+   * Дні, що вже минули, — завжди перерва (timeline).
+   */
+  async function addShift(fromDate, days, opts) {
     const c = cfg();
-    if (!c || d < 1 || d > DAYS) return;
-    record(planFor(d, c.startDate));
+    if (!c) throw new Error('Програму не додано.');
+    const n = Number(days);
+    if (!Number.isInteger(n) || n < 1) throw new Error('Кількість днів — ціле число від 1.');
+    const from = shiftTarget(fromDate);
+    const fill = opts && opts.fill === 'repeat' ? 'repeat' : 'pause';
+    const shifts = (c.shifts || []).concat([{ id: CRM.utils.uid(), from, days: n, fill, createdAt: new Date().toISOString() }]);
+    await CRM.store.setSetting(SETTING, Object.assign({}, c, { shifts }));
+    CRM.router.rerender();
+  }
+  async function removeShift(shiftId) {
+    const c = cfg();
+    if (!c) return;
+    await CRM.store.setSetting(SETTING, Object.assign({}, c, { shifts: (c.shifts || []).filter((s) => s.id !== shiftId) }));
+    CRM.router.rerender();
+  }
+  function shiftDialog() {
+    const c = cfg();
+    if (!c) return;
+    if (!(CRM.training && CRM.training.shiftDialog)) { ui.toast('Сайт оновлено не повністю — онови сторінку.', { type: 'error' }); return; }
+    const T = D.today();
+    const end = endDate();
+    const sel = selDate || T;
+    const def = sel < c.startDate ? c.startDate : sel > end ? T : sel;
+    CRM.training.shiftDialog({
+      defDate: def,
+      resolve: (date) => dateOfDay(shiftTarget(date)),
+      // Пропущене тренування — на сьогодні; сьогоднішнє чи майбутнє — на день пізніше
+      defaultDays: (date) => (date < T ? D.diffDays(date, T) : 1),
+      defaultFill: () => 'pause',
+      repeatHint: 'Звільнені дні повторять тренування, що були перед зсувом (напр., +4 дні — ще раз коло A → B → C → відпочинок).',
+      intro: 'Тренування з обраної дати й усі наступні перенесуться на пізніше. Вибери нову дату — дні порахуються самі (або впиши кількість днів). Дні, що звільнилися, — перерва або повтор попередніх тренувань. Дні, що вже минули, завжди стають перервою, а виконані тоді тренування лишаються на своїх датах.',
+      describe: (date) => { const sl = slotAt(date); return sl && sl.plan ? `день ${sl.d} · ${titleOf(sl.plan)}` : ''; },
+      list: () => shiftsOf(cfg()).map((s) => ({ id: s.id, text: `+${daysWord(s.days)} з ${fmt.dateShort(shiftStart(s))} (день ${s.from} і далі) · ${s.fill === 'repeat' ? 'повтор' : 'перерва'}` })),
+      add: (date, n, fill) => addShift(date, n, { fill }),
+      remove: (id) => removeShift(id)
+    });
   }
 
   function card() {
     const c = cfg();
     if (!c) return offerCard();
     const T = D.today();
-    const idx = dayIndex(T);
+    const end = endDate();
     const done = doneMap();
     const total = trainingDays().length;
-    const doneCount = Array.from(done.keys()).filter((d) => d >= 1 && d <= DAYS).length;
-    if (selDay == null || selDay < 1 || selDay > DAYS) selDay = Math.min(DAYS, Math.max(1, idx));
-    const plan = planFor(selDay, c.startDate);
+    const doneCount = doneCountOf(done);
+    if (!selDate) selDate = T;
+    if (selDate < c.startDate) selDate = c.startDate;
+    if (selDate > end) selDate = end;
+    const sl = slotAt(selDate);
 
     const status = statusText();
 
@@ -689,30 +1053,32 @@ window.CRM = window.CRM || {};
         h('div', { class: 'btn-row' },
           h('span', { class: 'prog-count subtle num' }, `Виконано ${doneCount} з ${total}`),
           menuBtn)),
-      h('div', { class: 'card-body prog-body' }, profileStrip(),
-        h('div', { class: 'prog-layout' }, dayDetail(plan, done.get(plan.d)), calendar(plan.d, done))));
+      h('div', { class: 'card-body prog-body' },
+        progressBar(doneCount, total),
+        shiftsOf(c).length ? h('div', { class: 'prog-profile prog-shifted' }, CRM.icon('calendar', { size: 'sm' }),
+          h('span', null, `Графік зсунуто: ${shiftsText()}. Кінець — ${fmt.date(end)}.`),
+          h('button', { type: 'button', class: 'link-like', onClick: shiftDialog }, 'Змінити')) : null,
+        profileStrip(),
+        h('div', { class: 'prog-layout' }, dayDetail(sl, done), calendar(selDate, done))));
   }
 
   // ---------- Розклад на Головній ----------
   CRM.home.addScheduleSource((date) => {
-    const c = cfg();
-    if (!c) return [];
-    const d = D.diffDays(c.startDate, date) + 1;
-    if (d < 1 || d > DAYS) return [];
-    const p = planFor(d, c.startDate);
-    if (p.type === 'R') return [];
-    const done = doneMap().get(d);
+    const info = dayInfo(date);
+    if (!info || info.rest || info.history) return [];
+    const p = info.plan;
     return [{
       time: null, kind: 'training', icon: 'dumbbell', cls: 'ico-danger',
-      title: p.type === 'T' ? 'Тест сили' : `Тренування ${TITLES[p.type]}`,
+      title: (info.repeat ? 'Повтор: ' : '') + (p.type === 'T' ? 'Тест сили' : `Тренування ${TITLES[p.type]}`),
       sub: `Програма · тиждень ${p.w} · ${p.dur}`,
-      badge: done ? { text: 'Виконано', cls: 'badge-success' } : null,
-      onClick: () => openDay(d)
+      badge: info.done ? { text: 'Виконано', cls: 'badge-success' } : null,
+      onClick: () => openDate(date)
     }];
   });
 
   CRM.program = {
-    card, offerCard, summary, dayInfo, openDay, recordDay, statusText, planFor, presetFor, parseSets, cfg, doneMap, profile, proteinText,
-    DAYS, PROGRAM_ID, NAME: PROGRAM_NAME, COLOR, EX
+    card, offerCard, summary, dayInfo, openDay, openDate, recordDay, recordDate, statusText, planFor, presetFor, parseSets, cfg, doneMap, profile, proteinText,
+    timeline, slotAt, dateOfDay, endDate, historyOn, addShift, removeShift, shiftDialog,
+    DAYS, PROGRAM_ID, NAME: PROGRAM_NAME, COLOR, EX, WARMUP, COOLDOWN
   };
 })(window.CRM);

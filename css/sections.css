@@ -1279,6 +1279,12 @@
 .ip-shifts { display: flex; flex-direction: column; gap: 6px; }
 .ip-shifts:empty { display: none; }
 .ip-shift { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; padding: 6px 10px; border-radius: var(--radius); background: var(--surface-2); }
+/* Вікно «Зсунути графік»: дні + підсумок «яке тренування → на яку дату» */
+.form-grid.ip-shift-days { align-items: end; }
+.ip-shift-sum { font-size: 13px; line-height: 1.4; color: var(--text-2); min-width: 0; padding-bottom: 2px; }
+.ip-shift-sum:empty { display: none; }
+/* «Верх тіла»: вступ до заминки */
+.prog-part-lead { margin: 2px 0 8px; }
 
 .pimport-head { display: flex; align-items: center; gap: 12px; }
 .pimport-errors { display: flex; flex-direction: column; gap: 6px; padding-left: 18px; font-size: 13.5px; color: var(--text); }
