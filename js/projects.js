@@ -8,6 +8,10 @@
    • Етап готовий сам, коли всі його задачі виконані, або вручну (done: true).
    • Поточний етап — перший незавершений. Прогрес проєкту — за задачами (без задач — за етапами).
    • Перенесення дедлайну етапу → «Зсунути наступні етапи?» (разом з датами їхніх задач).
+   • Етап 2 (2026.11.15-3): шар «Проєкти» в Календарі (calendarItems — дедлайни етапів і ◆ проєкту;
+     галочка — етап готовий, перетягування — новий дедлайн), блок «Проєкти» на Головній (homeCard),
+     дзвіночок (за 3 дні, у день, «прострочено»), ⚡ «… #диплом» → задача в поточний етап (matchTag),
+     картка «Проєкти» в «Моєму році» (js/year.js). Проєкти на паузі — без Календаря, Головної й нагадувань.
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -1208,6 +1212,152 @@ window.CRM = window.CRM || {};
 
   function openProject(id, params) { CRM.router.go(id ? 'projects/' + id : 'projects', params || null); }
 
+  // ==========================================================================
+  // Етап 2 (2026.11.15-3): шар у Календарі, блок на Головній, дзвіночок, ⚡ «… #диплом»
+  // ==========================================================================
+
+  /** Активні проєкти (не на паузі й не завершені) — для Календаря, Головної й нагадувань. */
+  function active() { return all().filter((p) => statusOf(p) === 'active'); }
+  /** Поточний етап проєкту (перший незавершений) або null. */
+  function currentStage(p) { const x = p ? info(p) : null; return x && x.cur ? x.cur.s : null; }
+
+  // ---------- Календар: дедлайни етапів і проєкту ----------
+  /**
+   * Пункти для шару «Проєкти» (лише активні проєкти).
+   * → [{ key, date, projectId, stageId | null, title, sub, color, done, overdue, diamond }]
+   * stageId null — власний дедлайн проєкту (◆), якщо того дня не закінчується жоден його етап.
+   */
+  function calendarItems(from, to) {
+    const T = D.today();
+    const out = [];
+    active().forEach((p) => {
+      const x = info(p, T);
+      const n = x.stages.length;
+      const color = colorOf(p);
+      const dl = p.deadline || null;
+      const stageOnDl = dl ? x.stages.some((r) => r.end === dl) : false;
+      x.stages.forEach((r) => {
+        if (!r.end || r.end < from || r.end > to) return;
+        const diamond = !!dl && r.end === dl;
+        const state = r.isDone ? 'готово' : r.total ? `${r.done} з ${fmt.count(r.total, ['задачі', 'задач', 'задач'])}` : 'дедлайн етапу';
+        out.push({
+          key: `${p.id}:${r.s.id}`, date: r.end, projectId: p.id, stageId: r.s.id,
+          title: `${p.name}: ${r.s.name}`,
+          sub: [`Етап ${r.i + 1} з ${n}`, state, diamond ? 'і дедлайн проєкту' : null].filter(Boolean).join(' · '),
+          color, done: r.isDone, overdue: r.overdue, diamond
+        });
+      });
+      if (dl && !stageOnDl && dl >= from && dl <= to) {
+        const allDone = n > 0 && x.stages.every((r) => r.isDone);
+        out.push({
+          key: `${p.id}:deadline`, date: dl, projectId: p.id, stageId: null,
+          title: `${p.name} — дедлайн проєкту`,
+          sub: n ? `${x.doneStages} з ${fmt.count(n, ['етапу', 'етапів', 'етапів'])} готово` : 'Дедлайн проєкту',
+          color, done: allDone, overdue: !allDone && dl < T, diamond: true
+        });
+      }
+    });
+    return out;
+  }
+
+  /** Новий власний дедлайн проєкту (перетягування ◆ у Календарі) — з «Скасувати». */
+  async function moveDeadline(pid, date) {
+    const p = get(pid);
+    if (!p || !date || p.deadline === date) return;
+    const prev = p.deadline || null;
+    await patchProject(pid, { deadline: date });
+    CRM.notify.runRules();
+    ui.toast(`Дедлайн проєкту «${p.name}»: ${fmt.dateShort(date)}`, {
+      action: { label: 'Скасувати', onClick: () => patchProject(pid, { deadline: prev }) }
+    });
+  }
+
+  // ---------- Головна: блок «Проєкти» ----------
+  const HOME_MAX = 3;
+  function homeCard() {
+    const list = sortOpenProjects(active());
+    if (!list.length) return null;
+    const T = D.today();
+    const rows = list.slice(0, HOME_MAX).map((p) => {
+      const x = info(p, T);
+      const r = x.cur;
+      let line;
+      if (!x.stages.length) line = stageLine(x);
+      else if (!r) line = 'Усі етапи готові — заверши проєкт';
+      else line = [`Етап ${r.i + 1} з ${x.stages.length}`, r.s.name, r.end ? leftText(r.left) : null].filter(Boolean).join(' · ');
+      return h('div', { class: 'pj-hrow', dataset: { id: p.id }, style: { '--pj': colorOf(p) } },
+        h('a', { class: 'pj-hrow-main', href: CRM.router.href('projects/' + p.id, r ? { stage: r.s.id } : null), title: r && r.end ? `Дедлайн етапу: ${fmt.dateShort(r.end)}` : null },
+          h('span', { class: 'pj-hrow-head' },
+            h('span', { class: 'pj-dot' }),
+            h('span', { class: 'pj-hrow-title' }, p.name || 'Без назви'),
+            h('span', { class: 'pj-hrow-pct num' }, x.pct + ' %')),
+          bar(x.pct),
+          h('span', { class: 'pj-hrow-stage' + (r && r.overdue ? ' is-overdue' : '') }, line)),
+        x.next ? h('button', {
+          type: 'button', class: 'pj-card-next pj-hrow-next', title: 'Відкрити задачу',
+          onClick: () => CRM.tasks.openTask(x.next.id)
+        }, h('span', { class: 'subtle' }, 'Далі:'), h('span', { class: 'pj-card-next-t' }, x.next.title || 'Без назви')) : null);
+    });
+    return h('section', { class: 'card pj-home' },
+      h('div', { class: 'card-head' },
+        h('h2', null, 'Проєкти', h('span', { class: 'tab-count' }, String(list.length))),
+        h('a', { href: '#/projects', class: 'btn btn-ghost btn-sm' }, 'Усі проєкти', CRM.icon('chevronRight', { size: 'sm' }))),
+      h('div', { class: 'pj-hlist' }, rows),
+      list.length > HOME_MAX ? h('div', { class: 'card-body subtle pj-home-more' }, `і ще ${list.length - HOME_MAX} — у «Проєктах»`) : null);
+  }
+
+  // ---------- ⚡ «написати вступ #диплом» → задача в поточний етап ----------
+  function tagKey(s) { return String(s || '').toLowerCase().replace(/[ʼ’`]/g, "'").replace(/[\s_\-.,:;!?«»"()]+/g, ''); }
+  /**
+   * Проєкт за міткою з ⚡: повна назва («#ремонт_кухні», «#РемонтКухні») або її перше слово
+   * («#ремонт»; ≥ 3 літери). Лише незавершені проєкти; активні — раніше за ті, що на паузі.
+   */
+  function matchTag(tag) {
+    const k = tagKey(tag);
+    if (k.length < 2) return null;
+    const list = sortOpenProjects(open());
+    const full = list.find((p) => tagKey(p.name) === k);
+    if (full) return full;
+    if (k.length < 3) return null;
+    return list.find((p) => {
+      const w = tagKey(String(p.name || '').trim().split(/\s+/)[0]);
+      return w.length >= 3 && w === k;
+    }) || null;
+  }
+
+  // ---------- Дзвіночок: за 3 дні, у день і «прострочено» ----------
+  /*
+   * Ключі: project:soon|today|overdue:<проєкт>:<етап | deadline>:<дата>.
+   * Лише активні проєкти й незавершені етапи; «прострочено» — до 7 днів після дедлайну
+   * (давні етапи, внесені заднім числом, не засипають дзвіночок).
+   */
+  CRM.notify.addRule(() => {
+    if (!CRM.db.SCHEMA.projects) return [];
+    const T = D.today();
+    const out = [];
+    const note = (ref, date, what, target) => {
+      const left = D.diffDays(T, date);
+      if (left > 3 || left < -7) return;
+      const base = { kind: 'project', target };
+      if (left === 0) out.push(Object.assign({ key: `project:today:${ref}:${date}`, title: 'Проєкт: дедлайн сьогодні', text: what }, base));
+      else if (left > 0) out.push(Object.assign({ key: `project:soon:${ref}:${date}`, title: `Проєкт: дедлайн ${left === 1 ? 'завтра' : 'через ' + daysText(left)}`, text: `${what} — ${fmt.dateShort(date)}` }, base));
+      else out.push(Object.assign({ key: `project:overdue:${ref}:${date}`, title: 'Проєкт: дедлайн минув', text: `${what} — ${fmt.dateShort(date)}` }, base));
+    };
+    active().forEach((p) => {
+      const x = info(p, T);
+      x.stages.forEach((r) => {
+        if (r.isDone || !r.end) return;
+        note(`${p.id}:${r.s.id}`, r.end, `етап «${r.s.name}» (${p.name})`, { route: 'projects/' + p.id, params: { stage: r.s.id } });
+      });
+      const dl = p.deadline;
+      const unfinished = !x.stages.length || x.stages.some((r) => !r.isDone);
+      if (dl && unfinished && !x.stages.some((r) => r.end === dl && !r.isDone)) {
+        note(`${p.id}:deadline`, dl, `проєкт «${p.name}»`, { route: 'projects/' + p.id });
+      }
+    });
+    return out;
+  });
+
   CRM.router.register('projects', { title: 'Проєкти', stores: ['projects', 'tasks', 'attachments', 'settings'], render });
 
   CRM.projects = {
@@ -1217,6 +1367,7 @@ window.CRM = window.CRM || {};
     patchProject, patchStage, setStageDone, shiftAfter, shiftScope, askShift, moveStageEnd, moveStage, removeStage, setStatus,
     addTask, assignTask, removeProject, snapshot, restoreSnapshot,
     chip, taskField, filterOptions, matchFilter,
-    openForm, openStageForm, openProject
+    openForm, openStageForm, openProject,
+    active, currentStage, calendarItems, moveDeadline, homeCard, matchTag
   };
 })(window.CRM);

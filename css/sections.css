@@ -1633,6 +1633,9 @@
 .kal-chip.k-task:focus-visible { box-shadow: inset 3px 0 0 var(--c), var(--focus-ring); }
 .kal-chip.k-learning { cursor: pointer; }
 .kal-chip.k-learning:focus-visible { box-shadow: inset 3px 0 0 var(--c), var(--focus-ring); }
+.kal-chip.k-project { cursor: pointer; }
+.kal-chip.k-project:focus-visible { box-shadow: inset 3px 0 0 var(--c), var(--focus-ring); }
+.kal-pj-dl { flex-shrink: 0; font-size: 10px; line-height: 1; color: var(--c); }
 .kal-ev.k-task { padding-left: 25px; }
 .kal-ev.k-task .kal-tcheck { position: absolute; left: 6px; top: 4px; }
 .kal-ev.k-task.short .kal-tcheck { top: 50%; transform: translateY(-50%); }
@@ -3156,6 +3159,21 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 }
 .pj-card-next:hover { background: var(--surface-2); }
 .pj-card-next-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Головна: блок «Проєкти» (етап 2) */
+.pj-hlist { display: flex; flex-direction: column; gap: 4px; padding: 2px 14px 12px; }
+.pj-hrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--radius); }
+.pj-hrow + .pj-hrow { border-top: 1px solid var(--border); border-radius: 0; }
+.pj-hrow-main { display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; min-width: 0; }
+.pj-hrow-main:hover .pj-hrow-title { color: var(--accent-text); }
+.pj-hrow-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pj-hrow-title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-hrow-pct { font-size: 13px; font-weight: 650; color: var(--text-2); }
+.pj-hrow .pj-bar { height: 5px; }
+.pj-hrow-stage { font-size: 13px; color: var(--text-2); line-height: 1.4; }
+.pj-hrow-stage.is-overdue { color: var(--hot); }
+.pj-hrow-next { margin: 0 -8px -4px; }
+.pj-home-more { font-size: 13px; padding-top: 0; }
 
 /* Сторінка проєкту: верх */
 .pj-hero .card-body { display: flex; flex-direction: column; gap: 12px; }

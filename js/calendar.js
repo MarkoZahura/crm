@@ -27,6 +27,11 @@
      вивчена (setTopicDone), перетягування на інший день — новий дедлайн (moveDeadline),
      клік — курс із розгорнутою темою.
 
+   • Шар «Проєкти» (пункт 9, етап 2): дедлайни етапів активних проєктів і власний дедлайн проєкту (◆)
+     (CRM.projects.calendarItems) — колір проєкту, готові етапи закреслені, прострочені — червоні;
+     галочка — етап готовий (setStageDone), перетягування — новий дедлайн (moveStageEnd з питанням
+     «Зсунути наступні етапи?» / moveDeadline), клік — проєкт з розгорнутим етапом.
+
    Подія: { id, title, date: 'РРРР-ММ-ДД', endDate?: 'РРРР-ММ-ДД' (остання дата, якщо на кілька днів) | null,
             allDay, start: 'ГГ:ХХ' | null, dur: хвилини | null,
             cat: id категорії, remind: хвилини до початку | null, note,
@@ -99,9 +104,10 @@ window.CRM = window.CRM || {};
     { id: 'training', label: 'Тренування з програм' },
     { id: 'payments', label: 'Регулярні платежі' },
     { id: 'deadlines', label: 'Дедлайни задач' },
-    { id: 'learning', label: 'Дедлайни навчання' }
+    { id: 'learning', label: 'Дедлайни навчання' },
+    { id: 'projects', label: 'Проєкти' }
   ];
-  const KIND_ORDER = { own: 0, people: 1, task: 2, gcal: 3, training: 4, payment: 5, deadline: 6, learning: 7 };
+  const KIND_ORDER = { own: 0, people: 1, task: 2, gcal: 3, training: 4, payment: 5, deadline: 6, learning: 7, project: 8 };
 
   // ---------- Налаштування вигляду (лише в цьому браузері) ----------
   function lsGet(key, def) { try { const v = localStorage.getItem(key); return v == null ? def : v; } catch (e) { return def; } }
@@ -657,6 +663,20 @@ window.CRM = window.CRM || {};
           color: x.color, icon: 'graduation', date: x.date, done: !!x.done, overdue: !!x.overdue,
           learn: { courseId: x.course.id, topicId },
           onOpen: () => CRM.learning.openCourse(x.course.id, { topic: topicId })
+        });
+      });
+    }
+
+    // Дедлайни етапів і проєктів (js/projects.js): колір проєкту, готові — закреслені, ◆ — дедлайн проєкту
+    if (L.projects && CRM.projects && CRM.projects.calendarItems) {
+      let list = [];
+      try { list = CRM.projects.calendarItems(from, to); } catch (e) { console.error(e); }
+      list.forEach((x) => {
+        put(x.date, 'allDay', {
+          key: 'pj:' + x.key, kind: 'project', title: x.title, sub: x.sub,
+          color: x.color, icon: 'projects', date: x.date, done: !!x.done, overdue: !!x.overdue,
+          pj: { projectId: x.projectId, stageId: x.stageId, diamond: !!x.diamond },
+          onOpen: () => CRM.projects.openProject(x.projectId, x.stageId ? { stage: x.stageId } : null)
         });
       });
     }
@@ -1514,6 +1534,13 @@ window.CRM = window.CRM || {};
           if (d !== it.date) CRM.learning.moveDeadline(it.learn.courseId, it.learn.topicId, d);
           return;
         }
+        // Дедлайн етапу (з питанням «Зсунути наступні етапи?») чи проєкту — на інший день
+        if (it.kind === 'project') {
+          if (d === it.date) return;
+          if (it.pj.stageId) CRM.projects.moveStageEnd(it.pj.projectId, it.pj.stageId, d);
+          else CRM.projects.moveDeadline(it.pj.projectId, d);
+          return;
+        }
         // Подія на кілька днів зсувається цілком (за день, за який її взяли)
         const shift = D.diffDays(it.date, d);
         const changes = it.span ? { date: D.addDays(it.span.first, shift), endDate: D.addDays(it.span.last, shift) } : { date: d };
@@ -2338,6 +2365,31 @@ window.CRM = window.CRM || {};
     return el;
   }
 
+  /** Дедлайн «Проєктів»: етап — з галочкою «готово», дедлайн проєкту — ◆; перетягується на інший день. */
+  function projectChip(it, cls, label, o) {
+    const done = !!it.done;
+    const stage = !!it.pj.stageId;
+    const check = stage ? h('button', {
+      type: 'button', class: 'task-check kal-tcheck' + (done ? ' checked' : ''), role: 'checkbox',
+      'aria-checked': done ? 'true' : 'false',
+      'aria-label': done ? `Етап «${it.title}» знову в роботу` : `Позначити етап «${it.title}» готовим`,
+      title: done ? 'Етап готовий — натисни, щоб повернути в роботу' : 'Позначити етап готовим',
+      onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; CRM.projects.setStageDone(it.pj.projectId, it.pj.stageId, !done); }
+    }, CRM.icon('check', { size: 'sm' })) : null;
+    const el = h('div', {
+      class: cls.join(' '), role: 'button', tabIndex: 0, style: { '--c': it.color },
+      title: [label, it.sub].filter(Boolean).join(' · '), dataset: { key: it.key },
+      onClick: (e) => { e.stopPropagation(); if (clicksBlocked()) return; openItem(it); },
+      onKeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openItem(it); } }
+    },
+    check,
+    it.pj.diamond ? h('span', { class: 'kal-pj-dl', 'aria-hidden': 'true', title: 'Дедлайн проєкту' }, '◆') : null,
+    h('span', { class: 'kal-chip-title' }, label),
+    o.withSub && it.sub ? h('span', { class: 'kal-chip-sub' }, it.sub) : null);
+    attachDrag(el, (sx, sy) => daySession(el, it, sx, sy));
+    return el;
+  }
+
   function chip(it, opts) {
     const o = opts || {};
     const cls = ['kal-chip', 'k-' + it.kind];
@@ -2354,6 +2406,7 @@ window.CRM = window.CRM || {};
     }
     if (it.kind === 'task') return taskChip(it, cls, label, o);
     if (it.kind === 'learning' && CRM.learning) return learnChip(it, cls, label, o);
+    if (it.kind === 'project' && CRM.projects) return projectChip(it, cls, label, o);
     const el = h('button', {
       type: 'button', class: cls.join(' '), style: { '--c': it.color },
       title: [label, it.sub, it.rep].filter(Boolean).join(' · '), dataset: { key: it.key },

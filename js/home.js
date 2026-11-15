@@ -113,7 +113,7 @@ window.CRM = window.CRM || {};
       weekStrip());
   }
 
-  const WEEK_KIND = { own: 'own', gcal: 'own', task: 'dl', deadline: 'dl', learning: 'dl', people: 'bday', training: 'train', payment: 'pay' };
+  const WEEK_KIND = { own: 'own', gcal: 'own', task: 'dl', deadline: 'dl', learning: 'dl', project: 'dl', people: 'bday', training: 'train', payment: 'pay' };
   const WEEK_LEGEND = [['own', 'події'], ['dl', 'дедлайни'], ['bday', 'дні народження'], ['train', 'тренування'], ['pay', 'платежі']];
   function weekStrip() {
     if (!CRM.calendar || !CRM.calendar.collect) return null;
@@ -281,14 +281,15 @@ window.CRM = window.CRM || {};
     habits: { name: 'Звички', sub: 'відмітки на сьогодні', has: () => !!CRM.habits, render: () => CRM.habits.homeCard() },
     year: { name: 'Мій рік', sub: 'підсумок року — у грудні й січні', has: () => !!CRM.year && CRM.year.homeShown(), render: () => CRM.year.homeCard() },
     tutor: { name: 'Уроки сьогодні', sub: 'репетиторство: план і звіт', has: () => !!CRM.tutor && CRM.tutor.all().length > 0, render: () => CRM.tutor.homeCard() },
+    projects: { name: 'Проєкти', sub: 'поточний етап, дедлайн і що далі', has: () => !!CRM.projects && !!CRM.projects.homeCard && CRM.projects.active().length > 0, render: () => CRM.projects.homeCard() },
     books: { name: 'Читаю зараз', sub: 'книги й прогрес у сторінках', has: () => !!CRM.books, render: () => CRM.books.homeCard() },
     training: { name: 'Сьогоднішнє тренування', sub: 'коли за програмою є тренування', has: () => !!CRM.programs, render: () => CRM.programs.homeCard() },
     schedule: { name: 'Розклад на сьогодні', sub: 'події, план дня, платежі', render: () => scheduleCard() }
   };
   const TOP = { pc: ['today', 'quote'], phone: ['quote'] };
   const DEFAULTS = {
-    pc: { left: ['year', 'tasks', 'tutor', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
-    phone: { list: ['today', 'year', 'tasks', 'tutor', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
+    pc: { left: ['year', 'tasks', 'projects', 'tutor', 'people', 'food', 'books'], right: ['money', 'limits', 'habits', 'training', 'schedule'], off: [], folded: [] },
+    phone: { list: ['today', 'year', 'tasks', 'projects', 'tutor', 'schedule', 'habits', 'books', 'money', 'limits', 'people', 'food', 'training'], off: [], folded: [] }
   };
   const has = (id) => !!BLOCKS[id] && (!BLOCKS[id].has || BLOCKS[id].has());
   const narrowMq = window.matchMedia ? window.matchMedia('(max-width: 860px)') : null;

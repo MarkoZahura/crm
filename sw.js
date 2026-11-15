@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.11.15-2';
-const BUILD = 'b4f11a50c331';
+const VERSION = '2026.11.15-3';
+const BUILD = '69745aa8dc8e';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': 'cce213a27c8ece0d',
-  'css/sections.css': 'd1ac4defc27b2111',
+  'css/sections.css': '7128a27e5f426268',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -53,7 +53,7 @@ const FILES = {
   'js/budget/limits.js': 'ee970a06ba603b02',
   'js/budget/recurring.js': '361c58170593ba28',
   'js/budget/transactions.js': '93d566432f0f1496',
-  'js/calendar.js': 'a0e87eb2da7e35c5',
+  'js/calendar.js': '51e7cb3ff8f8e7e9',
   'js/core/charts.js': 'b18bc9cd948e68cb',
   'js/core/db.js': 'e483f61d057b0236',
   'js/core/defaults.js': '32223999b81941f4',
@@ -68,18 +68,18 @@ const FILES = {
   'js/demo.js': '2ce705c354d51265',
   'js/gcal.js': '36f021c665da682e',
   'js/habits.js': 'e21f72a841eef3de',
-  'js/home.js': '72db8e8e26e06da8',
+  'js/home.js': '85e99e7b7cba391b',
   'js/keys.js': '527627c75fe9c2f2',
   'js/learning.js': '5203ad53f0e58888',
-  'js/notifications.js': '2724b57a7846a91e',
+  'js/notifications.js': '4cded64d9d24fda9',
   'js/nutrition.js': '92def9b3e17a25a4',
   'js/people.js': '411a3f9797fed3dd',
   'js/profile.js': '9f2414496bc75691',
   'js/program.js': 'e494a90a106525b7',
   'js/programs.js': '4238a00f6fb4f30e',
-  'js/projects.js': 'f261d0cd9b8d5b84',
-  'js/pwa.js': 'd01d77fb64b4bcb7',
-  'js/quick.js': 'f23b249c0a8850e3',
+  'js/projects.js': 'e6ce383a29d98548',
+  'js/pwa.js': 'c9280d317eed6e69',
+  'js/quick.js': 'b30487628f084647',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',
   'js/sync-config.js': '6e4963577579c35a',
@@ -89,8 +89,8 @@ const FILES = {
   'js/trash.js': '83a14e5233575f67',
   'js/tutor-money.js': '14159a5148c04ab4',
   'js/tutor.js': '56c73c58ae1ba3e3',
-  'js/year-share.js': 'f3b7619c443faaf5',
-  'js/year.js': '948105df5381b6bb',
+  'js/year-share.js': '5d41757f46beb0e7',
+  'js/year.js': '2173a815ed02ba28',
   'manifest-c.json': '6bec32309f09144a',
   'manifest-tiles.json': 'a5d3ba9581552a4b',
   'manifest.json': '7f3be59507fe8ac5'

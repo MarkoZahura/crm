@@ -8,6 +8,8 @@
    Картка «Мій рік» на Головній — з 1 грудня до 31 січня (× — сховати до наступного року).
    Етап 2 (05.11): картинки «Поділитися» — js/year-share.js (CRM.yearShare); тут — дані карток для картинки
    (bars, records, goals, money) і cardsFor(y, { hideMoney }) — гроші лише відсотками.
+   15.11 (пункт 9, етап 2): картка «Проєкти» (група «Справи й навчання») — завершені проєкти, готові етапи,
+   «вчасно N з M» (етап готовий не пізніше за свій дедлайн), «Зараз — …».
    Налаштування myYear { goals: { 'РРРР': [{ id, text, done: true|false|null }] }, hidden: ['РРРР'] }
    синхронізується; дані — лише в браузері й синхронізації, не в коді.
    ========================================================================== */
@@ -307,6 +309,28 @@ window.CRM = window.CRM || {};
       if (topics || courses) out.learning = { topics, courses, active: active.slice(0, 2) };
     }
 
+    // Проєкти (js/projects.js): завершені проєкти, готові етапи, «вчасно N з M»
+    if (CRM.projects && CRM.projects.info && CRM.db.SCHEMA.projects) {
+      let done = 0;
+      let stages = 0;
+      let onTime = 0;
+      let withEnd = 0;
+      const now = [];
+      S().list('projects').forEach((p) => {
+        const st = CRM.projects.statusOf(p);
+        if (st === 'done' && inR(p.doneAt)) { done += 1; mark(p.doneAt); }
+        const x = CRM.projects.info(p);
+        x.stages.forEach((r) => {
+          if (!r.isDone || !inR(r.doneAt)) return;
+          stages += 1;
+          mark(r.doneAt);
+          if (r.end) { withEnd += 1; if (r.doneAt <= r.end) onTime += 1; }
+        });
+        if (st === 'active' && x.pct > 0 && x.pct < 100) now.push({ name: p.name || 'Проєкт', pct: x.pct });
+      });
+      if (done || stages) out.projects = { done, stages, onTime, withEnd, now: now.slice(0, 2) };
+    }
+
     // Репетиторство
     if (CRM.tutor && CRM.tutor.lessonsBetween) {
       const nm = nowMin();
@@ -364,7 +388,7 @@ window.CRM = window.CRM || {};
 
     out.first = first;
     // Дні народження є в будь-якому році — «дані року» лише якщо когось привітав
-    out.any = !!(out.training || out.habits || out.food || out.money || out.tasks || out.events || out.learning || out.tutor || out.books || (out.people && out.people.greeted));
+    out.any = !!(out.training || out.habits || out.food || out.money || out.tasks || out.events || out.learning || out.projects || out.tutor || out.books || (out.people && out.people.greeted));
     return out;
   }
   function stats(y) { const b = bounds(y); return cached('y' + b.from + b.to, () => compute(b)); }
@@ -510,6 +534,18 @@ window.CRM = window.CRM || {};
         ? { id: 'tasks', group: 'work', icon: 'tasks', kicker: 'Задачі', value: t.done, num: 'int', unit: fmt.plural(t.done, ['задачу виконано', 'задачі виконано', 'задач виконано']),
           cmp: cmp(t.done, P('tasks') && P('tasks').done, y, b), lines }
         : { id: 'tasks', group: 'work', icon: 'calendar', kicker: 'Календар', value: st.events, num: 'int', unit: fmt.plural(st.events, ['подія', 'події', 'подій']), lines: [] });
+    }
+    if (st.projects) {
+      const pj = st.projects;
+      const lines = [];
+      if (pj.done && pj.stages) lines.push(`Готово ${fmt.count(pj.stages, ['етап', 'етапи', 'етапів'])}`);
+      if (pj.withEnd) lines.push(`Вчасно — ${int(pj.onTime)} з ${int(pj.withEnd)} ${fmt.plural(pj.withEnd, ['етапу', 'етапів', 'етапів'])}`);
+      if (pj.now.length) lines.push(`Зараз — ${pj.now.map((x) => `«${x.name}» (${x.pct} %)`).join(', ')}`);
+      out.push(pj.done
+        ? { id: 'projects', group: 'work', icon: 'projects', kicker: 'Проєкти', value: pj.done, num: 'int', unit: fmt.plural(pj.done, ['проєкт завершено', 'проєкти завершено', 'проєктів завершено']),
+          cmp: cmp(pj.done, P('projects') && P('projects').done, y, b), lines }
+        : { id: 'projects', group: 'work', icon: 'projects', kicker: 'Проєкти', value: pj.stages, num: 'int', unit: fmt.plural(pj.stages, ['етап готово', 'етапи готово', 'етапів готово']),
+          cmp: cmp(pj.stages, P('projects') && P('projects').stages, y, b), lines });
     }
     if (st.learning) {
       const l = st.learning;
@@ -946,7 +982,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('year', {
     title: 'Мій рік',
-    stores: ['tasks', 'events', 'people', 'habits', 'books', 'students', 'transactions', 'accounts', 'categories', 'rates', 'courses', 'workouts', 'meals', 'settings'],
+    stores: ['tasks', 'projects', 'events', 'people', 'habits', 'books', 'students', 'transactions', 'accounts', 'categories', 'rates', 'courses', 'workouts', 'meals', 'settings'],
     render
   });
 

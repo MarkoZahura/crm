@@ -42,7 +42,7 @@ window.CRM = window.CRM || {};
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
   }
   // Які картки йдуть на загальну картинку (до 8; далі — у звичайному порядку груп)
-  const TILE_ORDER = ['training', 'books', 'tasks', 'habits', 'money', 'tutor', 'learning', 'food', 'people', 'spend'];
+  const TILE_ORDER = ['training', 'books', 'tasks', 'habits', 'money', 'tutor', 'learning', 'projects', 'food', 'people', 'spend'];
   const MAX_TILES = 8;
 
   // ---------- Налаштування пристрою ----------

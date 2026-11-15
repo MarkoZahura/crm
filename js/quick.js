@@ -10,7 +10,7 @@
      «переказ 1000 моно → готівка» → переказ між рахунками; «біг 5 км 28 хв», «віджимання 3×20» → журнал тренувань
      «ДР Марти 5 листопада» → день народження в «Людях»; «написав Марті» → «Поспілкувались»
      «кава 65; таксі 120» — кілька записів одним рядком (лише «;», дата переходить на наступні частини)
-     «пт здати розділ #диплом» — задача з міткою «диплом»
+     «пт здати розділ #диплом» — задача з міткою «диплом» (або в поточний етап проєкту «Диплом», якщо такий є — js/projects.js)
      «відпустка 3–10 листопада», «з 3 по 10 листопада поїздка» — подія на кілька днів (весь день)
      «читав 30 сторінок», «Кобзар 20», «я на 120-й сторінці» → журнал читання в «Книгах» (js/books.js)
    parse(text) — розбір рядка без даних; plan(text) — варіанти з урахуванням рахунків,
@@ -1048,7 +1048,22 @@ window.CRM = window.CRM || {};
     if (!title) return null;
     const rec = { title, priority: P.prio ? 'high' : 'medium' };
     const parts = [];
-    if (P.labels && P.labels.length) rec.labels = CRM.tasks.mergeLabels ? CRM.tasks.mergeLabels([], P.labels) : P.labels.slice();
+    // «#диплом» — назва проєкту (чи її перше слово) → задача в поточний етап проєкту (js/projects.js), інакше мітка
+    let labels = P.labels || [];
+    let proj = null;
+    if (labels.length && CRM.projects && CRM.projects.matchTag && CRM.db.SCHEMA.projects) {
+      const rest = [];
+      labels.forEach((l) => { const p = proj ? null : CRM.projects.matchTag(l); if (p) proj = p; else rest.push(l); });
+      labels = rest;
+    }
+    if (labels.length) rec.labels = CRM.tasks.mergeLabels ? CRM.tasks.mergeLabels([], labels) : labels.slice();
+    let projPart = null;
+    if (proj) {
+      const st = CRM.projects.currentStage(proj);
+      rec.projectId = proj.id;
+      rec.stageId = st ? st.id : null;
+      projPart = `Проєкт: ${proj.name}${st ? ' › ' + st.name : ''}`;
+    }
     const start = P.time ? P.time.start : null;
     if (P.deadline && (P.date || P.time)) {
       rec.deadline = dateFor(P, 'task') || P.today;
@@ -1067,6 +1082,7 @@ window.CRM = window.CRM || {};
     } else {
       parts.push('без дати');
     }
+    if (projPart) parts.push(projPart);
     if (P.prio) parts.push('високий пріоритет');
     if (rec.labels && rec.labels.length) parts.push(rec.labels.map((l) => '#' + l).join(' '));
     if (P.remind) {
@@ -1617,7 +1633,9 @@ window.CRM = window.CRM || {};
       const rec = Object.assign({}, o.rec);
       if (rec.planDate && !rec.planStart) rec.planOrder = CRM.tasks.nextPlanOrder(rec.planDate);
       const saved = await CRM.tasks.create(rec);
-      const text = saved.planDate ? `Задачу додано в «План дня»: ${relDay(saved.planDate)}` : saved.deadline ? `Задачу додано, дедлайн — ${relDay(saved.deadline)}` : 'Задачу додано';
+      let text = saved.planDate ? `Задачу додано в «План дня»: ${relDay(saved.planDate)}` : saved.deadline ? `Задачу додано, дедлайн — ${relDay(saved.deadline)}` : 'Задачу додано';
+      const pj = saved.projectId && CRM.projects ? CRM.projects.get(saved.projectId) : null;
+      if (pj) text += ` · проєкт «${pj.name}»`;
       return { kind: 'task', store: 'tasks', id: saved.id, short, text: text + (saved.remind != null ? ' · ' + remindText(saved.remind) : ''), undo: () => removeRec('tasks', saved.id) };
     }
     if (o.kind === 'expense' || o.kind === 'income' || o.kind === 'transfer') {

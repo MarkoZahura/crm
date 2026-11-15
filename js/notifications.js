@@ -21,6 +21,7 @@
      limit:<категорія | total>:<РРРР-ММ>:80 | 100   (ліміти Бюджету, js/budget/limits.js)
      tutor:report:<учень>:<дата>   (урок закінчився, звіт ще не надіслано — js/tutor.js)
      tutor:summary:<учень>:<РРРР-ММ>   (1–7 числа: підсумок за минулий місяць ще не надіслано — js/tutor-money.js)
+     project:soon|today|overdue:<проєкт>:<етап | deadline>:<дата>   (дедлайни етапів і проєкту — js/projects.js)
    ========================================================================== */
 window.CRM = window.CRM || {};
 
@@ -40,6 +41,7 @@ window.CRM = window.CRM || {};
     habit: { icon: 'habits', cls: 'ico-goal' },
     limit: { icon: 'gauge', cls: 'ico-payment' },
     tutor: { icon: 'board', cls: 'ico-learning' },
+    project: { icon: 'projects', cls: 'ico-task' },
     system: { icon: 'info', cls: 'ico-event' }
   };
 
