@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.11.15-5';
-const BUILD = '29f6bf31ba80';
+const VERSION = '2026.11.15-6';
+const BUILD = '545158394d67';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': 'cce213a27c8ece0d',
-  'css/sections.css': 'c07480e57c8d911d',
+  'css/sections.css': '7ab2680f0ce43cbe',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -53,7 +53,7 @@ const FILES = {
   'js/budget/limits.js': 'ee970a06ba603b02',
   'js/budget/recurring.js': '361c58170593ba28',
   'js/budget/transactions.js': '93d566432f0f1496',
-  'js/calendar.js': 'd2c0029153024873',
+  'js/calendar.js': 'f75c66e1837920c9',
   'js/core/charts.js': 'b18bc9cd948e68cb',
   'js/core/db.js': 'e483f61d057b0236',
   'js/core/defaults.js': '32223999b81941f4',
@@ -67,7 +67,7 @@ const FILES = {
   'js/core/utils.js': '92718eb6f9b9d30e',
   'js/demo.js': '2ce705c354d51265',
   'js/gcal.js': 'f2dda04c7d704e4d',
-  'js/gmirror.js': '8a4c14762f178495',
+  'js/gmirror.js': 'c9fe745caaeee806',
   'js/habits.js': 'e21f72a841eef3de',
   'js/home.js': '85e99e7b7cba391b',
   'js/keys.js': '527627c75fe9c2f2',
@@ -79,7 +79,7 @@ const FILES = {
   'js/program.js': 'e494a90a106525b7',
   'js/programs.js': '4238a00f6fb4f30e',
   'js/projects.js': 'e6ce383a29d98548',
-  'js/pwa.js': 'e905070a587a0a91',
+  'js/pwa.js': '6ed3ba34ca61fca2',
   'js/quick.js': '73ef3cf522a0b8d8',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',

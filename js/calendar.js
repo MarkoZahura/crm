@@ -185,7 +185,8 @@ window.CRM = window.CRM || {};
 
   // ---------- Категорії ----------
   let catsCache = { raw: undefined, list: null };
-  /** Чинний список категорій: [{ id, label, color }]; «Інше» є завжди. */
+  const GCOLOR_RE = /^(?:[1-9]|1[01])$/;   // кольори подій Google: id 1–11
+  /** Чинний список категорій: [{ id, label, color, gcolor }]; «Інше» є завжди. gcolor — колір копій у Google (id 1–11) або null («Авто»). */
   function categories() {
     const raw = CRM.store.getSetting('calCategories', null);
     if (catsCache.list && catsCache.raw === raw) return catsCache.list;
@@ -194,7 +195,8 @@ window.CRM = window.CRM || {};
       .map((c) => ({
         id: c.id,
         label: String(c.label || '').replace(/\s+/g, ' ').trim().slice(0, CAT_MAX) || 'Без назви',
-        color: CRM.dict.get('categoryColors', c.color) ? c.color : 'slate'
+        color: CRM.dict.get('categoryColors', c.color) ? c.color : 'slate',
+        gcolor: GCOLOR_RE.test(String(c.gcolor || '')) ? String(c.gcolor) : null
       }));
     if (!list.length) list = DEFAULT_CATEGORIES.map((c) => Object.assign({}, c));
     if (!list.some((c) => c.id === OTHER)) list.push(Object.assign({}, DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1]));
@@ -208,7 +210,11 @@ window.CRM = window.CRM || {};
   function categoryName(id) { return categoryOf(id).label; }
   function catColor(id) { return CRM.dict.categoryColor(categoryOf(id).color); }
   async function saveCategories(list) {
-    await CRM.store.setSetting('calCategories', list.map((c) => ({ id: c.id, label: c.label, color: c.color })));
+    await CRM.store.setSetting('calCategories', list.map((c) => {
+      const o = { id: c.id, label: c.label, color: c.color };
+      if (c.gcolor && GCOLOR_RE.test(String(c.gcolor))) o.gcolor = String(c.gcolor);
+      return o;
+    }));
   }
 
   // ---------- Події ----------
@@ -2067,6 +2073,21 @@ window.CRM = window.CRM || {};
   async function setCategoryColor(id, color) {
     await saveCategories(categories().map((x) => (x.id === id ? Object.assign({}, x, { color }) : x)));
   }
+  /** Колір копій цієї категорії в Google: id 1–11 або null — «Авто» (найближчий до кольору категорії). */
+  async function setCategoryGColor(id, gcolor) {
+    const v = GCOLOR_RE.test(String(gcolor || '')) ? String(gcolor) : null;
+    await saveCategories(categories().map((x) => (x.id === id ? Object.assign({}, x, { gcolor: v }) : x)));
+  }
+  /** Колір Google для категорії: { id, name, hex, auto } (для дублювання в Google; null — кольорів Google немає). */
+  function categoryGColor(id) {
+    const G = CRM.gcal;
+    if (!G || !G.GCOLORS) return null;
+    const c = categoryOf(id);
+    const def = CRM.dict.get('categoryColors', c.color);
+    const gid = c.gcolor || (def ? G.nearestColor(def.light) : null);
+    const g = G.GCOLORS.find((x) => x.id === gid);
+    return g ? { id: g.id, name: g.name, hex: g.hex, auto: !c.gcolor } : null;
+  }
   /** Події, у яких є ця категорія (сама подія або окремий день серії). */
   function eventsWithCat(id) {
     return CRM.store.list('events').filter((e) => categoryOf(e.cat).id === id ||
@@ -2156,13 +2177,33 @@ window.CRM = window.CRM || {};
         swatches(c.color, async (v) => { pop.close(); await setCategoryColor(c.id, v); })),
       { align: 'start', className: 'lbl-colors-pop' });
     }
+    // Колір копій у Google (коли ввімкнено дублювання): «Авто» або один з 11 кольорів Google
+    const mirrorOn = () => !!(CRM.gmirror && CRM.gmirror.on && CRM.gmirror.on() && CRM.gcal && CRM.gcal.GCOLORS);
+    function gColorMenu(anchor, c) {
+      const G = CRM.gcal;
+      const def = CRM.dict.get('categoryColors', c.color);
+      const near = G.GCOLORS.find((x) => x.id === (def ? G.nearestColor(def.light) : null));
+      const btn = (v, label, color, withText) => h('button', {
+        type: 'button', role: 'radio', class: 'kal-gcolor' + (withText ? ' kal-gcolor-cal' : '') + ((c.gcolor || '') === v ? ' active' : ''),
+        'aria-checked': (c.gcolor || '') === v ? 'true' : 'false', 'aria-label': label, title: label, dataset: { gcolor: v }, style: { '--c': color },
+        onClick: async () => { pop.close(); await setCategoryGColor(c.id, v || null); }
+      }, h('span', { class: 'kal-cat-dot' }), withText ? h('span', null, label) : null);
+      const pop = ui.popover(anchor, h('div', { class: 'lbl-colors kcat-gcolors' },
+        h('div', { class: 'kal-pick-head' }, `Колір у Google — «${c.label}»`),
+        h('div', { class: 'kal-gcolors', role: 'radiogroup', 'aria-label': 'Колір у Google' },
+          btn('', near ? `Авто: ${near.name}` : 'Авто', near ? G.readable(near.hex) : 'var(--text-3)', true),
+          G.GCOLORS.map((x) => btn(x.id, x.name, G.readable(x.hex), false))),
+        h('div', { class: 'subtle kcat-ghint' }, 'Таким кольором будуть копії подій цієї категорії в Google Календарі. «Авто» — найближчий до кольору категорії в CRM.')),
+      { align: 'start', className: 'lbl-colors-pop kcat-gcolors-pop' });
+    }
     function render() {
       const list = categories();
       const cnt = counts();
       const addBtn = list.length < CATS_MAX ? ui.button({ label: 'Нова категорія', icon: 'plus', size: 'sm', variant: 'ghost', className: 'kcat-add' }) : null;
       if (addBtn) addBtn.addEventListener('click', () => newCategory(addBtn, null));
       ui.mount(body,
-        h('p', { class: 'subtle lbl-hint' }, 'Назва й колір змінюються одразу для всіх подій цієї категорії. «Інше» видалити не можна — туди потрапляють події без категорії.'),
+        h('p', { class: 'subtle lbl-hint' }, 'Назва й колір змінюються одразу для всіх подій цієї категорії. «Інше» видалити не можна — туди потрапляють події без категорії.' +
+          (mirrorOn() ? ' Кружечок з «G» — колір копій цієї категорії в Google Календарі.' : '')),
         list.map((c) => {
           const sw = h('button', {
             type: 'button', class: 'lbl-swatch', style: { '--lbl': CRM.dict.categoryColor(c.color) },
@@ -2177,8 +2218,18 @@ window.CRM = window.CRM || {};
             const v = cleanCat(nameIn.value);
             if (!v || !(await renameCategory(c.id, v))) nameIn.value = c.label;
           });
+          let gsw = null;
+          if (mirrorOn()) {
+            const gc = categoryGColor(c.id);
+            const gl = gc ? `${gc.name}${gc.auto ? ' (авто)' : ''}` : 'Авто';
+            gsw = h('button', {
+              type: 'button', class: 'kcat-gsw' + (gc && !gc.auto ? ' chosen' : ''), style: { '--c': gc ? CRM.gcal.readable(gc.hex) : 'var(--text-3)' },
+              title: `Колір у Google: ${gl}`, 'aria-label': `Колір у Google для «${c.label}»: ${gl}`, dataset: { gcolor: gc ? gc.id : '' },
+              onClick: () => gColorMenu(gsw, c)
+            }, 'G');
+          }
           return h('div', { class: 'lbl-row kcat-row', dataset: { cat: c.id } },
-            sw, nameIn,
+            sw, nameIn, gsw,
             h('span', { class: 'lbl-count subtle' }, fmt.count(cnt.get(c.id) || 0, ['подія', 'події', 'подій'])),
             c.id === OTHER
               ? h('span', { class: 'kcat-lock', title: '«Інше» видалити не можна' }, CRM.icon('shield', { size: 'sm' }))
@@ -3726,7 +3777,7 @@ window.CRM = window.CRM || {};
     whenText, categoryName, categories, categoryOf, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
     plannedTasks, untimedOn, overdueTasks, planTask, rollOver,
     FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn, ruleOf, seriesFirst, isOccurrence,
-    spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, hiddenCats,
+    spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, setCategoryGColor, categoryGColor, hiddenCats,
     // Події Google (пункт 12)
     openGoogle, createGoogle, copyGoogle, deleteGoogle, googleTarget, gFind, gTargets
   };

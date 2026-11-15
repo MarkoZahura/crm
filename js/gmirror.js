@@ -172,8 +172,10 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Як копія має виглядати ----------
+  /** Колір копії: свій колір Google категорії («Категорії подій» → «G») або найближчий до кольору категорії. */
   function colorFor(cat) {
     const c = C().categoryOf(cat);
+    if (c && c.gcolor) return c.gcolor;
     const def = c && CRM.dict.get('categoryColors', c.color);
     return def ? G().nearestColor(def.light) : null;
   }
@@ -856,7 +858,7 @@ window.CRM = window.CRM || {};
     if (r.ok && r.value) {
       const sent = r.value.sent;
       const failed = Object.keys(state.failed).length;
-      ui.toast(failed ? `Скопійовано в Google: ${sent - failed}; не вдалося: ${failed} (спробую ще)` : sent ? `Дублювання ввімкнено: скопійовано ${CRM.fmt.count(sent, ['подію', 'події', 'подій'])}` : 'Дублювання ввімкнено',
+      ui.toast(failed ? `Скопійовано в Google: ${sent}; не вдалося: ${failed} (спробую ще)` : sent ? `Дублювання ввімкнено: скопійовано ${CRM.fmt.count(sent, ['подію', 'події', 'подій'])}` : 'Дублювання ввімкнено',
         { type: failed ? 'error' : 'success' });
     } else {
       ui.toast('Дублювання ввімкнено. Копії надішлю, щойно буде доступ до Google («Оновити підключення»).');
@@ -920,6 +922,7 @@ window.CRM = window.CRM || {};
       const n = pendingCount();
       const gn = goneCount();
       lines.push(h('div', null, `Копії — в основному календарі Google. Подій з копією: ${copiesCount()}.`));
+      if (C() && C().openCategories) lines.push(h('div', { class: 'gm-colors' }, 'Колір копій — свій для кожної категорії: ', link('Кольори категорій у Google', () => C().openCategories(), 'gm-cats')));
       if (running && state.total) lines.push(h('div', null, `Надсилаю: ${state.done} з ${state.total}…`));
       else if (n) lines.push(h('div', { class: 'gm-pending' }, `Чекають надсилання: ${n} · `, link('Надіслати зараз', () => sendNow(), 'gm-send')));
       if (gn) lines.push(h('div', { class: 'gm-gone' }, `Видалено в Google: ${gn} · `, link('Вирішити', () => openGone(), 'gm-resolve')));
