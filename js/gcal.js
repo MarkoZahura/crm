@@ -1,5 +1,5 @@
 /* ==========================================================================
-   gcal.js — Google Календар (лише читання), без сервера.
+   gcal.js — Google Календар (читання й зміна подій), без сервера.
 
    Як це працює:
    • Вхід — бібліотека Google Identity Services (GIS), «token model»:
@@ -8,9 +8,13 @@
      (access token) приблизно на годину. Ключа для продовження (refresh token)
      у цій схемі немає, тож коли доступ спливає, потрібен клік
      «Оновити підключення» (зазвичай без повторного пароля).
-   • Дані — Google Calendar API v3 (лише читання):
-       GET /users/me/calendarList            (scope calendar.calendarlist.readonly)
-       GET /calendars/{calendarId}/events    (scope calendar.events.readonly)
+   • Дані — Google Calendar API v3:
+       GET /users/me/calendarList            (scope calendar.calendarlist.readonly; accessRole — чи можна писати)
+       GET /calendars/{calendarId}/events    (scope calendar.events — читати й змінювати події)
+     Зміна подій (пункт 12, з 2026.11.15-4): GET / PATCH / DELETE /calendars/{calendarId}/events/{eventId},
+     POST /calendars/{calendarId}/events (sendUpdates: all | none). Окреме заняття серії має власний id
+     (виняток; скасувати — PATCH status «cancelled»), уся серія — recurringEventId (поле recurrence — RRULE).
+     Старий ключ доступу (до 2026.11.15-4, лише читання) — події видно, а змінити можна після «Оновити підключення».
    • Те саме підключення дає доступ і іншим розділам, якщо їх увімкнено: Google Диск
      (копії, drive.file — backup.js) і Google-таблиця «Репетиторство» (лише читання,
      spreadsheets.readonly — tutor.js; accessToken('sheets')).
@@ -37,7 +41,8 @@ window.CRM = window.CRM || {};
   const GIS_SRC = 'https://accounts.google.com/gsi/client';
   const API = 'https://www.googleapis.com/calendar/v3';
   const SCOPE_LIST = 'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
-  const SCOPE_EVENTS = 'https://www.googleapis.com/auth/calendar.events.readonly';
+  // Читати й змінювати події (до 2026.11.15-4 — calendar.events.readonly; старий ключ лише читає)
+  const SCOPE_EVENTS = 'https://www.googleapis.com/auth/calendar.events';
   const SCOPES = SCOPE_LIST + ' ' + SCOPE_EVENTS;
   // Резервні копії на Google Диск (backup.js): доступ лише до файлів, які створила сама CRM
   const SCOPE_DRIVE = 'https://www.googleapis.com/auth/drive.file';
@@ -197,7 +202,8 @@ window.CRM = window.CRM || {};
       const drive = oauth.hasGrantedAllScopes(resp, SCOPE_DRIVE);
       const sheets = oauth.hasGrantedAllScopes(resp, SCOPE_SHEETS);
       const secs = Number(resp.expires_in) || 3600;
-      await CRM.store.setSetting('gcalToken', { accessToken: resp.access_token, expiresAt: Date.now() + Math.max(60, secs - 60) * 1000, list, drive, sheets });
+      // write: ключ дає змінювати події (новий дозвіл calendar.events)
+      await CRM.store.setSetting('gcalToken', { accessToken: resp.access_token, expiresAt: Date.now() + Math.max(60, secs - 60) * 1000, list, drive, sheets, write: true });
       await setCfg({ wanted: true });
       lastError = null;
       changed();
@@ -241,13 +247,22 @@ window.CRM = window.CRM || {};
   }
 
   // ---------- Запити до Calendar API ----------
-  async function apiGet(path, params) {
+  /**
+   * Запит до Calendar API. method: GET | POST | PATCH | DELETE; body — обʼєкт (JSON) для POST/PATCH.
+   * Помилки: e.code = expired | network | api-disabled | scope | rate | gone | http.
+   */
+  async function api(method, path, params, body) {
     const t = token();
     if (!t) throw err('expired', 'Доступ до Google Календаря сплив.');
     const qs = new URLSearchParams(params || {}).toString();
+    const opts = { method, headers: { Authorization: 'Bearer ' + t.accessToken } };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
     let res;
     try {
-      res = await fetch(API + path + (qs ? '?' + qs : ''), { headers: { Authorization: 'Bearer ' + t.accessToken } });
+      res = await fetch(API + path + (qs ? '?' + qs : ''), opts);
     } catch (e) {
       throw err('network', 'Немає звʼязку з Google — спробую ще раз пізніше.');
     }
@@ -267,16 +282,23 @@ window.CRM = window.CRM || {};
         throw err('api-disabled', 'У проєкті Google Cloud не ввімкнено Google Calendar API. Увімкни його (README, розділ «Google Календар») і натисни «Оновити події».');
       }
       if (res.status === 403 && /insufficient/i.test(msg + reason)) {
-        throw err('scope', 'Бракує дозволу на читання календаря. Натисни «Відключити», потім «Підключити» й дозволь доступ.');
+        throw err('scope', method === 'GET'
+          ? 'Бракує дозволу на читання календаря. Натисни «Відключити», потім «Підключити» й дозволь доступ.'
+          : 'Google не дозволив CRM змінювати події. Натисни «Оновити підключення» й залиш галочку біля доступу до календаря.');
       }
-      if (res.status === 429 || /rateLimit/i.test(reason)) throw err('rate', 'Google тимчасово обмежив кількість запитів — спробую пізніше.');
+      if (res.status === 429 || /rateLimit/i.test(reason)) throw err('rate', 'Google тимчасово обмежив кількість запитів — спробуй трохи пізніше.');
+      if (method !== 'GET' && res.status === 403) throw err('forbidden', 'Google не дозволив змінити цю подію' + (msg ? `: ${msg}` : '.'));
+      if (res.status === 404 || res.status === 410) throw err('gone', 'Цієї події вже немає в Google Календарі.');
       throw err('http', `Google відповів помилкою ${res.status}${msg ? ': ' + msg : ''}`);
     }
-    return res.json();
+    if (res.status === 204 || method === 'DELETE') return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
   }
+  const apiGet = (path, params) => api('GET', path, params);
 
   async function fetchCalendars(t) {
-    if (!t.list) return [{ id: 'primary', summary: 'Основний календар', primary: true, selected: true }];
+    if (!t.list) return [{ id: 'primary', summary: 'Основний календар', primary: true, selected: true, role: 'owner', tz: null }];
     const out = [];
     let pageToken = null;
     let guard = 0;
@@ -286,7 +308,10 @@ window.CRM = window.CRM || {};
       const j = await apiGet('/users/me/calendarList', params);
       (j.items || []).forEach((c) => {
         if (!c || !c.id || c.deleted) return;
-        out.push({ id: c.id, summary: String(c.summaryOverride || c.summary || c.id).slice(0, 120), primary: !!c.primary, selected: !!c.selected });
+        out.push({
+          id: c.id, summary: String(c.summaryOverride || c.summary || c.id).slice(0, 120), primary: !!c.primary, selected: !!c.selected,
+          role: typeof c.accessRole === 'string' ? c.accessRole : null, tz: typeof c.timeZone === 'string' ? c.timeZone : null
+        });
       });
       pageToken = j.nextPageToken || null;
       guard++;
@@ -304,7 +329,7 @@ window.CRM = window.CRM || {};
     const end = allDay
       ? (ev.end && ev.end.date) || D.addDays(ev.start.date, 1)
       : (ev.end && ev.end.dateTime) || start;
-    return {
+    const out = {
       id: String(ev.id), cal: calId,
       title: String(ev.summary || '').trim().slice(0, 200) || '(без назви)',
       allDay, start, end,
@@ -312,6 +337,28 @@ window.CRM = window.CRM || {};
       link: /^https:\/\//.test(ev.htmlLink || '') ? ev.htmlLink : null,
       tentative: ev.status === 'tentative'
     };
+    // Для зміни з CRM (пункт 12): серія, опис, нагадування, хто організатор, чи є гості
+    if (ev.recurringEventId) {
+      out.rid = String(ev.recurringEventId);
+      const o = ev.originalStartTime || {};
+      out.ost = o.dateTime || o.date || start;
+    }
+    if (ev.description) out.desc = String(ev.description).slice(0, 8000);
+    if (ev.start.timeZone) out.tz = String(ev.start.timeZone);
+    if (ev.eventType && ev.eventType !== 'default') out.type = String(ev.eventType);
+    // organizer.self Google пише лише як true (false — пропускає): немає — організатор хтось інший
+    if (ev.organizer && !ev.organizer.self) out.notMine = true;
+    if (ev.guestsCanModify) out.gcm = true;
+    if (ev.privateCopy) out.privateCopy = true;
+    const guests = (ev.attendees || []).filter((a) => a && !a.self && !a.resource).length;
+    if (guests) out.guests = guests;
+    const r = ev.reminders;
+    if (r && typeof r === 'object') {
+      out.rem = r.useDefault ? 'default' : (Array.isArray(r.overrides) ? r.overrides : [])
+        .filter((x) => x && Number.isFinite(Number(x.minutes)))
+        .map((x) => ({ method: x.method === 'email' ? 'email' : 'popup', minutes: Number(x.minutes) }));
+    }
+    return out;
   }
 
   async function fetchEvents(calId, from, to) {
@@ -379,12 +426,341 @@ window.CRM = window.CRM || {};
         refreshing = null;
         changed();
         CRM.notify.runRules();
+        // Поки завантажувались події, у Google щось змінили з CRM — завантажити ще раз
+        if (refreshAgain) { refreshAgain = false; setTimeout(() => refresh(), 0); }
       }
     })();
     return refreshing;
   }
 
   function eventStartMs(e) { return e.allDay ? Date.parse(kyivStartISO(e.start)) : Date.parse(e.start); }
+
+  // ---------- Зміна подій з CRM (пункт 12) ----------
+  // Календарі, де можна писати (accessRole зі списку календарів; основний без списку — свій)
+  const WRITE_ROLES = ['owner', 'writer', 'writerWithoutPrivateAccess'];
+  // Часовий пояс нових подій, якщо в календаря свого не вказано (повторюваним Google його вимагає)
+  const TZ_DEFAULT = 'Europe/Kiev';
+  const enc = encodeURIComponent;
+
+  function calInfo(id) {
+    const c = cache();
+    return (c && c.calendars && c.calendars.find((x) => x.id === id)) || null;
+  }
+  function calWritable(id) {
+    const cal = calInfo(id);
+    if (!cal) return id === 'primary';
+    const role = cal.role || (cal.primary ? 'owner' : null);
+    return WRITE_ROLES.indexOf(role) !== -1;
+  }
+  function calLabel(id) {
+    const cal = calInfo(id);
+    return cal ? (cal.primary ? 'основний' : cal.summary) : 'основний';
+  }
+  /** Календарі, у які можна додати нову подію: показані в CRM і з правом запису (основний — першим). */
+  function writableCalendars() {
+    if (isFile() || !cfg().wanted) return [];
+    const c = cache();
+    if (!c || !c.calendars) return [];
+    const sel = cfg().calendars || [];
+    return c.calendars.filter((x) => sel.indexOf(x.id) !== -1 && calWritable(x.id));
+  }
+  function calendarTz(id) { const cal = calInfo(id); return (cal && cal.tz) || TZ_DEFAULT; }
+
+  /** Чи триває подія з часом через північ (такі тут не перетягуємо й час не змінюємо). */
+  function crossesMidnight(e) {
+    if (e.allDay) return false;
+    return D.toKyivDate(e.start) !== D.toKyivDate(new Date(Math.max(Date.parse(e.end) - 1, Date.parse(e.start))));
+  }
+
+  /**
+   * Чи можна змінити подію з CRM: { ok, why, drag }.
+   * Доступ, що сплив, не заважає — перед збереженням CRM попросить «Оновити підключення».
+   */
+  function editInfo(e) {
+    if (!e || isFile() || !cfg().wanted) return { ok: false, drag: false, why: 'Google Календар не підключено.' };
+    if (!calWritable(e.cal)) {
+      return { ok: false, drag: false, why: `Календар «${calLabel(e.cal)}» — лише для перегляду: змінити подію можна тільки в самому Google Календарі.` };
+    }
+    if (e.type) {
+      return { ok: false, drag: false, why: 'Це особлива подія Google («Не на роботі», «Робоче місце», «Час для зосередження», день народження з контактів чи подія з Gmail) — її можна змінити лише в Google Календарі.' };
+    }
+    if (e.notMine && !e.gcm) {
+      return { ok: false, drag: false, why: 'Це запрошення від іншої людини — змінити час чи назву може лише організатор.' };
+    }
+    return { ok: true, drag: !crossesMidnight(e), why: null };
+  }
+
+  // --- Час ---
+  /** Момент «дата + хвилини від півночі» за Києвом як RFC 3339 у UTC: '2026-11-16T08:00:00Z'. */
+  function kyivISO(date, min) {
+    const p0 = D.parse(date);
+    const target = Date.UTC(p0.y, p0.m - 1, p0.d, 0, Number(min) || 0);
+    let t = target;
+    for (let i = 0; i < 3; i++) {
+      const p = D.kyivParts(new Date(t));
+      t += target - Date.UTC(p.y, p.m - 1, p.d, p.hh, p.mm, p.ss);
+    }
+    return new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  }
+  const minOf = (hm) => { const m = /^(\d{1,2}):(\d{2})$/.exec(hm || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
+
+  /** Опис Google буває з HTML (жирний, посилання) — у формі показуємо текстом. Розбір без завантаження картинок і скриптів. */
+  function textOf(desc) {
+    const s = String(desc || '');
+    if (!/<[a-z!/]/i.test(s)) return s;
+    const html = s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n');
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      return (doc.body ? doc.body.textContent : '').replace(/\n{3,}/g, '\n\n').trim();
+    } catch (e) { return s.replace(/<[^>]*>/g, ''); }
+  }
+
+  /** Нагадування Google у вигляді для форми: 'default' | 'none' | хвилини | 'custom' (кілька чи email). */
+  function remindOf(e) {
+    const r = e.rem;
+    if (r === undefined || r === 'default') return 'default';
+    if (!r.length) return 'none';
+    if (r.length === 1 && r[0].method === 'popup') return r[0].minutes;
+    return 'custom';
+  }
+  function remindBody(v) {
+    if (v === 'default') return { useDefault: true };
+    if (v === 'none') return { useDefault: false, overrides: [] };
+    const n = Number(v);
+    return Number.isFinite(n) ? { useDefault: false, overrides: [{ method: 'popup', minutes: Math.max(0, Math.min(40320, Math.round(n))) }] } : null;
+  }
+
+  /** Подія Google (з кешу) → поля форми CRM. */
+  function toModel(e) {
+    const m = {
+      title: e.title === '(без назви)' ? '' : e.title, note: textOf(e.desc), location: e.location || '',
+      gremind: remindOf(e), cal: e.cal
+    };
+    if (e.allDay) {
+      const last = D.addDays(e.end, -1);
+      return Object.assign(m, { date: e.start, endDate: last > e.start ? last : null, allDay: true, start: null, dur: null });
+    }
+    const dur = Math.max(1, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000));
+    return Object.assign(m, { date: D.toKyivDate(e.start), endDate: null, allDay: false, start: hhmm(e.start), dur });
+  }
+
+  /** start/end для Google з полів форми. Поле іншого виду явно стирається (null) — інакше PATCH їх змішав би. */
+  function timesBody(v, tz) {
+    if (v.allDay) {
+      return { start: { date: v.date, dateTime: null, timeZone: null }, end: { date: D.addDays(v.endDate || v.date, 1), dateTime: null, timeZone: null } };
+    }
+    const s = kyivISO(v.date, minOf(v.start));
+    const en = new Date(Date.parse(s) + (Number(v.dur) || 60) * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    return { start: { dateTime: s, timeZone: tz || TZ_DEFAULT, date: null }, end: { dateTime: en, timeZone: tz || TZ_DEFAULT, date: null } };
+  }
+
+  // --- Правила повтору (RRULE, RFC 5545) ↔ правило CRM { freq, every, days, until, count } ---
+  const BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];   // 0 — понеділок, як у CRM
+  const FREQ_OF = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' };
+  const FREQ_TO = { day: 'DAILY', week: 'WEEKLY', month: 'MONTHLY', year: 'YEARLY' };
+
+  function rruleParts(line) {
+    const parts = {};
+    String(line || '').replace(/^RRULE:/i, '').split(';').forEach((kv) => {
+      const i = kv.indexOf('=');
+      if (i > 0) parts[kv.slice(0, i).toUpperCase()] = kv.slice(i + 1);
+    });
+    return parts;
+  }
+  function rruleLine(parts) {
+    const order = ['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'UNTIL', 'COUNT', 'WKST'];
+    const keys = Object.keys(parts).sort((a, b) => {
+      const ia = order.indexOf(a); const ib = order.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    return 'RRULE:' + keys.filter((k) => parts[k] !== undefined && parts[k] !== null && parts[k] !== '').map((k) => k + '=' + parts[k]).join(';');
+  }
+  /** UNTIL з RRULE → дата за Києвом (або null, якщо не розібрати). */
+  function untilDate(v) {
+    let m = /^(\d{4})(\d{2})(\d{2})$/.exec(v || '');
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(v || '');
+    if (m) return D.toKyivDate(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])));
+    return null;
+  }
+  /** Дата → UNTIL: «весь день» — РРРРММДД; з часом — кінець цього дня за Києвом у UTC. */
+  function untilValue(date, allDay) {
+    if (allDay) return date.replace(/-/g, '');
+    const ms = Date.parse(kyivISO(D.addDays(date, 1), 0)) - 1000;
+    return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  }
+
+  /**
+   * Розібрати recurrence серії: { rule (як у CRM) | null, simple, rrule, extra (інші рядки — EXDATE тощо) }.
+   * simple — правило вміщається у форму CRM (щодня / щотижня в певні дні / щомісяця / щороку, до дати / N разів).
+   */
+  function parseRecurrence(lines, firstDate) {
+    const list = (Array.isArray(lines) ? lines : []).map(String);
+    const rr = list.filter((l) => /^RRULE:/i.test(l));
+    const extra = list.filter((l) => !/^RRULE:/i.test(l));
+    if (rr.length !== 1) return { rule: null, simple: false, rrule: rr[0] || null, extra };
+    const p = rruleParts(rr[0]);
+    const freq = FREQ_OF[String(p.FREQ || '').toUpperCase()];
+    const known = ['FREQ', 'INTERVAL', 'BYDAY', 'UNTIL', 'COUNT', 'WKST', 'BYMONTHDAY', 'BYMONTH'];
+    let simple = !!freq && Object.keys(p).every((k) => known.indexOf(k) !== -1);
+    const every = p.INTERVAL ? Number(p.INTERVAL) : 1;
+    if (!(Number.isInteger(every) && every >= 1 && every <= 99)) simple = false;
+    let days = null;
+    if (freq === 'week') {
+      if (p.BYDAY) {
+        const ds = p.BYDAY.split(',').map((x) => BYDAY.indexOf(x.trim().toUpperCase()));
+        if (ds.some((i) => i < 0)) simple = false;
+        else days = Array.from(new Set(ds)).sort((a, b) => a - b);
+      } else if (D.isDate(firstDate)) days = [D.weekday(firstDate)];
+    } else if (p.BYDAY) simple = false;
+    const fd = D.isDate(firstDate) ? D.parse(firstDate) : null;
+    if (p.BYMONTHDAY && !((freq === 'month' || freq === 'year') && fd && Number(p.BYMONTHDAY) === fd.d)) simple = false;
+    if (p.BYMONTH && !(freq === 'year' && fd && Number(p.BYMONTH) === fd.m)) simple = false;
+    let until = null;
+    if (p.UNTIL) { until = untilDate(p.UNTIL); if (!until) simple = false; }
+    let count = null;
+    if (p.COUNT) { count = Number(p.COUNT); if (!(Number.isInteger(count) && count >= 1)) simple = false; }
+    const rule = simple ? { freq, every, days: freq === 'week' ? days : null, until, count: until ? null : count } : null;
+    return { rule, simple, rrule: rr[0], extra, parts: p };
+  }
+
+  /** Правило CRM → рядок RRULE. */
+  function buildRRule(rule, allDay) {
+    const p = { FREQ: FREQ_TO[rule.freq] };
+    if (rule.every && rule.every > 1) p.INTERVAL = String(rule.every);
+    if (rule.freq === 'week' && rule.days && rule.days.length) p.BYDAY = rule.days.slice().sort((a, b) => a - b).map((i) => BYDAY[i]).join(',');
+    if (rule.until) p.UNTIL = untilValue(rule.until, allDay);
+    else if (rule.count) p.COUNT = String(rule.count);
+    return rruleLine(p);
+  }
+  /** Той самий RRULE, що закінчується датою date (COUNT прибирається). */
+  function rruleUntil(line, date, allDay) {
+    const p = rruleParts(line);
+    delete p.COUNT;
+    p.UNTIL = untilValue(date, allDay);
+    return rruleLine(p);
+  }
+  /** Той самий RRULE з іншою кількістю разів (UNTIL лишається, якщо був). */
+  function rruleCount(line, n) {
+    const p = rruleParts(line);
+    if (p.COUNT) p.COUNT = String(Math.max(1, n));
+    return rruleLine(p);
+  }
+  /** Зсунути дні тижня (BYDAY) на delta днів — коли серію переносять на інший день. */
+  function rruleShift(line, delta) {
+    const p = rruleParts(line);
+    const d = ((delta % 7) + 7) % 7;
+    if (!d || !p.BYDAY) return line;
+    const ds = p.BYDAY.split(',').map((x) => BYDAY.indexOf(x.trim().toUpperCase()));
+    if (ds.some((i) => i < 0)) return line;
+    p.BYDAY = Array.from(new Set(ds.map((i) => (i + d) % 7))).sort((a, b) => a - b).map((i) => BYDAY[i]).join(',');
+    return rruleLine(p);
+  }
+
+  // --- Запити змін ---
+  const evPath = (cal, id) => `/calendars/${enc(cal)}/events` + (id ? '/' + enc(id) : '');
+  const sendOf = (send) => (send ? { sendUpdates: send } : null);
+
+  function getEvent(cal, id) { return api('GET', evPath(cal, id)); }
+  async function patchEvent(cal, id, body, send) {
+    const r = await api('PATCH', evPath(cal, id), sendOf(send), body);
+    await applyToCache(r, cal);
+    return r;
+  }
+  async function insertEvent(cal, body, send) {
+    const r = await api('POST', evPath(cal), sendOf(send), body);
+    await applyToCache(r, cal);
+    return r;
+  }
+  async function deleteEvent(cal, id, send) {
+    await api('DELETE', evPath(cal, id), sendOf(send));
+    await dropFromCache(cal, id);
+    return null;
+  }
+
+  // --- Кеш одразу після зміни (не чекаючи 10 хв), потім — перевірка в Google ---
+  async function saveEvents(c, events) {
+    events.sort((a, b) => eventStartMs(a) - eventStartMs(b));
+    await CRM.store.setSetting('gcalCache', Object.assign({}, c, { events }));
+    changed();
+  }
+  async function applyToCache(r, cal) {
+    const c = cache();
+    if (!r || !c) { refreshSoon(); return; }
+    // Серія (з recurrence) — у кеші лежать окремі заняття: їх перерахує Google
+    if (Array.isArray(r.recurrence) && r.recurrence.length) { refreshSoon(); return; }
+    const events = c.events.filter((x) => !(x.cal === cal && x.id === String(r.id)));
+    const e = normalizeEvent(r, cal);
+    if (e && (cfg().calendars || []).indexOf(cal) !== -1) events.push(e);
+    await saveEvents(c, events);
+    // Перенесене заняття серії могло змінити й інші дні — коротка перевірка
+    if (r.recurringEventId) refreshSoon();
+  }
+  async function dropFromCache(cal, id) {
+    const c = cache();
+    if (!c) return;
+    // Видалили всю серію — прибрати й усі її заняття
+    await saveEvents(c, c.events.filter((x) => !(x.cal === cal && (x.id === id || x.rid === id))));
+    refreshSoon();
+  }
+  let refreshAgain = false;
+  function refreshSoon() {
+    if (refreshing) { refreshAgain = true; return refreshing; }
+    return refresh();
+  }
+
+  // --- Доступ сплив / бракує дозволу: «Оновити підключення» й та сама зміна ще раз ---
+  function writeNeed() {
+    const t = token();
+    if (!t) return 'expired';
+    if (!t.write) return 'scope';
+    return null;
+  }
+  function askReconnect(need) {
+    return ui.confirm({
+      title: need === 'scope' ? 'Дозволь CRM змінювати події Google' : 'Доступ до Google сплив',
+      message: need === 'scope'
+        ? 'Досі CRM лише читала Google Календар. Натисни «Оновити підключення» — у вікні Google залиш галочку біля доступу до календаря, і зміна збережеться.'
+        : 'Google видає доступ приблизно на годину. Натисни «Оновити підключення» (зазвичай один клік без пароля) — і зміна збережеться в Google Календарі.',
+      confirmText: 'Оновити підключення'
+    });
+  }
+  function failText(e) {
+    if (e.code === 'network') return 'Немає звʼязку з Google — подію не змінено.';
+    if (e.code === 'gone') return 'Цієї події вже немає в Google Календарі (її змінили чи видалили деінде) — оновлюю.';
+    return e.message || 'Google не зберіг зміну.';
+  }
+  /**
+   * Виконати зміну в Google. fn — async-функція з запитами (patchEvent, insertEvent…).
+   * Повертає { ok, value } або { ok: false, cancelled } — тоді Календар повертає подію на місце.
+   */
+  async function run(fn) {
+    const attempt = async () => { try { return { ok: true, value: await fn() }; } catch (e) { return { ok: false, e }; } };
+    const fail = (r) => {
+      if (r.e && r.e.code === 'gone') refreshSoon();
+      ui.toast(failText(r.e || {}), { type: 'error', duration: 8000 });
+      changed();
+      return r;
+    };
+    let need = writeNeed();
+    if (!need) {
+      const r = await attempt();
+      if (r.ok) return r;
+      if (r.e.code !== 'expired' && r.e.code !== 'scope') return fail(r);
+      need = r.e.code;
+    }
+    changed();
+    const go = await askReconnect(need);
+    if (!go) return { ok: false, cancelled: true };
+    const ok = await connect({ refresh: true, quiet: true });
+    if (!ok) return { ok: false, cancelled: true };
+    if (writeNeed()) return fail({ e: err('scope', 'Google не дав дозволу змінювати події — залиш галочку біля доступу до календаря у вікні Google.') });
+    const r2 = await attempt();
+    return r2.ok ? r2 : fail(r2);
+  }
+
+  /** Підключення є, але ключ лише читає (до 2026.11.15-4): підказка «Онови підключення». */
+  function readOnlyToken() { const t = token(); return !!(t && !t.write); }
 
   async function setCalendarSelected(id, on) {
     const cur = (cfg().calendars || []).filter((x) => x !== id);
@@ -486,7 +862,8 @@ window.CRM = window.CRM || {};
         kind: 'event', icon: 'calendar', cls: 'ico-event',
         title: e.title, sub: parts.join(' · '),
         badge: e.tentative ? { text: 'Під питанням', cls: '' } : null,
-        onClick: () => openEvent(e)
+        // Клік — та сама форма, що й у Календарі (змінити, видалити, «Відкрити в Google»)
+        onClick: () => (CRM.calendar && CRM.calendar.openGoogle ? CRM.calendar.openGoogle(e, date) : openEvent(e))
       };
     });
   });
@@ -537,7 +914,9 @@ window.CRM = window.CRM || {};
     const n = eventsOn(D.today()).length;
     return h('span', null,
       `Google Календар: ${n ? CRM.fmt.count(n, ['подія', 'події', 'подій']) + ' сьогодні' : 'подій сьогодні немає'} · оновлено о ${hhmm(c.at)} · `,
-      link('Оновити', () => refresh({ manual: true })));
+      link('Оновити', () => refresh({ manual: true })),
+      // Ключ доступу ще старий (лише читання) — підказка, як дозволити зміни
+      readOnlyToken() ? h('span', { class: 'gcal-ro-note' }, ' · Щоб змінювати події Google тут, ', link('онови підключення', () => connect({ refresh: true }))) : null);
   }
 
   // ---------- Блок у «Моєму кабінеті» ----------
@@ -603,13 +982,15 @@ window.CRM = window.CRM || {};
       const fresh = (s === 'expired' || s === 'disconnected') && neverHere();
       if (fresh && s === 'expired') actions.push(ui.button({ label: 'Підключити', icon: 'link', variant: 'primary', size: 'sm', onClick: () => connect() }));
       else if (s === 'expired') actions.push(ui.button({ label: 'Оновити підключення', icon: 'refresh', variant: 'primary', size: 'sm', onClick: () => connect({ refresh: true }) }));
+      // Ключ ще старий (лише читання) — дозволити CRM змінювати події (пункт 12)
+      if (s === 'connected' && readOnlyToken()) actions.push(ui.button({ label: 'Дозволити зміни', icon: 'link', variant: 'primary', size: 'sm', className: 'gcal-allow-write', onClick: () => connect({ refresh: true }) }));
       if (s === 'connected') actions.push(ui.button({ label: refreshing ? 'Оновлюю…' : 'Оновити події', icon: 'refresh', size: 'sm', disabled: !!refreshing, onClick: () => refresh({ manual: true }) }));
       if (s === 'connected' || (s === 'expired' && !fresh)) actions.push(ui.button({ label: 'Відключити', size: 'sm', onClick: () => disconnect() }));
 
       ui.mount(head,
         h('div', { class: 'setting-text' },
           h('div', { class: 'setting-title' }, CRM.icon('calendar', { size: 'sm' }), 'Google Календар', badge(s, fresh)),
-          h('div', { class: 'setting-desc' }, `Лише читання. Події видно в розділі «Календар» і в розкладі на Головній, за ${REMIND_MIN} хв до початку — нагадування.`)),
+          h('div', { class: 'setting-desc' }, `Події видно в розділі «Календар» і в розкладі на Головній, за ${REMIND_MIN} хв до початку — нагадування. Змінювати, видаляти й додавати події Google можна прямо в «Календарі».`)),
         h('div', { class: 'setting-actions' }, actions));
 
       clientIn.disabled = s === 'connected' || s === 'expired';
@@ -648,6 +1029,7 @@ window.CRM = window.CRM || {};
       if (s === 'connected') {
         info.push(`Доступ діє до ${hhmm(new Date(t.expiresAt + 60000).toISOString())}.`);
         if (ch) info.push(`Події оновлено о ${hhmm(ch.at)} (далі — кожні 10 хв, поки сайт відкритий), завантажено з ${CRM.fmt.dateShort(ch.from)} по ${CRM.fmt.dateShort(ch.to)}.`);
+        if (readOnlyToken()) info.push('Поки CRM лише читає події: натисни «Дозволити зміни» — Google попросить дозвіл змінювати події, і їх можна буде переносити, змінювати й видаляти прямо в «Календарі».');
       }
       if (s === 'expired' && ch) info.push(`Показано події станом на ${hhmm(ch.at)}.`);
       if (fresh) info.push('Client ID уже є. Натисни «Підключити», щоб увійти в Google на цьому пристрої.');
@@ -733,8 +1115,13 @@ window.CRM = window.CRM || {};
   async function dropToken() { await CRM.store.setSetting('gcalToken', null); changed(); }
 
   CRM.gcal = {
-    SCOPES, SCOPE_DRIVE, SCOPE_SHEETS, init, status, connect, disconnect, refresh, statusNote, settingsBlock, accessToken, dropToken,
+    SCOPES, SCOPE_EVENTS, SCOPE_DRIVE, SCOPE_SHEETS, init, status, connect, disconnect, refresh, statusNote, settingsBlock, accessToken, dropToken,
     eventsOn, eventsBetween, loadedRange, ensureRange, occursOn, openEvent, calendarName, hhmm,
-    kyivStartISO, isValidClientId: (v) => CLIENT_RE.test(String(v || '').trim())
+    kyivStartISO, isValidClientId: (v) => CLIENT_RE.test(String(v || '').trim()),
+    // Зміна подій з CRM (пункт 12)
+    editInfo, crossesMidnight, writableCalendars, calWritable, calLabel, calendarTz, readOnlyToken, run,
+    toModel, timesBody, remindBody, remindOf, textOf, kyivISO,
+    parseRecurrence, buildRRule, rruleUntil, rruleCount, rruleShift, untilValue, untilDate,
+    getEvent, patchEvent, insertEvent, deleteEvent, refreshSoon
   };
 })(window.CRM);

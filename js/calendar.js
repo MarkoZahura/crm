@@ -587,12 +587,14 @@ window.CRM = window.CRM || {};
       // «Заняття Макс» з Google, коли того дня є урок Макса в CRM, — не показуємо (без дублів; tutor.js)
       const dupIdx = CRM.tutor && CRM.tutor.dupIndex ? CRM.tutor.dupIndex(from, to) : null;
       CRM.gcal.eventsBetween(from, to).forEach((g) => {
+        // Змінювати з CRM можна події з календарів, де є право запису (пункт 12)
+        const drag = CRM.gcal.editInfo ? CRM.gcal.editInfo(g).drag : false;
         days.forEach((d) => {
           if (!CRM.gcal.occursOn(g, d)) return;
           if (dupIdx && dupIdx.size && CRM.tutor.isGoogleDuplicate(g, d, dupIdx)) return;
           const it = {
             key: 'g:' + g.cal + ':' + g.id + ':' + d, kind: 'gcal', title: g.title, color: gColor, icon: 'calendar',
-            gev: g, date: d, tentative: !!g.tentative
+            gev: g, date: d, tentative: !!g.tentative, editable: drag, series: !!g.rid
           };
           if (g.allDay) { put(d, 'allDay', Object.assign(it, { sub: 'Google Календар' })); return; }
           const sDay = D.toKyivDate(g.start);
@@ -786,7 +788,7 @@ window.CRM = window.CRM || {};
   }
 
   /** Віконце «Копіювати на…»: дата (і час — для події з часом). onDone — після копіювання. */
-  function copyTo(anchor, src, onDone) {
+  function copyTo(anchor, src, onDone, doCopy) {
     const dIn = ui.dateInput({ value: D.addDays(src.date, 1), clearable: false, ariaLabel: 'На яку дату' });
     const tIn = src.allDay || !src.start ? null : ui.timeInput({ value: src.start, ariaLabel: 'Час початку копії' });
     const err = h('div', { class: 'kal-quick-err', role: 'alert' });
@@ -801,7 +803,8 @@ window.CRM = window.CRM || {};
       }
       pop.close('copied');
       if (onDone) onDone();
-      await copyEvent(src, changes);
+      if (doCopy) await doCopy(changes);
+      else await copyEvent(src, changes);
     }
     if (tIn) tIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tIn.dispatchEvent(new Event('change')); run(); } });
     const pop = ui.popover(anchor, h('div', { class: 'kal-copy' },
@@ -1017,9 +1020,9 @@ window.CRM = window.CRM || {};
       const day = dayShort(o.inst.date);
       const opts = [
         o.allowOne ? { id: 'one', label: 'Лише цю', sub: del ? `${day} — інші дні серії лишаються` : day } : null,
-        { id: 'following', label: 'Цю й наступні', sub: `${day} і всі наступні` },
-        { id: 'all', label: 'Усі події серії', sub: del ? 'Уся серія перейде в Кошик (можна відновити протягом 30 днів)'
-          : o.reset ? 'Окремі зміни окремих днів буде скинуто' : 'Від першого дня серії' }
+        o.noFollowing ? null : { id: 'following', label: 'Цю й наступні', sub: `${day} і всі наступні` },
+        { id: 'all', label: 'Усі події серії', sub: del ? (o.google ? 'Уся серія зникне з Google Календаря («Скасувати» — одразу після видалення)' : 'Уся серія перейде в Кошик (можна відновити протягом 30 днів)')
+          : o.reset && !o.google ? 'Окремі зміни окремих днів буде скинуто' : 'Від першого дня серії' }
       ].filter(Boolean);
       let value = opts[0].id;
       let result = null;
@@ -1324,7 +1327,7 @@ window.CRM = window.CRM || {};
     block.classList.add('kal-dragging');
     block.setAttribute('aria-grabbed', 'true');
     function setCopy(e) {
-      copy = !!(e && (e.ctrlKey || e.metaKey)) && it.kind === 'own' && mode === 'move';
+      copy = !!(e && (e.ctrlKey || e.metaKey)) && (it.kind === 'own' || it.kind === 'gcal') && mode === 'move';
       block.classList.toggle('kal-copying', copy);
     }
 
@@ -1386,6 +1389,13 @@ window.CRM = window.CRM || {};
         if (isTask) {
           if (mode === 'move') planTask(it.task.id, { date: st.date, start: fromMin(st.start) });
           else resizeTask(it.task.id, st.end - st.start);
+          return;
+        }
+        // Подія Google — зміна йде в сам Google Календар (пункт 12)
+        if (it.kind === 'gcal') {
+          if (mode === 'move' && copy) { CRM.router.rerender(); copyGoogle(it.gev, { date: st.date, start: fromMin(st.start) }); return; }
+          if (mode === 'move') moveGoogle(it, { date: st.date, start: fromMin(st.start) }, 'move');
+          else moveGoogle(it, { dur: st.end - st.start }, 'resize');
           return;
         }
         if (mode === 'move' && copy) { copyEvent(it.ev, { date: st.date, start: fromMin(st.start) }); CRM.router.rerender(); return; }
@@ -1507,7 +1517,7 @@ window.CRM = window.CRM || {};
     const offY = sy - r.top;
     let over = null;
     let copy = false;
-    const setCopy = (e) => { copy = it.kind === 'own' && !!(e && (e.ctrlKey || e.metaKey)); clone.classList.toggle('kal-copying', copy); };
+    const setCopy = (e) => { copy = (it.kind === 'own' || it.kind === 'gcal') && !!(e && (e.ctrlKey || e.metaKey)); clone.classList.toggle('kal-copying', copy); };
     return {
       mod: setCopy,
       move(x, y, e) {
@@ -1541,6 +1551,13 @@ window.CRM = window.CRM || {};
           else CRM.projects.moveDeadline(it.pj.projectId, d);
           return;
         }
+        // Подія Google — на інший день цілком (час той самий); з Ctrl — копія
+        if (it.kind === 'gcal') {
+          const gs = D.diffDays(it.date, d);
+          if (copy) { copyGoogle(it.gev, { shift: gs }); return; }
+          if (gs) moveGoogle(it, { shift: gs }, 'move');
+          return;
+        }
         // Подія на кілька днів зсувається цілком (за день, за який її взяли)
         const shift = D.diffDays(it.date, d);
         const changes = it.span ? { date: D.addDays(it.span.first, shift), endDate: D.addDays(it.span.last, shift) } : { date: d };
@@ -1550,17 +1567,377 @@ window.CRM = window.CRM || {};
     };
   }
 
+  // ---------- Події Google: зміна з CRM (пункт 12) ----------
+  // Нові події: «Моя CRM» або «Google Календар» — вибір памʼятається в цьому браузері (crm.cal.target, crm.cal.gcal)
+  function gTargets() { return CRM.gcal && CRM.gcal.writableCalendars ? CRM.gcal.writableCalendars() : []; }
+  function targetPref() { return lsGet('crm.cal.target', 'crm') === 'google' && gTargets().length ? 'google' : 'crm'; }
+  function defaultGCal() {
+    const list = gTargets();
+    const last = lsGet('crm.cal.gcal', '');
+    const c = list.find((x) => x.id === last) || list.find((x) => x.primary) || list[0];
+    return c ? c.id : null;
+  }
+  /** Для ⚡: куди піде нова подія — { cal, label } (Google) або null (CRM). */
+  function googleTarget() {
+    if (targetPref() !== 'google') return null;
+    const cal = defaultGCal();
+    return cal ? { cal, label: CRM.gcal.calLabel(cal) } : null;
+  }
+  const GREMIND = [
+    { v: 'default', label: 'Як у календарі Google' }, { v: 'none', label: 'Без нагадування' },
+    { v: 0, label: 'У момент початку' }, { v: 5, label: 'За 5 хв' }, { v: 10, label: 'За 10 хв' }, { v: 15, label: 'За 15 хв' },
+    { v: 30, label: 'За 30 хв' }, { v: 60, label: 'За 1 год' }, { v: 120, label: 'За 2 год' }, { v: 1440, label: 'За 1 день' }
+  ];
+  const gWhere = (cal) => (CRM.gcal.calLabel(cal) === 'основний' ? 'Google Календар' : `Google Календар («${CRM.gcal.calLabel(cal)}»)`);
+
+  /** Час події Google, як він був (для «Скасувати»). Поле іншого виду — null, щоб PATCH не змішав. */
+  function gStartEnd(g) {
+    if (g.allDay) return { start: { date: g.start, dateTime: null, timeZone: null }, end: { date: g.end, dateTime: null, timeZone: null } };
+    const tz = g.tz || CRM.gcal.calendarTz(g.cal);
+    return { start: { dateTime: g.start, timeZone: tz, date: null }, end: { dateTime: g.end, timeZone: tz, date: null } };
+  }
+  const remindOrig = (g) => (g.rem === undefined || g.rem === 'default' ? { useDefault: true } : { useDefault: false, overrides: g.rem });
+  /** start/end без порожніх полів — для нової події. */
+  function cleanTimes(t) {
+    const out = {};
+    ['start', 'end'].forEach((k) => {
+      out[k] = {};
+      Object.keys(t[k]).forEach((f) => { if (t[k][f] != null) out[k][f] = t[k][f]; });
+    });
+    return out;
+  }
+  function untilOfLine(line) {
+    const m = /UNTIL=([0-9TZ]+)/i.exec(line || '');
+    return m ? CRM.gcal.untilDate(m[1]) : null;
+  }
+  /** Поля події з Google для копії / відновлення після видалення. */
+  function gCopy(full, keepRule) {
+    const out = {};
+    ['summary', 'description', 'location', 'colorId', 'transparency', 'visibility', 'reminders', 'guestsCanModify'].forEach((f) => {
+      if (full[f] !== undefined) out[f] = CRM.utils.deepClone(full[f]);
+    });
+    if (Array.isArray(full.attendees) && full.attendees.length) {
+      out.attendees = full.attendees.filter((a) => a && a.email).map((a) => {
+        const x = { email: a.email };
+        if (a.displayName) x.displayName = a.displayName;
+        if (a.optional) x.optional = true;
+        if (a.responseStatus) x.responseStatus = a.responseStatus;
+        return x;
+      });
+    }
+    if (full.start) out.start = CRM.utils.deepClone(full.start);
+    if (full.end) out.end = CRM.utils.deepClone(full.end);
+    if (keepRule && Array.isArray(full.recurrence)) out.recurrence = full.recurrence.slice();
+    return out;
+  }
+  const masterDay = (master) => (master.start && master.start.date && !master.start.dateTime ? master.start.date : D.toKyivDate(master.start.dateTime));
+  const masterAllDay = (master) => !!(master.start && master.start.date && !master.start.dateTime);
+  /** Початкова дата заняття в серії (originalStartTime) за Києвом. */
+  const occDay = (g, m) => (g.ost ? (/T/.test(g.ost) ? D.toKyivDate(g.ost) : g.ost) : m.date);
+
+  /** Що змінилось у формі (V) порівняно з показаною подією (m): тіло зміни, тіло для «Скасувати», чи змінено час. */
+  function gDiff(g, m, V) {
+    const body = {};
+    const back = {};
+    if (V.title !== undefined && (V.title || '') !== (m.title || '')) { body.summary = V.title; back.summary = m.title; }
+    if (V.location !== undefined && (V.location || '') !== (m.location || '')) { body.location = V.location; back.location = g.location || ''; }
+    if (V.note !== undefined && (V.note || '') !== (m.note || '')) { body.description = V.note; back.description = g.desc || ''; }
+    if (V.gremind !== undefined && V.gremind !== 'custom' && String(V.gremind) !== String(m.gremind)) {
+      body.reminders = CRM.gcal.remindBody(V.gremind);
+      back.reminders = remindOrig(g);
+    }
+    const timeCh = V.date !== m.date || !!V.allDay !== !!m.allDay || (V.endDate || null) !== (m.endDate || null) ||
+      (!V.allDay && (V.start !== m.start || Number(V.dur) !== Number(m.dur)));
+    return { body, back, timeCh };
+  }
+
+  /** Є гості й організатор — я: «Надіслати гостям лист?» → 'all' | 'none'; без гостей — ''; передумав — null. */
+  function askGuests(g, del) {
+    if (!g || !g.guests || g.notMine) return Promise.resolve('');
+    return new Promise((resolve) => {
+      let res = null;
+      const dlg = ui.modal({
+        title: del ? 'Повідомити гостей про видалення?' : 'Повідомити гостей про зміну?',
+        size: 'sm', center: true,
+        body: h('p', { class: 'modal-text' }, `У події «${g.title}» є інші учасники (${g.guests}). Google може надіслати їм лист${del ? ' про скасування' : ' з новими даними'}.`),
+        footer: [
+          ui.button({ label: 'Скасувати', onClick: () => dlg.close('cancel') }),
+          ui.button({ label: 'Не надсилати', className: 'kal-guests-none', onClick: () => { res = 'none'; dlg.close('none'); } }),
+          ui.button({ label: 'Надіслати', variant: 'primary', className: 'kal-guests-all', onClick: () => { res = 'all'; dlg.close('all'); } })
+        ],
+        onClose: () => resolve(res)
+      });
+    });
+  }
+
+  /** «Цю й наступні» для серії з COUNT — скільки занять було до цього (правило має бути простим). */
+  function countBefore(rule, first, occ) {
+    return ruleDates(first, normRule(rule, first), first, D.addDays(occ, -1)).length;
+  }
+
+  /** Уся серія: змінити головну подію (час переноситься на стільки ж днів, що й показане заняття). Повертає «Скасувати». */
+  async function gSeriesAll(g, m, V, o, master, d) {
+    const cal = g.cal;
+    const b = Object.assign({}, d.body);
+    const u = Object.assign({}, d.back);
+    const first = masterDay(master);
+    const mAll = masterAllDay(master);
+    const rec = Array.isArray(master.recurrence) ? master.recurrence : [];
+    const parsed = CRM.gcal.parseRecurrence(rec, first);
+    const shift = D.diffDays(m.date, V.date);
+    if (d.timeCh) {
+      const V2 = { allDay: !!V.allDay, date: D.addDays(first, shift), start: V.start, dur: V.dur, endDate: null };
+      if (V.allDay && V.endDate) V2.endDate = D.addDays(V2.date, D.diffDays(V.date, V.endDate));
+      Object.assign(b, CRM.gcal.timesBody(V2, (master.start && master.start.timeZone) || CRM.gcal.calendarTz(cal)));
+      u.start = Object.assign({ date: null, dateTime: null, timeZone: null }, master.start);
+      u.end = Object.assign({ date: null, dateTime: null, timeZone: null }, master.end);
+    }
+    let line = null;
+    if (o.ruleChanged && o.rule) line = CRM.gcal.buildRRule(o.rule, !!V.allDay);
+    else if (parsed.rrule && ((shift % 7 && parsed.parts.BYDAY) || (d.timeCh && !!V.allDay !== mAll && parsed.parts.UNTIL))) {
+      line = shift ? CRM.gcal.rruleShift(parsed.rrule, shift) : parsed.rrule;
+      const until = untilOfLine(line);
+      if (until && !!V.allDay !== mAll) line = CRM.gcal.rruleUntil(line, until, !!V.allDay);
+    }
+    if (line) { b.recurrence = [line].concat(parsed.extra); u.recurrence = rec; }
+    if (!Object.keys(b).length) return null;
+    await CRM.gcal.patchEvent(cal, g.rid, b, o.send || null);
+    return () => CRM.gcal.run(() => CRM.gcal.patchEvent(cal, g.rid, u, o.send || null));
+  }
+
+  /** «Цю й наступні»: стара серія закінчується напередодні, з цього заняття — нова. Повертає «Скасувати». */
+  async function gSeriesFollowing(g, m, V, o, master, d) {
+    const cal = g.cal;
+    const first = masterDay(master);
+    const occ = occDay(g, m);
+    if (occ <= first) return gSeriesAll(g, m, V, o, master, d);
+    const mAll = masterAllDay(master);
+    const rec = Array.isArray(master.recurrence) ? master.recurrence : [];
+    const parsed = CRM.gcal.parseRecurrence(rec, first);
+    if (!parsed.rrule) return gSeriesAll(g, m, V, o, master, d);
+    let line;
+    if (o.ruleChanged && o.rule) line = CRM.gcal.buildRRule(o.rule, !!V.allDay);
+    else {
+      line = parsed.rrule;
+      if (parsed.parts.COUNT) {
+        if (!parsed.rule) throw Object.assign(new Error('Правило повтору цієї серії складне — «Цю й наступні» зроби в самому Google Календарі.'), { code: 'complex' });
+        line = CRM.gcal.rruleCount(line, parsed.rule.count - countBefore(parsed.rule, first, occ));
+      }
+      const shift = D.diffDays(m.date, V.date);
+      if (shift % 7 && parsed.parts.BYDAY) line = CRM.gcal.rruleShift(line, shift);
+      const until = untilOfLine(line);
+      if (until && !!V.allDay !== mAll) line = CRM.gcal.rruleUntil(line, until, !!V.allDay);
+    }
+    const nb = gCopy(master, false);
+    Object.assign(nb, d.body);
+    Object.assign(nb, cleanTimes(CRM.gcal.timesBody(V, (master.start && master.start.timeZone) || CRM.gcal.calendarTz(cal))));
+    nb.recurrence = [line];
+    const cut = [CRM.gcal.rruleUntil(parsed.rrule, D.addDays(occ, -1), mAll)].concat(parsed.extra);
+    await CRM.gcal.patchEvent(cal, g.rid, { recurrence: cut }, o.send || null);
+    let created;
+    try {
+      created = await CRM.gcal.insertEvent(cal, nb, o.send || null);
+    } catch (e) {
+      // Нову серію не створено — повернути стару як була
+      try { await CRM.gcal.patchEvent(cal, g.rid, { recurrence: rec }); } catch (x) { /* покаже перевірка */ }
+      throw e;
+    }
+    return () => CRM.gcal.run(async () => {
+      await CRM.gcal.deleteEvent(cal, created.id, o.send || null);
+      await CRM.gcal.patchEvent(cal, g.rid, { recurrence: rec }, o.send || null);
+    });
+  }
+
+  /**
+   * Зберегти зміну події Google. g — подія з кешу, m — її поля (toModel), V — нові поля.
+   * o: { scope: 'one' | 'following' | 'all', rule, ruleChanged, send, master }.
+   * → { ok, undo, nothing } або { ok: false } (подія лишається як була).
+   */
+  async function saveGoogle(g, m, V, o) {
+    const cal = g.cal;
+    const d = gDiff(g, m, V);
+    if (!g.rid || o.scope === 'one') {
+      const b = Object.assign({}, d.body);
+      const u = Object.assign({}, d.back);
+      if (d.timeCh) { Object.assign(b, CRM.gcal.timesBody(V, g.tz || CRM.gcal.calendarTz(cal))); Object.assign(u, gStartEnd(g)); }
+      if (!Object.keys(b).length) return { ok: true, nothing: true };
+      const r = await CRM.gcal.run(() => CRM.gcal.patchEvent(cal, g.id, b, o.send || null));
+      if (!r.ok) return r;
+      return { ok: true, undo: () => CRM.gcal.run(() => CRM.gcal.patchEvent(cal, g.id, u, o.send || null)) };
+    }
+    if (!d.timeCh && !Object.keys(d.body).length && !o.ruleChanged) return { ok: true, nothing: true };
+    const r = await CRM.gcal.run(async () => {
+      const master = o.master || await CRM.gcal.getEvent(cal, g.rid);
+      return o.scope === 'all' ? gSeriesAll(g, m, V, o, master, d) : gSeriesFollowing(g, m, V, o, master, d);
+    });
+    if (!r.ok) return r;
+    return r.value ? { ok: true, undo: r.value } : { ok: true, nothing: true };
+  }
+
+  function gWhen(V) {
+    if (V.allDay) return V.endDate ? spanText(V.date, V.endDate) : `${dayShort(V.date)}, весь день`;
+    return `${dayShort(V.date)}, ${whenText(V)}`;
+  }
+
+  /** Перетягування події Google: інший час (сітка), тривалість (нижній край) або інший день (місяць, «весь день»). */
+  async function moveGoogle(it, ch, kind) {
+    const g = it.gev;
+    const m = CRM.gcal.toModel(g);
+    const V = Object.assign({}, m);
+    if (ch.shift != null) {
+      V.date = D.addDays(m.date, ch.shift);
+      if (m.endDate) V.endDate = D.addDays(m.endDate, ch.shift);
+    }
+    if (ch.date) V.date = ch.date;
+    if (ch.start) V.start = ch.start;
+    if (ch.dur) V.dur = ch.dur;
+    let scope = 'one';
+    if (g.rid) {
+      scope = await chooseScope({ mode: 'edit', allowOne: true, inst: { date: it.date }, google: true });
+      if (!scope) { CRM.router.rerender(); return; }
+    }
+    const send = await askGuests(g);
+    if (send === null) { CRM.router.rerender(); return; }
+    const res = await saveGoogle(g, m, V, { scope, send });
+    if (!res.ok || res.nothing) { CRM.router.rerender(); return; }
+    const title = m.title || 'Без назви';
+    let text;
+    if (scope === 'all') text = `«${title}» — змінено всі заняття серії`;
+    else if (scope === 'following') text = `«${title}» — змінено з ${dayShort(occDay(g, m))} і далі`;
+    else if (kind === 'resize') text = `«${title}»${g.rid ? ' (лише цього разу)' : ''}: ${whenText(V)} (${durText(V.dur)})`;
+    else text = `«${title}» перенесено${g.rid ? ' лише цього разу' : ''}: ${gWhen(V)}`;
+    ui.toast(text + ' · Google Календар', { type: 'success', action: { label: 'Скасувати', onClick: () => res.undo() } });
+  }
+
+  /** Нова подія в Google. V — поля форми, rule — повтор (або null). Повертає подію з Google (або null). */
+  async function createGoogle(V, rule, calId, opts) {
+    const o = opts || {};
+    const cal = calId || defaultGCal();
+    if (!cal) { ui.toast('Немає календаря Google, у який можна додати подію.', { type: 'error' }); return null; }
+    const body = Object.assign({ summary: V.title || '' }, cleanTimes(CRM.gcal.timesBody(V, CRM.gcal.calendarTz(cal))));
+    if (V.note) body.description = V.note;
+    if (V.location) body.location = V.location;
+    if (V.gremind !== undefined && V.gremind !== 'default' && V.gremind !== 'custom' && !V.allDay) body.reminders = CRM.gcal.remindBody(V.gremind);
+    if (rule) body.recurrence = [CRM.gcal.buildRRule(rule, !!V.allDay)];
+    const r = await CRM.gcal.run(() => CRM.gcal.insertEvent(cal, body));
+    if (!r.ok) { if (o.onCancel && r.cancelled) o.onCancel(); return null; }
+    lsSet('crm.cal.gcal', cal);
+    const created = r.value;
+    if (!o.quiet) {
+      const se = V.allDay && V.endDate ? spanText(V.date, V.endDate) : gWhen(V);
+      ui.toast(`Подію додано в ${gWhere(cal)}: ${se}${rule ? ' · ' + ruleText(rule, V.date) : ''}`, {
+        type: 'success', action: { label: 'Скасувати', onClick: () => CRM.gcal.run(() => CRM.gcal.deleteEvent(cal, created.id)) }
+      });
+    }
+    return created;
+  }
+
+  /** Копія події Google у тому самому календарі. ch: { date, start } або { shift } (днів). */
+  async function copyGoogle(g, ch) {
+    const m = CRM.gcal.toModel(g);
+    const V = Object.assign({}, m);
+    if (ch && ch.shift != null) { V.date = D.addDays(m.date, ch.shift); if (m.endDate) V.endDate = D.addDays(m.endDate, ch.shift); }
+    if (ch && ch.date) { if (m.endDate) V.endDate = D.addDays(m.endDate, D.diffDays(m.date, ch.date)); V.date = ch.date; }
+    if (ch && ch.start) V.start = ch.start;
+    if (!V.allDay && toMin(V.start) + (Number(V.dur) || 60) > DAY_MIN) V.dur = Math.max(SNAP, DAY_MIN - toMin(V.start));
+    const body = Object.assign({ summary: m.title || '' }, cleanTimes(CRM.gcal.timesBody(V, g.tz || CRM.gcal.calendarTz(g.cal))));
+    if (g.desc) body.description = g.desc;
+    if (g.location) body.location = g.location;
+    if (g.rem !== undefined && g.rem !== 'default') body.reminders = remindOrig(g);
+    const r = await CRM.gcal.run(() => CRM.gcal.insertEvent(g.cal, body));
+    if (!r.ok) { CRM.router.rerender(); return null; }
+    const created = r.value;
+    ui.toast(`«${m.title || 'Без назви'}» скопійовано: ${gWhen(V)} · Google Календар`, {
+      type: 'success', duration: 8000,
+      action: { label: 'Скасувати', onClick: () => CRM.gcal.run(() => CRM.gcal.deleteEvent(g.cal, created.id)) }
+    });
+    return created;
+  }
+  /** Подія Google з кешу за id (після створення — щоб одразу відкрити). */
+  function gFind(cal, id) {
+    const c = CRM.store.getSetting('gcalCache', null);
+    return c && Array.isArray(c.events) ? c.events.find((e) => e.cal === cal && e.id === id) || null : null;
+  }
+
+  /** Видалити подію Google (для заняття серії — «Лише цю / Цю й наступні / Усі»). Повертає true, якщо видалено. */
+  async function deleteGoogle(g, dlg) {
+    const cal = g.cal;
+    const m = CRM.gcal.toModel(g);
+    const title = m.title || 'Без назви';
+    const day = dayShort(m.date);
+    if (g.rid) {
+      const scope = await chooseScope({ mode: 'delete', allowOne: true, inst: { date: m.date }, google: true });
+      if (!scope) return false;
+      const send = await askGuests(g, true);
+      if (send === null) return false;
+      if (dlg) dlg.close('delete');
+      if (scope === 'one') {
+        const r = await CRM.gcal.run(() => CRM.gcal.patchEvent(cal, g.id, { status: 'cancelled' }, send || null));
+        if (!r.ok) return false;
+        ui.toast(`«${title}»: ${day} — скасовано в Google Календарі`, {
+          action: { label: 'Скасувати', onClick: () => CRM.gcal.run(() => CRM.gcal.patchEvent(cal, g.id, { status: 'confirmed' }, send || null)) }
+        });
+        return true;
+      }
+      const r = await CRM.gcal.run(async () => {
+        const master = await CRM.gcal.getEvent(cal, g.rid);
+        const first = masterDay(master);
+        const occ = occDay(g, m);
+        const rec = Array.isArray(master.recurrence) ? master.recurrence : [];
+        const parsed = CRM.gcal.parseRecurrence(rec, first);
+        if (scope === 'following' && occ > first && parsed.rrule) {
+          const cut = [CRM.gcal.rruleUntil(parsed.rrule, D.addDays(occ, -1), masterAllDay(master))].concat(parsed.extra);
+          await CRM.gcal.patchEvent(cal, g.rid, { recurrence: cut }, send || null);
+          return { text: `«${title}»: заняття з ${dayShort(occ)} видалено з Google Календаря`, undo: () => CRM.gcal.run(() => CRM.gcal.patchEvent(cal, g.rid, { recurrence: rec }, send || null)) };
+        }
+        await CRM.gcal.deleteEvent(cal, g.rid, send || null);
+        return { text: `Серію «${title}» видалено з Google Календаря`, undo: () => CRM.gcal.run(() => CRM.gcal.insertEvent(cal, gCopy(master, true), 'none')) };
+      });
+      if (!r.ok) return false;
+      ui.toast(r.value.text, { action: { label: 'Скасувати', onClick: () => r.value.undo() } });
+      return true;
+    }
+    const ok = await ui.confirm({
+      title: 'Видалити подію з Google Календаря?',
+      message: `«${title}» зникне з Google Календаря (і на телефоні). У Кошик CRM вона не потрапляє — «Скасувати» в повідомленні одразу після видалення поверне її.`,
+      confirmText: 'Видалити', danger: true
+    });
+    if (!ok) return false;
+    const send = await askGuests(g, true);
+    if (send === null) return false;
+    if (dlg) dlg.close('delete');
+    const r = await CRM.gcal.run(async () => {
+      const full = await CRM.gcal.getEvent(cal, g.id);
+      await CRM.gcal.deleteEvent(cal, g.id, send || null);
+      return full;
+    });
+    if (!r.ok) return false;
+    ui.toast(`«${title}» видалено з Google Календаря`, {
+      action: { label: 'Скасувати', onClick: () => CRM.gcal.run(() => CRM.gcal.insertEvent(cal, gCopy(r.value, true), 'none')) }
+    });
+    return true;
+  }
+
+  /** Відкрити подію Google: форма CRM, якщо змінювати можна, інакше — віконце з поясненням. */
+  function openGoogle(g, date) {
+    if (!g) return null;
+    const info = CRM.gcal.editInfo ? CRM.gcal.editInfo(g) : { ok: false };
+    if (!info.ok) return showGoogle(g, info.why);
+    return openEditor(null, null, date || null, { gev: g });
+  }
+
   // ---------- Відкрити пункт ----------
   function openItem(it) {
     // Урок з «Репетиторства» — вікно уроку (план, звіт); змінити подію — звідти
     if (it.kind === 'own' && it.lesson && CRM.tutor) CRM.tutor.openLessonOn(it.ev.studentId, it.date);
     else if (it.kind === 'own') openEditor(it.ev.id, null, it.ev.occ || null);
     else if (it.kind === 'task') CRM.tasks.openTask(it.task.id);
-    else if (it.kind === 'gcal') showGoogle(it.gev);
+    else if (it.kind === 'gcal') openGoogle(it.gev, it.date);
     else if (it.onOpen) it.onOpen();
   }
 
-  function showGoogle(g) {
+  /** Подія Google, яку змінити з CRM не можна (why — чому): лише перегляд і «Відкрити в Google». */
+  function showGoogle(g, why) {
     const calName = CRM.gcal.calendarName(g.cal);
     let when;
     if (g.allDay) {
@@ -1583,7 +1960,7 @@ window.CRM = window.CRM || {};
       title: g.title, size: 'sm', center: true, className: 'kal-gdetail',
       body: h('div', { class: 'stack', style: { gap: '12px' } },
         h('div', { class: 'kal-gd' }, rows),
-        h('div', { class: 'callout' }, CRM.icon('info'), h('span', null, 'Подія з Google Календаря: тут її видно, а змінити чи видалити можна лише в самому Google Календарі.'))),
+        h('div', { class: 'callout' }, CRM.icon('info'), h('span', null, why || 'Подія з Google Календаря: тут її видно, а змінити чи видалити можна лише в самому Google Календарі.'))),
       footer: [
         ui.button({ label: 'Закрити', onClick: () => dlg.close('button') }),
         g.link ? ui.button({ label: 'Відкрити в Google', icon: 'external', variant: 'primary', onClick: () => { CRM.gcal.openEvent(g); dlg.close('button'); } }) : null
@@ -1815,6 +2192,20 @@ window.CRM = window.CRM || {};
     closeQuick();
     let cat = lastCat();
     let kind = CRM.tasks && CRM.tasks.create ? lastKind() : 'event';
+    // Подія — у «Мою CRM» чи в Google Календар (пункт 12; вибір памʼятається)
+    const gList = gTargets();
+    let target = gList.length ? targetPref() : 'crm';
+    const targetSeg = gList.length ? h('div', { class: 'segmented kal-target kal-target-quick', role: 'radiogroup', 'aria-label': 'Куди додати подію' }) : null;
+    function drawTarget() {
+      if (!targetSeg) return;
+      ui.mount(targetSeg, [['crm', 'Моя CRM'], ['google', 'Google']].map(([v, l]) => h('button', {
+        type: 'button', role: 'radio', class: v === target ? 'active' : '', 'aria-checked': v === target ? 'true' : 'false', dataset: { target: v },
+        title: v === 'google' ? `Додати в ${gWhere(defaultGCal())}` : 'Додати в CRM',
+        onClick: () => { target = v; lsSet('crm.cal.target', v); drawTarget(); titleIn.focus({ preventScroll: true }); }
+      }, l)));
+      targetSeg.hidden = kind === 'task';
+      cats.hidden = kind === 'task' || target === 'google';
+    }
     const titleIn = ui.input({ placeholder: 'Назва події', maxlength: 200, 'aria-label': 'Назва події' });
     const timeIn = preset.allDay ? ui.timeInput({ ariaLabel: 'Час початку (необовʼязково)' }) : null;
     const errEl = h('div', { class: 'kal-quick-err', role: 'alert' });
@@ -1837,6 +2228,7 @@ window.CRM = window.CRM || {};
       cats.hidden = isTask;
       whenEl.textContent = isTask && preset.allDay ? `${dayShort(preset.date)} · у «План дня»` : whenText0;
       errEl.textContent = '';
+      if (targetSeg) drawTarget();
     }
     setKind(kind);
 
@@ -1861,6 +2253,11 @@ window.CRM = window.CRM || {};
         await addTask(v.title, { date: v.date, start: v.allDay ? null : v.start, dur: preset.allDay ? null : v.dur });
         return;
       }
+      if (target === 'google') {
+        pop.close('saved');
+        await createGoogle(Object.assign(v, { note: '', gremind: 'default' }), null, defaultGCal());
+        return;
+      }
       if (!canSave()) return;
       lsSet('crm.cal.cat', v.cat);
       pop.close('saved');
@@ -1877,7 +2274,7 @@ window.CRM = window.CRM || {};
         });
         return;
       }
-      openEditor(null, v.error ? Object.assign({}, preset, { title: titleIn.value.trim(), cat }) : v);
+      openEditor(null, Object.assign(v.error ? Object.assign({}, preset, { title: titleIn.value.trim(), cat }) : v, { target }));
     }
     titleIn.addEventListener('input', () => { errEl.textContent = ''; });
     titleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
@@ -1885,6 +2282,7 @@ window.CRM = window.CRM || {};
 
     const content = h('div', { class: 'kal-quick' },
       CRM.tasks && CRM.tasks.create ? kindSeg : null,
+      targetSeg,
       h('div', { class: 'kal-quick-when' }, CRM.icon('clock', { size: 'sm' }), whenEl),
       titleIn,
       timeIn ? h('label', { class: 'kal-quick-time' }, h('span', null, 'Час'), timeIn, h('span', { class: 'subtle' }, 'необовʼязково')) : null,
@@ -1923,7 +2321,11 @@ window.CRM = window.CRM || {};
    * Відкрити форму: id — наявна подія; preset — значення нової;
    * occ — для серії: початкова дата повтору, який відкрили (інакше — найближчий).
    */
-  function openEditor(id, preset, occ) {
+  function openEditor(id, preset, occ, gx) {
+    // Подія Google (пункт 12): та сама форма, а зміни йдуть у Google Календар
+    const G = gx && gx.gev ? gx.gev : null;
+    const gm = G ? CRM.gcal.toModel(G) : null;
+    if (G) id = null;
     const cur = id ? CRM.store.get('events', id) : null;
     if (id && !cur) { ui.toast('Цієї події більше немає', { type: 'error' }); return null; }
     if (cur && cur.deletedAt) { ui.toast('Подія в Кошику — віднови її, щоб відкрити'); return null; }
@@ -1935,10 +2337,20 @@ window.CRM = window.CRM || {};
       if (!o) { const n = nextOccurrence(series0, D.today()); o = n ? n.occ : null; }
       inst = o ? instanceOf(series0, o) : null;
     }
-    const ev = inst ? CRM.utils.deepClone(inst) : cur ? CRM.utils.deepClone(cur) : Object.assign({
+    const ev = gm ? Object.assign({ cat: lastCat(), remind: 15 }, CRM.utils.deepClone(gm)) : inst ? CRM.utils.deepClone(inst) : cur ? CRM.utils.deepClone(cur) : Object.assign({
       title: '', date: D.today(), allDay: false, start: '09:00', dur: 60, cat: lastCat(), remind: 15, note: ''
     }, preset || {});
     if (!ev.allDay && !ev.start) ev.allDay = true;
+    if (ev.gremind === undefined) ev.gremind = 'default';
+    if (ev.location === undefined) ev.location = '';
+    // Де зберегти нову подію: «Моя CRM» або «Google Календар» (вибір памʼятається)
+    const gList = G || cur ? [] : gTargets();
+    let target = G ? 'google' : (preset && (preset.target === 'google' || preset.target === 'crm') ? preset.target : targetPref());
+    if (!G && !gList.length) target = 'crm';
+    let gcalId = G ? G.cal : (preset && preset.gcal && gList.some((c) => c.id === preset.gcal) ? preset.gcal : defaultGCal());
+    const isG = () => target === 'google';
+    // Подія Google з часом через північ: дату й час тут не змінюємо
+    const lockTime = !!(G && CRM.gcal.crossesMidnight(G));
     let allDay = !!ev.allDay;
     // Категорію могли видалити (напр., на іншому пристрої) — тоді «Інше»
     let cat = ev.cat && categories().some((c) => c.id === ev.cat) ? ev.cat : ev.cat ? OTHER : lastCat();
@@ -2001,18 +2413,30 @@ window.CRM = window.CRM || {};
     const fRemind = ui.field({ label: 'Нагадування', input: remindSel, hint: 'Приходить, лише коли CRM відкрита (вкладка може бути у фоні).' });
     const allDayBox = check('Весь день', allDay, (on) => {
       allDay = on;
-      fTimes.hidden = on;
-      fRemind.hidden = on;
+      fTimes.hidden = on || lockTime;
+      applyTarget();
       refreshEnd();
     });
-    fTimes.hidden = allDay;
-    fRemind.hidden = allDay;
-    const noteIn = ui.textarea({ value: ev.note || '', rows: 3, maxlength: 2000, placeholder: 'Необовʼязково: що підготувати, посилання, адреса…', 'aria-label': 'Нотатки' });
+    fTimes.hidden = allDay || lockTime;
+    const noteIn = ui.textarea({ value: ev.note || '', rows: 3, maxlength: G ? 8000 : 2000, placeholder: 'Необовʼязково: що підготувати, посилання, адреса…', 'aria-label': 'Нотатки' });
+    // Лише для Google: місце й нагадування Google (приходять від Google на телефон)
+    const locIn = ui.input({ value: ev.location || '', maxlength: 200, placeholder: 'Необовʼязково: адреса чи посилання на зустріч', 'aria-label': 'Місце' });
+    const fLoc = ui.field({ label: 'Місце', input: locIn });
+    const gRemOpts = GREMIND.slice();
+    if (typeof ev.gremind === 'number' && !gRemOpts.some((r) => r.v === ev.gremind)) gRemOpts.push({ v: ev.gremind, label: `За ${ev.gremind} хв` });
+    if (ev.gremind === 'custom') gRemOpts.push({ v: 'custom', label: 'Свої нагадування Google (без змін)' });
+    const gRemSel = ui.select(gRemOpts.map((r) => ({ value: String(r.v), label: r.label })), { value: String(ev.gremind), 'aria-label': 'Нагадування Google' });
+    const fGRemind = ui.field({ label: 'Нагадування', input: gRemSel, hint: 'Нагадування надсилає сам Google (на телефоні — застосунок Google Календар).' });
+    const gRemOf = (v) => (v === 'default' || v === 'none' || v === 'custom' ? v : Number(v));
 
     // --- Повторення ---
-    const rule0 = series0 ? ruleOf(series0) : null;
+    let rule0 = series0 ? ruleOf(series0) : null;
+    // Серія Google: правило береться з головної події серії (завантажується, поки форма відкрита)
+    let gFirst = null;
+    let gMaster = null;
+    let gRuleState = G && G.rid ? 'loading' : null;   // loading | simple | complex | error
     // Для наявної серії підписи й дні тижня рахуються від її першого дня, а не від показаного повтору
-    const repBase = () => (series0 ? series0.date : (dateIn.dateValue || ev.date));
+    const repBase = () => (series0 ? series0.date : gFirst || (dateIn.dateValue || ev.date));
     const rp = {
       mode: presetOf(rule0, repBase()),
       every: rule0 ? rule0.every : 1,
@@ -2047,6 +2471,14 @@ window.CRM = window.CRM || {};
     [customBox, endBox, repSum].forEach((x) => fRepeat.insertBefore(x, repErrEl));
 
     function fillRepOptions() {
+      if (gRuleState && gRuleState !== 'simple') {
+        ui.mount(repSel, h('option', { value: '' }, gRuleState === 'loading' ? 'Завантажую правило повтору…'
+          : gRuleState === 'complex' ? 'Повторюється за правилом Google (змінити — у Google Календарі)' : 'Повторювана подія Google (правило — у Google Календарі)'));
+        repSel.value = '';
+        repSel.disabled = true;
+        return;
+      }
+      repSel.disabled = false;
       const b = repBase();
       const p = D.parse(b);
       ui.mount(repSel, [
@@ -2093,8 +2525,9 @@ window.CRM = window.CRM || {};
       countWord.textContent = plural(rp.count, ['раз', 'рази', 'разів']);
       const r = formRule();
       let s = r ? capitalize(ruleText(r, repBase())) : '';
-      if (r && series0) {
-        const first = ruleDates(series0.date, rule0, series0.date, FAR, 1)[0];
+      if (r && rule0 && (series0 || gFirst)) {
+        const fb = series0 ? series0.date : gFirst;
+        const first = ruleDates(fb, rule0, fb, FAR, 1)[0];
         if (first) s += ` · серія з ${fmt.date(first)}`;
       }
       repSum.textContent = s;
@@ -2113,7 +2546,7 @@ window.CRM = window.CRM || {};
     }
     /** Змінили дату у формі: для нової серії підписи (і день тижня, якщо дні не вибирали) — від нової дати. */
     function repDateChanged() {
-      if (series0) return;
+      if (series0 || (G && G.rid)) return;
       if (!rp.daysTouched) rp.days = [D.weekday(repBase())];
       fillRepOptions();
       repRefresh();
@@ -2181,7 +2614,7 @@ window.CRM = window.CRM || {};
         remind: allDay || rv === '' ? null : Number(rv), note: noteIn.value.trim()
       };
       // Правило серії не змінювали (напр., переносять останній повтор на день пізніше) — дату закінчення не перевіряємо
-      const rErr = repError(series0 && inst && sameRule(formRule(), rule0) ? null : V.date);
+      const rErr = repError(((series0 && inst) || (G && G.rid)) && sameRule(formRule(), rule0) ? null : V.date);
       if (rErr) { fRepeat.setError(rErr); return; }
       const rule = formRule();
       // Подія на кілька днів: лише «весь день» і без повторів
@@ -2192,6 +2625,8 @@ window.CRM = window.CRM || {};
         if (D.diffDays(V.date, e) >= MAX_SPAN) { fEnd.setError(`Подія — не довше за ${MAX_SPAN} днів`); return; }
         V.endDate = e;
       }
+      // Подія Google — у Google Календар
+      if (isG()) { await saveG(V, rule); return; }
       if (!canSave()) return;
       lsSet('crm.cal.cat', cat);
 
@@ -2222,24 +2657,66 @@ window.CRM = window.CRM || {};
       const se = spanEnd(saved);
       ui.toast(`Подію додано: ${se ? whenText(saved) : dayShort(saved.date) + (allDay ? '' : ', ' + whenText(saved))}${rule ? ' · ' + ruleText(rule, saved.date) : ''}`, { type: 'success' });
     }
+    /** Зберегти в Google: нова подія, окрема подія чи заняття серії (з вибором «Лише цю / Цю й наступні / Усі»). */
+    async function saveG(V, rule) {
+      V.location = locIn.value.trim();
+      V.gremind = allDay ? ev.gremind : gRemOf(gRemSel.value);
+      if (lockTime) Object.assign(V, { date: gm.date, allDay: false, start: gm.start, dur: gm.dur, endDate: null });
+      if (!G) {
+        dlg.close('saved');
+        lsSet('crm.cal.target', 'google');
+        await createGoogle(V, rule, gcalId);
+        return;
+      }
+      if (G.rid && gRuleState === 'simple' && !rule) {
+        fRepeat.setError('Щоб серія більше не повторювалась, видали наступні заняття: «Видалити» → «Цю й наступні».');
+        return;
+      }
+      const ruleChanged = !!(G.rid && gRuleState === 'simple' && !sameRule(rule, rule0));
+      const d = gDiff(G, gm, V);
+      if (!d.timeCh && !Object.keys(d.body).length && !ruleChanged) { dlg.close('saved'); return; }
+      let scope = 'one';
+      if (G.rid) {
+        const counted = !!(gMaster && (gMaster.recurrence || []).some((l) => /COUNT=/i.test(l)));
+        scope = await chooseScope({ mode: 'edit', allowOne: !ruleChanged, inst: { date: gm.date }, reset: ruleChanged, google: true, noFollowing: gRuleState === 'complex' && counted });
+        if (!scope) return;
+      }
+      const send = await askGuests(G);
+      if (send === null) return;
+      dlg.close('saved');
+      const res = await saveGoogle(G, gm, V, { scope, rule, ruleChanged, send, master: gMaster });
+      if (!res.ok || res.nothing) return;
+      const t = V.title || 'Без назви';
+      const text = !G.rid ? `Збережено в Google Календарі: «${t}»`
+        : scope === 'one' ? `«${t}» — змінено лише ${dayShort(V.date)} · Google Календар`
+          : scope === 'following' ? `«${t}» — змінено з ${dayShort(occDay(G, gm))} і далі · Google Календар` : `«${t}» — змінено всі заняття серії · Google Календар`;
+      ui.toast(text, { type: 'success', action: { label: 'Скасувати', onClick: () => res.undo() } });
+    }
     titleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
 
     refreshEnd();
     showSpan();
 
     // «Дублювати» / «Копіювати на…» — для наявної події (повтор серії копіюється як звичайна подія)
-    const src = inst || cur;
+    const src = inst || cur || gm;
     let copyRow = null;
     if (src) {
       const dupBtn = ui.button({ label: 'Дублювати', icon: 'copy', size: 'sm', variant: 'ghost', className: 'kal-dup', title: 'Копія на той самий день — одразу відкриється, щоб змінити' });
       dupBtn.addEventListener('click', async () => {
         dlg.close('dup');
+        if (G) {
+          // Копія події Google — у тому самому календарі Google
+          const c = await copyGoogle(G, {});
+          const ne = c ? gFind(G.cal, c.id) : null;
+          if (ne) openGoogle(ne);
+          return;
+        }
         const saved = await copyEvent(src, {});
         if (saved) openEditor(saved.id);
       });
       const copyBtn = ui.button({ label: 'Копіювати на…', icon: 'calendar', size: 'sm', variant: 'ghost', className: 'kal-copyto' });
       copyBtn.setAttribute('aria-haspopup', 'dialog');
-      copyBtn.addEventListener('click', () => copyTo(copyBtn, src, () => dlg.close('copied')));
+      copyBtn.addEventListener('click', () => copyTo(copyBtn, src, () => dlg.close('copied'), G ? (ch) => copyGoogle(G, ch) : null));
       copyRow = h('div', { class: 'kal-ed-actions' }, dupBtn, copyBtn);
     }
 
@@ -2248,18 +2725,64 @@ window.CRM = window.CRM || {};
     const lessonNote = stu ? h('div', { class: 'kal-lesson-note' }, CRM.icon('board', { size: 'sm' }),
       h('span', null, `Урок учня «${stu.name}» (Репетиторство)`),
       h('button', { type: 'button', class: 'link-like kal-lesson-open', onClick: () => { dlg.close('lesson'); CRM.tutor.openLessonOn(stu.id, ev.date); } }, 'Відкрити урок')) : null;
+    // Подія Google: звідки вона й «Відкрити в Google»; нова подія — «Де зберегти»
+    const gInfo = G ? h('div', { class: 'kal-gsrc' }, CRM.icon('calendar', { size: 'sm' }),
+      h('span', null, gWhere(G.cal) + (G.rid ? ' · повторювана подія' : '')),
+      G.link ? h('button', { type: 'button', class: 'link-like kal-gsrc-open', onClick: () => CRM.gcal.openEvent(G) }, 'Відкрити в Google') : null) : null;
+    const lockNote = lockTime ? h('div', { class: 'callout kal-gsrc-lock' }, CRM.icon('info'),
+      h('span', null, `Подія триває через північ (${fmt.dateTime(G.start)} – ${fmt.dateTime(G.end)}) — дату й час змінюй у самому Google Календарі; тут можна змінити назву, місце, опис і нагадування.`)) : null;
+    let targetRow = null;
+    let gCalWrap = null;
+    if (gList.length) {
+      const seg = h('div', { class: 'segmented kal-target', role: 'radiogroup', 'aria-label': 'Де зберегти подію' });
+      const drawSeg = () => ui.mount(seg, [['crm', 'Моя CRM'], ['google', 'Google Календар']].map(([v, l]) => h('button', {
+        type: 'button', role: 'radio', class: v === target ? 'active' : '', 'aria-checked': v === target ? 'true' : 'false', dataset: { target: v },
+        onClick: () => { target = v; lsSet('crm.cal.target', v); drawSeg(); applyTarget(); }
+      }, l)));
+      drawSeg();
+      if (gList.length > 1) {
+        const calSel = ui.select(gList.map((c) => ({ value: c.id, label: c.primary ? `${c.summary} (основний)` : c.summary })), { value: gcalId, 'aria-label': 'Календар Google' });
+        calSel.addEventListener('change', () => { gcalId = calSel.value; lsSet('crm.cal.gcal', gcalId); });
+        gCalWrap = h('span', { class: 'kal-target-cal' }, calSel);
+      }
+      targetRow = ui.field({ label: 'Де зберегти', input: h('div', { class: 'kal-target-row' }, seg, gCalWrap) });
+    }
+    const whenRow = h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), fEnd, allDayBox);
+    whenRow.hidden = lockTime;
+    const fCat = ui.field({ label: 'Категорія', input: catPicker(cat, (v) => { cat = v; }, false, true) });
+    const fNote = ui.field({ label: 'Нотатки', input: noteIn });
+    const noteLabel = fNote.querySelector('.field-label');
+    /** Показати поля для CRM чи для Google. */
+    function applyTarget() {
+      const g = isG();
+      fCat.hidden = g;
+      fLoc.hidden = !g;
+      fRemind.hidden = g || allDay;
+      fGRemind.hidden = !g || allDay || lockTime;
+      if (noteLabel) noteLabel.textContent = g ? 'Опис' : 'Нотатки';
+      if (gCalWrap) gCalWrap.hidden = !g;
+      // окрему подію Google серією тут не робимо (лише в самому Google)
+      fRepeat.hidden = !!(G && !G.rid) || lockTime;
+    }
     const body = h('div', { class: 'form-stack kal-editor' },
       lessonNote,
+      gInfo,
+      targetRow,
       fTitle,
       copyRow,
-      h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), fEnd, allDayBox),
+      lockNote,
+      whenRow,
       fTimes,
       fRepeat,
-      ui.field({ label: 'Категорія', input: catPicker(cat, (v) => { cat = v; }, false, true) }),
+      fCat,
+      fLoc,
       fRemind,
-      ui.field({ label: 'Нотатки', input: noteIn }));
+      fGRemind,
+      fNote);
+    applyTarget();
     const footer = [
-      cur ? ui.button({ label: 'Видалити', icon: 'trash', variant: 'danger-ghost', className: 'kal-del', onClick: async () => {
+      cur || G ? ui.button({ label: 'Видалити', icon: 'trash', variant: 'danger-ghost', className: 'kal-del', onClick: async () => {
+        if (G) { await deleteGoogle(G, dlg); return; }
         if (series0 && inst) {
           const scope = await chooseScope({ mode: 'delete', allowOne: true, inst });
           if (!scope) return;
@@ -2277,12 +2800,42 @@ window.CRM = window.CRM || {};
         await removeEvent(cur);
       } }) : null,
       ui.button({ label: 'Скасувати', onClick: () => dlg.close('button') }),
-      ui.button({ label: cur ? 'Зберегти' : 'Додати', variant: 'primary', onClick: save })
+      ui.button({ label: cur || G ? 'Зберегти' : 'Додати', variant: 'primary', onClick: save })
     ];
     const dlg = ui.modal({
-      title: cur ? (series0 ? 'Повторювана подія' : 'Подія') : 'Нова подія',
-      size: 'md', className: 'kal-editor-modal', body, footer, initialFocus: titleIn
+      title: G ? (G.rid ? 'Повторювана подія Google' : 'Подія Google') : cur ? (series0 ? 'Повторювана подія' : 'Подія') : 'Нова подія',
+      size: 'md', className: 'kal-editor-modal' + (G ? ' kal-editor-google' : ''), body, footer, initialFocus: titleIn
     });
+
+    // Серія Google: правило з головної події серії (без доступу — лише підпис)
+    if (G && G.rid) {
+      const fail = () => { gRuleState = 'error'; fillRepOptions(); repRefresh(); };
+      if (CRM.gcal.status() !== 'connected') fail();
+      else {
+        CRM.gcal.getEvent(G.cal, G.rid).then((master) => {
+          gMaster = master;
+          gFirst = masterDay(master);
+          const parsed = CRM.gcal.parseRecurrence(master.recurrence, gFirst);
+          if (parsed.rule) {
+            rule0 = normRule(parsed.rule, gFirst);
+            gRuleState = 'simple';
+            rp.mode = presetOf(rule0, gFirst);
+            rp.every = rule0.every;
+            rp.unit = rule0.freq;
+            rp.days = rule0.days ? rule0.days.slice() : [D.weekday(gFirst)];
+            rp.daysTouched = true;
+            rp.end = rule0.until ? 'until' : rule0.count ? 'count' : 'never';
+            if (rule0.until) { rp.until = rule0.until; untilIn.dateValue = rule0.until; }
+            if (rule0.count) rp.count = rule0.count;
+            everyIn.value = String(rp.every);
+            countIn.value = String(rp.count);
+            endSel.value = rp.end;
+          } else gRuleState = 'complex';
+          fillRepOptions();
+          repRefresh();
+        }, fail);
+      }
+    }
     return dlg;
   }
 
@@ -2416,7 +2969,7 @@ window.CRM = window.CRM || {};
     o.time ? h('span', { class: 'kal-chip-time num' }, o.time) : null,
     h('span', { class: 'kal-chip-title' }, label),
     o.withSub && it.sub ? h('span', { class: 'kal-chip-sub' }, it.sub) : null);
-    if (it.kind === 'own') attachDrag(el, (sx, sy) => daySession(el, it, sx, sy));
+    if (it.kind === 'own' || (it.kind === 'gcal' && it.editable)) attachDrag(el, (sx, sy) => daySession(el, it, sx, sy));
     return el;
   }
 
@@ -3120,6 +3673,8 @@ window.CRM = window.CRM || {};
     whenText, categoryName, categories, categoryOf, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
     plannedTasks, untimedOn, overdueTasks, planTask, rollOver,
     FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn,
-    spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, hiddenCats
+    spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, hiddenCats,
+    // Події Google (пункт 12)
+    openGoogle, createGoogle, copyGoogle, deleteGoogle, googleTarget, gFind, gTargets
   };
 })(window.CRM);

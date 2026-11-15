@@ -3305,3 +3305,18 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 @media (max-width: 640px) {
   .pj-fs-dates .date-trigger .icon { display: none; }
 }
+/* ---------- Календар: події Google — зміна з CRM (пункт 12, gcal.js + calendar.js) ---------- */
+.kal-target-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kal-target-row .segmented { flex-shrink: 0; }
+.kal-target-cal .select { min-width: 0; max-width: 260px; }
+.kal-target-quick { align-self: flex-start; }
+.kal-gsrc { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; color: var(--text-2); }
+.kal-gsrc .icon { color: var(--text-2); }
+.kal-gsrc .link-like { font-size: 13px; margin-left: auto; }
+.kal-gsrc-lock { font-size: 13px; }
+.gcal-ro-note { white-space: normal; }
+@media (max-width: 520px) {
+  .kal-target-row { gap: 8px; }
+  .kal-target-cal .select { max-width: 100%; }
+  .kal-gsrc .link-like { margin-left: 0; }
+}

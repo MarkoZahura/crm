@@ -1036,9 +1036,14 @@ window.CRM = window.CRM || {};
       parts.push(dayShort(date));
     }
     if (!endDate) parts.push(rec.allDay ? 'весь день' : `${rec.start}–${hhmm(toMin(rec.start) + rec.dur)}`);
-    parts.push(CRM.calendar.categoryName(cat));
+    // Нові події — у Google Календар, якщо так вибрано в «Календарі» (пункт 12): без категорій CRM, нагадування — від Google
+    const google = CRM.calendar.googleTarget ? CRM.calendar.googleTarget() : null;
+    if (google) {
+      rec.gremind = P.remind && !rec.allDay ? rec.remind : 'default';
+      parts.push(google.label === 'основний' ? '→ Google Календар' : `→ Google Календар («${google.label}»)`);
+    } else parts.push(CRM.calendar.categoryName(cat));
     if (P.remind) parts.push(rec.allDay ? 'без часу — нагадування не буде' : remindText(rec.remind));
-    return { kind: 'event', label: 'Подія', icon: 'calendar', iconClass: 'ico-event', title, parts, rec, ok: !problem, problem };
+    return { kind: 'event', label: 'Подія', icon: 'calendar', iconClass: 'ico-event', title, parts, rec, google, ok: !problem, problem };
   }
 
   // ---------- Задача ----------
@@ -1618,6 +1623,24 @@ window.CRM = window.CRM || {};
       if (!res) return null;
       return { kind: 'book', store: 'books', id: r.bookId, short, text: `${o.title}: ${o.parts[0]}`, undo: res.undo };
     }
+    if (o.kind === 'event' && o.google && CRM.calendar.createGoogle) {
+      const r = o.rec;
+      const cal = o.google.cal;
+      // Доступ сплив і людина не оновила підключення — запропонувати зберегти в CRM
+      const offer = () => CRM.ui.toast('Подію не додано в Google Календар', {
+        duration: 9000, action: { label: 'Зберегти в CRM', onClick: async () => { await CRM.store.save('events', r); CRM.ui.toast('Подію збережено в CRM', { type: 'success' }); } }
+      });
+      const g = await CRM.calendar.createGoogle(r, r.repeat || null, cal, { quiet: true, onCancel: offer });
+      if (!g) return null;
+      const span = r.endDate && CRM.calendar.spanEnd && CRM.calendar.spanEnd(r);
+      const when = span ? CRM.calendar.whenText(r)
+        : r.repeat && CRM.calendar.repeatText ? CRM.calendar.repeatText(r) + ', з ' + dayShort(r.date) : dayShort(r.date);
+      return {
+        kind: 'gevent', id: { cal, id: g.id }, short,
+        text: `${r.repeat ? 'Повторювану подію' : 'Подію'} додано в Google Календар${o.google.label === 'основний' ? '' : ` («${o.google.label}»)`}: ${when}${r.allDay ? '' : ', ' + r.start + '–' + hhmm(toMin(r.start) + r.dur)}`,
+        undo: () => CRM.gcal.run(() => CRM.gcal.deleteEvent(cal, g.id))
+      };
+    }
     if (o.kind === 'event') {
       const saved = await CRM.store.save('events', o.rec);
       const span = saved.endDate && CRM.calendar.spanEnd && CRM.calendar.spanEnd(saved);
@@ -1782,6 +1805,10 @@ window.CRM = window.CRM || {};
   }
   function openSaved(kind, id) {
     if (kind === 'event') return CRM.calendar.openEditor(id);
+    if (kind === 'gevent') {
+      const e = CRM.calendar.gFind ? CRM.calendar.gFind(id.cal, id.id) : null;
+      return e ? CRM.calendar.openGoogle(e) : CRM.ui.toast('Подія ще завантажується з Google — відкрий її в «Календарі».');
+    }
     if (kind === 'task') return CRM.tasks.openTask(id);
     if (kind === 'expense' || kind === 'income' || kind === 'transfer') return CRM.budget.openTxForm({ id });
     if (kind === 'meal') return CRM.nutrition.openEntry(id);
@@ -1799,7 +1826,7 @@ window.CRM = window.CRM || {};
     if (o.kind === 'habit') return CRM.habits.openPage(r.habitId);
     if (o.kind === 'book') return CRM.books.openBook(r.bookId);
     if (o.kind === 'tutorpay' || o.kind === 'lesson') return CRM.tutorMoney.details(o);
-    if (o.kind === 'event') return CRM.calendar.openEditor(null, r);
+    if (o.kind === 'event') return CRM.calendar.openEditor(null, o.google ? Object.assign({}, r, { target: 'google', gcal: o.google.cal }) : Object.assign({}, r, { target: 'crm' }));
     if (o.kind === 'task') {
       const pre = Object.assign({}, r);
       if (pre.planDate && !pre.planStart) pre.planOrder = CRM.tasks.nextPlanOrder(pre.planDate);
