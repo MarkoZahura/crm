@@ -340,6 +340,11 @@ window.CRM = window.CRM || {};
     return ruleDates(ev.date, rule, from, end);
   }
   function isOccurrence(ev, d) { return D.isDate(d) && seriesDates(ev, d, d).length === 1; }
+  /** Перший день серії за правилом (дата серії може не збігатися з днем тижня з правила). */
+  function seriesFirst(ev) {
+    const rule = ruleOf(ev);
+    return rule ? ruleDates(ev.date, rule, ev.date, FAR, 1)[0] || null : null;
+  }
   function skipped(ev, d) { return Array.isArray(ev.skip) && ev.skip.includes(d); }
 
   /** Як виглядає повтор серії, що за правилом припадає на день orig (з урахуванням змін «лише цього»). */
@@ -583,7 +588,7 @@ window.CRM = window.CRM || {};
     }
 
     if (L.gcal && CRM.gcal && CRM.gcal.eventsBetween) {
-      const gColor = CRM.dict.categoryColor('teal');
+      // Колір — як у Google: свій колір події або колір календаря (з 2026.11.15-5)
       // «Заняття Макс» з Google, коли того дня є урок Макса в CRM, — не показуємо (без дублів; tutor.js)
       const dupIdx = CRM.tutor && CRM.tutor.dupIndex ? CRM.tutor.dupIndex(from, to) : null;
       CRM.gcal.eventsBetween(from, to).forEach((g) => {
@@ -593,7 +598,7 @@ window.CRM = window.CRM || {};
           if (!CRM.gcal.occursOn(g, d)) return;
           if (dupIdx && dupIdx.size && CRM.tutor.isGoogleDuplicate(g, d, dupIdx)) return;
           const it = {
-            key: 'g:' + g.cal + ':' + g.id + ':' + d, kind: 'gcal', title: g.title, color: gColor, icon: 'calendar',
+            key: 'g:' + g.cal + ':' + g.id + ':' + d, kind: 'gcal', title: g.title, color: CRM.gcal.colorOf ? CRM.gcal.colorOf(g) : CRM.dict.categoryColor('teal'), icon: 'calendar',
             gev: g, date: d, tentative: !!g.tentative, editable: drag, series: !!g.rid
           };
           if (g.allDay) { put(d, 'allDay', Object.assign(it, { sub: 'Google Календар' })); return; }
@@ -904,7 +909,8 @@ window.CRM = window.CRM || {};
   }
   function freshCopy(rec) {
     const c = CRM.utils.deepClone(rec);
-    ['id', 'createdAt', 'updatedAt', 'deletedAt', 'deleteBatch', 'deleteHead'].forEach((f) => { delete c[f]; });
+    // gsync — де копія в Google (gmirror.js): у нової події своя копія
+    ['id', 'createdAt', 'updatedAt', 'deletedAt', 'deleteBatch', 'deleteHead', 'gsync'].forEach((f) => { delete c[f]; });
     return c;
   }
 
@@ -933,7 +939,8 @@ window.CRM = window.CRM || {};
       // «Не повторюється»: цей повтор стає звичайною подією
       const single = Object.assign(freshCopy(series), V, { repeat: null, skip: [], overrides: {} });
       if (scope === 'all') {
-        await CRM.store.save('events', Object.assign({}, single, { id: series.id, createdAt: series.createdAt }));
+        // та сама подія (той самий id) — і та сама копія в Google (gmirror.js перетворить її на окрему подію)
+        await CRM.store.save('events', Object.assign({}, single, { id: series.id, createdAt: series.createdAt }, series.gsync ? { gsync: series.gsync } : {}));
         return undoSeries;
       }
       const a = Object.assign({}, series, { repeat: Object.assign({}, old, { until: D.addDays(occ, -1), count: null }),
@@ -1570,7 +1577,10 @@ window.CRM = window.CRM || {};
   // ---------- Події Google: зміна з CRM (пункт 12) ----------
   // Нові події: «Моя CRM» або «Google Календар» — вибір памʼятається в цьому браузері (crm.cal.target, crm.cal.gcal)
   function gTargets() { return CRM.gcal && CRM.gcal.writableCalendars ? CRM.gcal.writableCalendars() : []; }
-  function targetPref() { return lsGet('crm.cal.target', 'crm') === 'google' && gTargets().length ? 'google' : 'crm'; }
+  // Дублювання ввімкнено (gmirror.js): усі нові події — у CRM (копія сама йде в Google), перемикача «Де зберегти» немає
+  function mirrorOn() { return !!(CRM.gmirror && CRM.gmirror.on()); }
+  function newTargets() { return mirrorOn() ? [] : gTargets(); }
+  function targetPref() { return !mirrorOn() && lsGet('crm.cal.target', 'crm') === 'google' && gTargets().length ? 'google' : 'crm'; }
   function defaultGCal() {
     const list = gTargets();
     const last = lsGet('crm.cal.gcal', '');
@@ -1646,6 +1656,8 @@ window.CRM = window.CRM || {};
       body.reminders = CRM.gcal.remindBody(V.gremind);
       back.reminders = remindOrig(g);
     }
+    // Колір (2026.11.15-5): '' — як у календаря (null у PATCH стирає свій колір)
+    if (V.gcolor !== undefined && (V.gcolor || '') !== (m.gcolor || '')) { body.colorId = V.gcolor || null; back.colorId = m.gcolor || null; }
     const timeCh = V.date !== m.date || !!V.allDay !== !!m.allDay || (V.endDate || null) !== (m.endDate || null) ||
       (!V.allDay && (V.start !== m.start || Number(V.dur) !== Number(m.dur)));
     return { body, back, timeCh };
@@ -1818,6 +1830,7 @@ window.CRM = window.CRM || {};
     if (V.note) body.description = V.note;
     if (V.location) body.location = V.location;
     if (V.gremind !== undefined && V.gremind !== 'default' && V.gremind !== 'custom' && !V.allDay) body.reminders = CRM.gcal.remindBody(V.gremind);
+    if (V.gcolor) body.colorId = V.gcolor;
     if (rule) body.recurrence = [CRM.gcal.buildRRule(rule, !!V.allDay)];
     const r = await CRM.gcal.run(() => CRM.gcal.insertEvent(cal, body));
     if (!r.ok) { if (o.onCancel && r.cancelled) o.onCancel(); return null; }
@@ -1844,6 +1857,7 @@ window.CRM = window.CRM || {};
     if (g.desc) body.description = g.desc;
     if (g.location) body.location = g.location;
     if (g.rem !== undefined && g.rem !== 'default') body.reminders = remindOrig(g);
+    if (g.color) body.colorId = g.color;
     const r = await CRM.gcal.run(() => CRM.gcal.insertEvent(g.cal, body));
     if (!r.ok) { CRM.router.rerender(); return null; }
     const created = r.value;
@@ -2193,7 +2207,7 @@ window.CRM = window.CRM || {};
     let cat = lastCat();
     let kind = CRM.tasks && CRM.tasks.create ? lastKind() : 'event';
     // Подія — у «Мою CRM» чи в Google Календар (пункт 12; вибір памʼятається)
-    const gList = gTargets();
+    const gList = newTargets();
     let target = gList.length ? targetPref() : 'crm';
     const targetSeg = gList.length ? h('div', { class: 'segmented kal-target kal-target-quick', role: 'radiogroup', 'aria-label': 'Куди додати подію' }) : null;
     function drawTarget() {
@@ -2344,7 +2358,7 @@ window.CRM = window.CRM || {};
     if (ev.gremind === undefined) ev.gremind = 'default';
     if (ev.location === undefined) ev.location = '';
     // Де зберегти нову подію: «Моя CRM» або «Google Календар» (вибір памʼятається)
-    const gList = G || cur ? [] : gTargets();
+    const gList = G || cur ? [] : newTargets();
     let target = G ? 'google' : (preset && (preset.target === 'google' || preset.target === 'crm') ? preset.target : targetPref());
     if (!G && !gList.length) target = 'crm';
     let gcalId = G ? G.cal : (preset && preset.gcal && gList.some((c) => c.id === preset.gcal) ? preset.gcal : defaultGCal());
@@ -2410,7 +2424,12 @@ window.CRM = window.CRM || {};
     if (ev.remind != null && ev.remind !== '' && !remindOpts.some((r) => r.v === Number(ev.remind))) remindOpts.push({ v: Number(ev.remind), label: `За ${ev.remind} хв` });
     const remindSel = ui.select(remindOpts.map((r) => ({ value: r.v == null ? '' : String(r.v), label: r.label })),
       { value: ev.remind == null ? '' : String(ev.remind), 'aria-label': 'Нагадування' });
-    const fRemind = ui.field({ label: 'Нагадування', input: remindSel, hint: 'Приходить, лише коли CRM відкрита (вкладка може бути у фоні).' });
+    // Дублювання в Google ввімкнено (gmirror.js) — про подію з копією нагадує Google
+    const mirrored = !G && mirrorOn() && !(cur && cur.studentId);
+    const fRemind = ui.field({
+      label: 'Нагадування', input: remindSel,
+      hint: mirrored ? 'Подія дублюється в Google Календар — нагадування надішле Google (на телефон), а CRM покаже його в дзвіночку.' : 'Приходить, лише коли CRM відкрита (вкладка може бути у фоні).'
+    });
     const allDayBox = check('Весь день', allDay, (on) => {
       allDay = on;
       fTimes.hidden = on || lockTime;
@@ -2428,6 +2447,22 @@ window.CRM = window.CRM || {};
     const gRemSel = ui.select(gRemOpts.map((r) => ({ value: String(r.v), label: r.label })), { value: String(ev.gremind), 'aria-label': 'Нагадування Google' });
     const fGRemind = ui.field({ label: 'Нагадування', input: gRemSel, hint: 'Нагадування надсилає сам Google (на телефоні — застосунок Google Календар).' });
     const gRemOf = (v) => (v === 'default' || v === 'none' || v === 'custom' ? v : Number(v));
+    // Колір події Google (2026.11.15-5): «Як у календаря» або один з кольорів Google
+    let gcolor = ev.gcolor || '';
+    const gColorWrap = h('div', { class: 'kal-gcolors', role: 'radiogroup', 'aria-label': 'Колір' });
+    function drawGColors() {
+      if (!CRM.gcal.GCOLORS) return;
+      const pick = (v) => { gcolor = v; drawGColors(); };
+      const btn = (v, label, color, withText) => h('button', {
+        type: 'button', role: 'radio', class: 'kal-gcolor' + (withText ? ' kal-gcolor-cal' : '') + (gcolor === v ? ' active' : ''),
+        'aria-checked': gcolor === v ? 'true' : 'false', 'aria-label': label, title: label, dataset: { gcolor: v }, style: { '--c': color },
+        onClick: () => pick(v)
+      }, h('span', { class: 'kal-cat-dot' }), withText ? h('span', null, label) : null);
+      ui.mount(gColorWrap, [btn('', 'Як у календаря', CRM.gcal.calColor(G ? G.cal : gcalId), true)]
+        .concat(CRM.gcal.GCOLORS.map((c) => btn(c.id, c.name, CRM.gcal.readable(c.hex), false))));
+    }
+    drawGColors();
+    const fGColor = ui.field({ label: 'Колір', input: gColorWrap });
 
     // --- Повторення ---
     let rule0 = series0 ? ruleOf(series0) : null;
@@ -2660,6 +2695,7 @@ window.CRM = window.CRM || {};
     /** Зберегти в Google: нова подія, окрема подія чи заняття серії (з вибором «Лише цю / Цю й наступні / Усі»). */
     async function saveG(V, rule) {
       V.location = locIn.value.trim();
+      V.gcolor = gcolor;
       V.gremind = allDay ? ev.gremind : gRemOf(gRemSel.value);
       if (lockTime) Object.assign(V, { date: gm.date, allDay: false, start: gm.start, dur: gm.dur, endDate: null });
       if (!G) {
@@ -2742,10 +2778,21 @@ window.CRM = window.CRM || {};
       drawSeg();
       if (gList.length > 1) {
         const calSel = ui.select(gList.map((c) => ({ value: c.id, label: c.primary ? `${c.summary} (основний)` : c.summary })), { value: gcalId, 'aria-label': 'Календар Google' });
-        calSel.addEventListener('change', () => { gcalId = calSel.value; lsSet('crm.cal.gcal', gcalId); });
+        calSel.addEventListener('change', () => { gcalId = calSel.value; lsSet('crm.cal.gcal', gcalId); drawGColors(); });
         gCalWrap = h('span', { class: 'kal-target-cal' }, calSel);
       }
       targetRow = ui.field({ label: 'Де зберегти', input: h('div', { class: 'kal-target-row' }, seg, gCalWrap) });
+    }
+    // Своя подія при ввімкненому дублюванні: стан копії в Google (gmirror.js)
+    let mirrorNote = null;
+    if (mirrored) {
+      const st = cur ? CRM.gmirror.statusOf(cur) : 'new';
+      const text = st === 'synced' ? 'Копія — у Google Календарі' : st === 'pending' ? 'Копію буде надіслано в Google Календар, щойно буде доступ до Google'
+        : st === 'gone' ? 'Копію цієї події видалили в Google Календарі — ' : st === 'new' ? 'Подія зʼявиться й у Google Календарі' : null;
+      if (text) {
+        mirrorNote = h('div', { class: 'kal-mirror-note', dataset: { mirror: st } }, CRM.icon('copy', { size: 'sm' }), h('span', null, text,
+          st === 'gone' ? h('button', { type: 'button', class: 'link-like', onClick: () => { dlg.close('gone'); CRM.gmirror.openGone(); } }, 'вирішити') : null));
+      }
     }
     const whenRow = h('div', { class: 'kal-when-row' }, ui.field({ label: 'Дата', input: dateIn }), fEnd, allDayBox);
     whenRow.hidden = lockTime;
@@ -2756,6 +2803,8 @@ window.CRM = window.CRM || {};
     function applyTarget() {
       const g = isG();
       fCat.hidden = g;
+      fGColor.hidden = !g;
+      if (mirrorNote) mirrorNote.hidden = g;
       fLoc.hidden = !g;
       fRemind.hidden = g || allDay;
       fGRemind.hidden = !g || allDay || lockTime;
@@ -2767,6 +2816,7 @@ window.CRM = window.CRM || {};
     const body = h('div', { class: 'form-stack kal-editor' },
       lessonNote,
       gInfo,
+      mirrorNote,
       targetRow,
       fTitle,
       copyRow,
@@ -2775,6 +2825,7 @@ window.CRM = window.CRM || {};
       fTimes,
       fRepeat,
       fCat,
+      fGColor,
       fLoc,
       fRemind,
       fGRemind,
@@ -3661,7 +3712,9 @@ window.CRM = window.CRM || {};
       out.push({
         key: `calevent:${ev.id}:${date}T${ev.start}`, kind: 'event', title,
         text: `Календар · ${whenText(ev)} · ${categoryName(ev.cat)}`,
-        target: { route: 'calendar', params: { view: 'day', date } }
+        target: { route: 'calendar', params: { view: 'day', date } },
+        // Копія вже в Google — нагадує Google (телефон), тут лише дзвіночок (без системного сповіщення)
+        quiet: !!(CRM.gmirror && CRM.gmirror.googleReminds(ev.id))
       });
     });
     return out;
@@ -3672,7 +3725,7 @@ window.CRM = window.CRM || {};
     DEFAULT_CATEGORIES, VIEWS, LAYERS, REMINDERS, HOUR, TASK_DUR, MAX_SPAN,
     whenText, categoryName, categories, categoryOf, occurrences, collect, layoutTimed, rangeOf, openEditor, openNew, kyivMs, toMin, fromMin, go,
     plannedTasks, untimedOn, overdueTasks, planTask, rollOver,
-    FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn,
+    FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn, ruleOf, seriesFirst, isOccurrence,
     spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, hiddenCats,
     // Події Google (пункт 12)
     openGoogle, createGoogle, copyGoogle, deleteGoogle, googleTarget, gFind, gTargets

@@ -15,6 +15,10 @@
      POST /calendars/{calendarId}/events (sendUpdates: all | none). Окреме заняття серії має власний id
      (виняток; скасувати — PATCH status «cancelled»), уся серія — recurringEventId (поле recurrence — RRULE).
      Старий ключ доступу (до 2026.11.15-4, лише читання) — події видно, а змінити можна після «Оновити підключення».
+   • Кольори (з 2026.11.15-5): подія — colorId (1–11, назви як у Google: Лаванда, Шавлія…), без нього — колір
+     календаря (calendarList backgroundColor). Показуємо сучасні кольори Google (GCOLORS), підлаштовані під тему.
+   • Копії подій CRM (дублювання, gmirror.js) — звичайні події Google з extendedProperties.private.crmId;
+     у CRM вони не показуються (eventsOn / eventsBetween / нагадування їх пропускають), поки є подія CRM.
    • Те саме підключення дає доступ і іншим розділам, якщо їх увімкнено: Google Диск
      (копії, drive.file — backup.js) і Google-таблиця «Репетиторство» (лише читання,
      spreadsheets.readonly — tutor.js; accessToken('sheets')).
@@ -289,6 +293,7 @@ window.CRM = window.CRM || {};
       if (res.status === 429 || /rateLimit/i.test(reason)) throw err('rate', 'Google тимчасово обмежив кількість запитів — спробуй трохи пізніше.');
       if (method !== 'GET' && res.status === 403) throw err('forbidden', 'Google не дозволив змінити цю подію' + (msg ? `: ${msg}` : '.'));
       if (res.status === 404 || res.status === 410) throw err('gone', 'Цієї події вже немає в Google Календарі.');
+      if (res.status === 409) throw err('conflict', 'Подія з таким ідентифікатором уже є в Google Календарі.');
       throw err('http', `Google відповів помилкою ${res.status}${msg ? ': ' + msg : ''}`);
     }
     if (res.status === 204 || method === 'DELETE') return null;
@@ -298,7 +303,7 @@ window.CRM = window.CRM || {};
   const apiGet = (path, params) => api('GET', path, params);
 
   async function fetchCalendars(t) {
-    if (!t.list) return [{ id: 'primary', summary: 'Основний календар', primary: true, selected: true, role: 'owner', tz: null }];
+    if (!t.list) return [{ id: 'primary', summary: 'Основний календар', primary: true, selected: true, role: 'owner', tz: null, bg: null }];
     const out = [];
     let pageToken = null;
     let guard = 0;
@@ -310,7 +315,8 @@ window.CRM = window.CRM || {};
         if (!c || !c.id || c.deleted) return;
         out.push({
           id: c.id, summary: String(c.summaryOverride || c.summary || c.id).slice(0, 120), primary: !!c.primary, selected: !!c.selected,
-          role: typeof c.accessRole === 'string' ? c.accessRole : null, tz: typeof c.timeZone === 'string' ? c.timeZone : null
+          role: typeof c.accessRole === 'string' ? c.accessRole : null, tz: typeof c.timeZone === 'string' ? c.timeZone : null,
+          bg: /^#[0-9a-f]{6}$/i.test(c.backgroundColor || '') ? c.backgroundColor.toLowerCase() : null
         });
       });
       pageToken = j.nextPageToken || null;
@@ -350,6 +356,11 @@ window.CRM = window.CRM || {};
     if (ev.organizer && !ev.organizer.self) out.notMine = true;
     if (ev.guestsCanModify) out.gcm = true;
     if (ev.privateCopy) out.privateCopy = true;
+    // Колір події (1–11) і позначка копії події CRM (дублювання — gmirror.js)
+    if (ev.colorId && /^\d{1,2}$/.test(String(ev.colorId))) out.color = String(ev.colorId);
+    const ext = ev.extendedProperties && ev.extendedProperties.private;
+    if (ext && typeof ext.crmId === 'string' && ext.crmId) out.crm = ext.crmId.slice(0, 100);
+    if (ev.updated) out.upd = String(ev.updated);
     const guests = (ev.attendees || []).filter((a) => a && !a.self && !a.resource).length;
     if (guests) out.guests = guests;
     const r = ev.reminders;
@@ -398,10 +409,14 @@ window.CRM = window.CRM || {};
     if (status() !== 'connected') return Promise.resolve(false);
     refreshing = (async () => {
       changed({ busy: true });
+      // Коли почали завантажувати: зміни, надіслані в Google пізніше, у цьому кеші можуть ще не відбитись (gmirror.js)
+      const started = new Date().toISOString();
       try {
         const t = token();
         const prev = cache();
-        const calendars = prev && prev.calendars && prev.calendars.length && !o.calendars ? prev.calendars : await fetchCalendars(t);
+        // Кеш календарів до 2026.11.15-5 — без кольору (bg): перечитати список
+        const keep = prev && prev.calendars && prev.calendars.length && !o.calendars && prev.calendars.every((c) => 'bg' in c);
+        const calendars = keep ? prev.calendars : await fetchCalendars(t);
         let selected = cfg().calendars;
         if (!Array.isArray(selected)) {
           selected = calendars.filter((c) => c.primary || c.selected).map((c) => c.id);
@@ -415,7 +430,7 @@ window.CRM = window.CRM || {};
           (await fetchEvents(c.id, from, to)).forEach((e) => events.push(e));
         }
         events.sort((a, b) => eventStartMs(a) - eventStartMs(b));
-        await CRM.store.setSetting('gcalCache', { at: new Date().toISOString(), base, from, to, calendars, events });
+        await CRM.store.setSetting('gcalCache', { at: new Date().toISOString(), started, base, from, to, calendars, events });
         lastError = null;
         return true;
       } catch (e) {
@@ -465,6 +480,88 @@ window.CRM = window.CRM || {};
     return c.calendars.filter((x) => sel.indexOf(x.id) !== -1 && calWritable(x.id));
   }
   function calendarTz(id) { const cal = calInfo(id); return (cal && cal.tz) || TZ_DEFAULT; }
+
+  // ---------- Кольори (з 2026.11.15-5) ----------
+  // colorId події 1–11 — назви як у Google Календарі (Apps Script EventColor: 1 Lavender … 11 Tomato);
+  // відтінки — як у сучасному вигляді Google (API colors.get віддає старі пастельні).
+  const GCOLORS = [
+    { id: '11', name: 'Томат', hex: '#d50000' }, { id: '4', name: 'Фламінго', hex: '#e67c73' },
+    { id: '6', name: 'Мандарин', hex: '#f4511e' }, { id: '5', name: 'Банан', hex: '#f6bf26' },
+    { id: '2', name: 'Шавлія', hex: '#33b679' }, { id: '10', name: 'Базилік', hex: '#0b8043' },
+    { id: '7', name: 'Павич', hex: '#039be5' }, { id: '9', name: 'Чорниця', hex: '#3f51b5' },
+    { id: '1', name: 'Лаванда', hex: '#7986cb' }, { id: '3', name: 'Виноград', hex: '#8e24aa' },
+    { id: '8', name: 'Графіт', hex: '#616161' }
+  ];
+  const rgbOf = (hex) => { const n = parseInt(String(hex).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const hexOf = (rgb) => '#' + rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  function luminance(hex) {
+    return rgbOf(hex).map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); })
+      .reduce((a, c, i) => a + c * [0.2126, 0.7152, 0.0722][i], 0);
+  }
+  const mix = (hex, to, k) => { const a = rgbOf(hex); const b = rgbOf(to); return hexOf(a.map((v, i) => v + (b[i] - v) * k)); };
+  /** Колір, що читається на тлі теми: у світлій — пастельні темнішають, у темній — темні світлішають. */
+  function readable(hex) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return null;
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const L = luminance(hex);
+    if (dark && L < 0.16) return mix(hex, '#ffffff', 0.32);
+    if (!dark && L > 0.6) return mix(hex, '#000000', 0.32);
+    return hex.toLowerCase();
+  }
+  const gColorHex = (id) => { const c = GCOLORS.find((x) => x.id === String(id)); return c ? c.hex : null; };
+  /** Колір календаря Google (з його налаштувань) або бірюзовий CRM. */
+  function calColor(cal) {
+    const c = calInfo(cal);
+    return (c && readable(c.bg)) || CRM.dict.categoryColor('teal');
+  }
+  /** Колір події Google у CRM: свій (colorId) або колір її календаря. */
+  function colorOf(e) {
+    const own = e && e.color ? gColorHex(e.color) : null;
+    return own ? readable(own) : calColor(e && e.cal);
+  }
+  /** Відтінок (0–360), світлота й насиченість (0–1) — для порівняння кольорів «на око». */
+  function hslOf(hex) {
+    const [r, g, b] = rgbOf(hex).map((v) => v / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const d = max - min;
+    if (!d) return { h: 0, s: 0, l };
+    const s = d / (1 - Math.abs(2 * l - 1));
+    let h;
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
+    return { h: (h + 360) % 360, s: Math.min(1, s), l };
+  }
+  /** Найближчий колір Google до кольору (hex) — напр., для категорії CRM у копії події: спершу відтінок (для сірих — світлота). */
+  function nearestColor(hex) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return null;
+    const a = hslOf(hex);
+    let best = null;
+    let bd = Infinity;
+    GCOLORS.forEach((c) => {
+      const b = hslOf(c.hex);
+      let dh = Math.abs(a.h - b.h);
+      if (dh > 180) dh = 360 - dh;
+      const d = 3 * Math.min(a.s, b.s) * (dh / 180) ** 2 + (a.l - b.l) ** 2 + 0.5 * (a.s - b.s) ** 2;
+      if (d < bd) { bd = d; best = c.id; }
+    });
+    return best;
+  }
+
+  // ---------- Копії подій CRM (дублювання — gmirror.js) ----------
+  /** id події CRM, копією якої є ця подія Google (або null). */
+  function copyOf(e) {
+    if (!e) return null;
+    if (e.crm) return e.crm;
+    return CRM.gmirror && CRM.gmirror.crmIdOf ? CRM.gmirror.crmIdOf(e.cal, e.rid || e.id) : null;
+  }
+  /** Копію не показуємо в CRM, поки є сама подія CRM (вона показується своєю). */
+  function isCopy(e) {
+    const id = copyOf(e);
+    return !!(id && CRM.store.get('events', id));
+  }
 
   /** Чи триває подія з часом через північ (такі тут не перетягуємо й час не змінюємо). */
   function crossesMidnight(e) {
@@ -534,7 +631,7 @@ window.CRM = window.CRM || {};
   function toModel(e) {
     const m = {
       title: e.title === '(без назви)' ? '' : e.title, note: textOf(e.desc), location: e.location || '',
-      gremind: remindOf(e), cal: e.cal
+      gremind: remindOf(e), cal: e.cal, gcolor: e.color || ''
     };
     if (e.allDay) {
       const last = D.addDays(e.end, -1);
@@ -783,7 +880,7 @@ window.CRM = window.CRM || {};
     if (isFile() || !cfg().wanted) return [];
     const c = cache();
     if (!c || date < c.from || date > c.to) return [];
-    return c.events.filter((e) => occursOn(e, date));
+    return c.events.filter((e) => occursOn(e, date) && !isCopy(e));
   }
 
   /** Події, що зачіпають проміжок [from, to] (для розділу «Календар»). */
@@ -792,6 +889,7 @@ window.CRM = window.CRM || {};
     const c = cache();
     if (!c || to < c.from || from > c.to) return [];
     return c.events.filter((e) => {
+      if (isCopy(e)) return false;
       if (e.allDay) return e.start <= to && e.end > from;
       const s = D.toKyivDate(e.start);
       const en = D.toKyivDate(new Date(Math.max(Date.parse(e.end) - 1, Date.parse(e.start))));
@@ -874,7 +972,7 @@ window.CRM = window.CRM || {};
     const c = cache();
     if (!c) return [];
     const now = Date.now();
-    return c.events.filter((e) => !e.allDay).map((e) => {
+    return c.events.filter((e) => !e.allDay && !isCopy(e)).map((e) => {
       const left = Date.parse(e.start) - now;
       if (!(left > 0 && left <= REMIND_MIN * 60000)) return null;
       // урок, який є і в CRM, — нагадує CRM (за своїм часом), без дубля
@@ -893,7 +991,13 @@ window.CRM = window.CRM || {};
   /** Client ID є (напр., прийшов синхронізацією), але на цьому пристрої вхід у Google не зроблено. */
   function neverHere() { return !!cfg().clientId && !rawToken() && !cache(); }
 
+  /** Підпис + стан дублювання подій CRM у Google (gmirror.js: «Чекають надсилання…», «Видалено в Google…»). */
   function statusNote() {
+    const base = statusNoteBase();
+    const more = CRM.gmirror && CRM.gmirror.noteParts ? CRM.gmirror.noteParts() : null;
+    return more ? h('span', null, base, more) : base;
+  }
+  function statusNoteBase() {
     const s = status();
     const c = cache();
     const link = (text, onClick) => h('button', { type: 'button', class: 'link-like', onClick }, text);
@@ -1025,6 +1129,8 @@ window.CRM = window.CRM || {};
             cal.primary ? h('span', { class: 'badge' }, 'основний') : null);
           })));
       }
+      // Дублювання подій CRM у Google (gmirror.js)
+      if ((s === 'connected' || s === 'expired') && !fresh && CRM.gmirror && CRM.gmirror.settingsPart) parts.push(CRM.gmirror.settingsPart());
       const info = [];
       if (s === 'connected') {
         info.push(`Доступ діє до ${hhmm(new Date(t.expiresAt + 60000).toISOString())}.`);
@@ -1122,6 +1228,11 @@ window.CRM = window.CRM || {};
     editInfo, crossesMidnight, writableCalendars, calWritable, calLabel, calendarTz, readOnlyToken, run,
     toModel, timesBody, remindBody, remindOf, textOf, kyivISO,
     parseRecurrence, buildRRule, rruleUntil, rruleCount, rruleShift, untilValue, untilDate,
-    getEvent, patchEvent, insertEvent, deleteEvent, refreshSoon
+    getEvent, patchEvent, insertEvent, deleteEvent, refreshSoon,
+    // Кольори й дублювання (2026.11.15-5)
+    GCOLORS, colorOf, calColor, nearestColor, readable, copyOf, isCopy,
+    api, cache, cfg, setCfg, writeNeed, normalize: normalizeEvent, evPath, isFile: () => isFile(),
+    primaryCalendar: () => { const c = cache(); const p = c && c.calendars && c.calendars.find((x) => x.primary); return p ? p.id : 'primary'; },
+    selectedCalendars: () => cfg().calendars || []
   };
 })(window.CRM);

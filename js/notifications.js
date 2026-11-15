@@ -59,7 +59,7 @@ window.CRM = window.CRM || {};
 
   /**
    * Додати сповіщення.
-   * n = { key, kind, title, text, target: { store, id } | { route, params } | { url } }
+   * n = { key, kind, title, text, target: { store, id } | { route, params } | { url }, quiet? }
    */
   async function push(n) {
     if (n.key && CRM.store.list('notifications').some((x) => x.key === n.key)) return null;
@@ -67,7 +67,8 @@ window.CRM = window.CRM || {};
       key: n.key || null, kind: n.kind || 'system', title: n.title, text: n.text || '',
       target: n.target || null, read: !!n.read, dismissed: false, at: new Date().toISOString()
     });
-    if (!rec.read) showSystem(rec);
+    // quiet — лише в дзвіночку (напр., про подію, копія якої вже в Google, нагадує сам Google — gmirror.js)
+    if (!rec.read && !n.quiet) showSystem(rec);
     return rec;
   }
 

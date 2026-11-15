@@ -140,6 +140,19 @@ window.CRM = window.CRM || {};
     return recs;
   }
 
+  /**
+   * Зберегти записи як є — з тим updatedAt, що в них (службові поля, напр., gsync у gmirror.js:
+   * updatedAt + 1 мс доходить до інших пристроїв, але не перекриває справжню зміну, зроблену там пізніше).
+   */
+  async function saveKeep(name, records) {
+    const recs = records.map((r) => Object.assign({}, r));
+    await CRM.db.putMany(name, recs);
+    recs.forEach((r) => cache[name].set(r.id, r));
+    emit(name);
+    notifySync({ kind: 'put', store: name, recs });
+    return recs;
+  }
+
   /** Оновити окремі поля запису: patch('tasks', id, { title: '…' }) */
   async function patch(name, id, changes) {
     const cur = get(name, id);
@@ -529,7 +542,7 @@ window.CRM = window.CRM || {};
 
   CRM.store = {
     APP_ID, SCHEMA_VERSION, MAX_ATTACHMENT, TRASH_DAYS, DATA_STORES,
-    load, on, emit, list, get, count, save, saveMany, patch, removeForever, removeManyForever,
+    load, on, emit, list, get, count, save, saveMany, saveKeep, patch, removeForever, removeManyForever,
     softDelete, restoreBatch, purgeBatch, trashItems, purgeExpired,
     listAttachments, addAttachment, getAttachmentBlob, removeAttachment,
     getSetting, setSetting, getRate, allRates, saveRate, saveRates,
