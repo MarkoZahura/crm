@@ -816,6 +816,9 @@
   border-radius: 50%; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--text-2);
 }
 .ex-head .ex-name { flex: 1; min-width: 0; height: 32px; }
+/* Повтори / секунди (вправа на час) */
+.ex-unit { flex-shrink: 0; padding: 2px; }
+.ex-unit button { height: 26px; padding: 0 8px; font-size: 12px; }
 .sets { display: flex; flex-direction: column; gap: 4px; }
 .set-row { display: grid; grid-template-columns: 52px minmax(0, 110px) minmax(0, 140px) 30px; gap: 8px; align-items: center; }
 .set-row > .subtle { text-align: center; }

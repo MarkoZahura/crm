@@ -9,6 +9,10 @@
      календар усіх тижнів, правила, дата старту, зсув графіка, видалення.
    • «Виконано» відкриває форму журналу з планом дня; запис отримує
      program = { id, week, day, date, planned, repeat? }.
+   • Сила (з 15.11.2026): підхід — reps (+ holdSec/relaxSec) або durationSec (вправа на час →
+     у журналі exercise.unit = 'sec', підходи { sec, weight }); phaseLabel — назва фази;
+     тести (test-… / «Тест…» / test: true) — у плані орієнтир, у журнал — фактичний результат
+     (result: 'reps'|'sec'; «… за 10 с» — кількість). Посилання: YouTube — «Відео техніки», інше — «Стаття».
    • «Сьогоднішнє тренування» на Головній і пункти в розкладі.
 
    Дані: сховище programs, запис = одна програма:
@@ -79,6 +83,51 @@ window.CRM = window.CRM || {};
   }
   const kindOf = (p) => KINDS[p.kind] || KINDS.strength;
   const phaseOf = (id) => PHASES[id] || { name: id ? id.charAt(0).toUpperCase() + id.slice(1) : 'Фаза', color: 'violet' };
+  // Фази з назвою з файлу (phaseLabel): перша назва фази — колір фази, наступні з тим самим phase — свої кольори
+  const EXTRA_PHASE_COLORS = ['violet', 'green', 'magenta', 'teal', 'olive', 'brown', 'red', 'orange', 'yellow'];
+  const phaseKey = (s) => s.phase + '\u0001' + (s.phaseLabel || '');
+  const phaseCache = new WeakMap();
+  function phaseMap(p) {
+    const plan = p.plan;
+    let m = phaseCache.get(plan);
+    if (m) return m;
+    m = new Map();
+    const ss = plan.sessions || [];
+    const used = new Set(ss.map((s) => phaseOf(s.phase).color));
+    const seenPhase = new Set();
+    ss.forEach((s) => {
+      const key = phaseKey(s);
+      if (m.has(key)) return;
+      const base = phaseOf(s.phase);
+      let color = base.color;
+      if (seenPhase.has(s.phase)) {
+        color = EXTRA_PHASE_COLORS.find((c) => !used.has(c)) || base.color;
+        used.add(color);
+      }
+      seenPhase.add(s.phase);
+      m.set(key, { name: s.phaseLabel || base.name, color });
+    });
+    phaseCache.set(plan, m);
+    return m;
+  }
+  /** Фаза дня: { name (phaseLabel з файлу або назва за phase), color }. */
+  const phaseOfSession = (p, s) => phaseMap(p).get(phaseKey(s)) || phaseOf(s.phase);
+  /** Тест (id «test-…», назва «Тест…» або test: true у файлі): число в плані — орієнтир, у журнал — фактичний результат. */
+  function autoTest(id, name) {
+    return /^test[-_]/i.test(String(id || '')) || /^тест(?![а-яіїєґʼ'’])/i.test(String(name || '').trim());
+  }
+  const isTestEx = (ex) => !!ex && (ex.test !== undefined ? ex.test === true : autoTest(ex.id, ex.name));
+  /**
+   * Що записувати в журнал за вправою основної частини сили: 'reps' (кількість) або 'sec' (секунди).
+   * План на час (durationSec) — секунди; але в тесті «… за 10 с» (або result: "reps" у файлі) — кількість.
+   */
+  function resultUnit(ex, m) {
+    const planned = m.durationSec && !m.reps ? 'sec' : 'reps';
+    if (!isTestEx(ex)) return planned;
+    if (ex.result === 'reps' || ex.result === 'sec') return ex.result;
+    if (planned === 'sec' && /за\s*\d+\s*(с|сек|хв)(?![а-яіїєґ])/i.test(ex.name || '')) return 'reps';
+    return planned;
+  }
   const colorOf = (p) => CRM.dict.categoryColor(p.color || 'orange');
   /** «Біг на вулиці, 24 тижні» → «Біг на вулиці» (для значків і рядків). */
   function shortTitle(p) {
@@ -146,12 +195,17 @@ window.CRM = window.CRM || {};
           if (!url || url.protocol !== 'https:') { add(`${where}: videoUrl має бути посиланням, що починається з https://, а зараз — ${show(e.videoUrl)}.`); extraOk = false; } else videoUrl = url.href;
         }
         if (e.videoVerified !== undefined && typeof e.videoVerified !== 'boolean') { add(`${where}: videoVerified має бути true або false.`); extraOk = false; }
+        if (e.test !== undefined && typeof e.test !== 'boolean') { add(`${where}: test (це тест) має бути true або false.`); extraOk = false; }
+        if (e.result !== undefined && e.result !== 'reps' && e.result !== 'sec') { add(`${where}: result (що записувати в тесті) має бути "reps" (кількість) або "sec" (секунди), а зараз — ${show(e.result)}.`); extraOk = false; }
         if (!ok || !extraOk) {
           // Вправу все одно запамʼятовуємо, щоб не сипати зайвих помилок «вправи немає» в днях
           if (ok) exById.set(e.id, { id: e.id, name: e.name.trim(), part: e.part });
           return;
         }
         const ex = { id: e.id, name: e.name.trim(), part: e.part, focus, videoUrl, videoVerified: e.videoVerified === true };
+        // Тест: явно test: true або id «test-…» / назва «Тест…»; result — що записувати в журнал
+        if (e.test !== undefined) ex.test = e.test; else if (autoTest(e.id, ex.name)) ex.test = true;
+        if (e.result !== undefined) ex.result = e.result;
         exById.set(e.id, ex);
         exercises.push(ex);
       });
@@ -211,6 +265,7 @@ window.CRM = window.CRM || {};
           if (s.date !== expected) { add(`${where}: дата ${s.date} не збігається з тижнем і днем — від старту ${obj.startDate} це має бути ${expected}.`); ok = false; }
         }
         if (!isText(s.phase, 60)) { add(`${where}: phase (фаза) має бути непорожнім текстом, напр. "adaptation" або "main".`); ok = false; }
+        if (s.phaseLabel !== undefined && !isText(s.phaseLabel, 60)) { add(`${where}: phaseLabel (назва фази) має бути непорожнім текстом до 60 символів, напр. "Сила".`); ok = false; }
         if (typeof s.rest !== 'boolean') { add(`${where}: rest має бути true (відпочинок) або false (тренування).`); ok = false; }
         if (!Array.isArray(s.main)) { add(`${where}: main (вправи дня) має бути списком, для відпочинку — порожнім [].`); return; }
         if (s.rest === true && s.main.length) { add(`${where}: у дні відпочинку (rest: true) не може бути вправ.`); ok = false; }
@@ -223,11 +278,23 @@ window.CRM = window.CRM || {};
           const x = { exerciseId: m.exerciseId };
           const nm = `${w} ${exName(m.exerciseId)}`;
           if (obj.kind === 'strength') {
+            // Підхід — або повторення (reps; за потреби з утриманням holdSec і розслабленням relaxSec у кожному повторі),
+            // або час (durationSec — планка, утримання, тест на час)
+            const hasReps = m.reps !== undefined;
+            const hasDur = m.durationSec !== undefined;
             if (!isInt(m.sets, 1, 50)) { add(`${nm}: sets (підходи) має бути цілим числом від 1 до 50.`); ok = false; }
-            if (!isInt(m.reps, 1, 1000)) { add(`${nm}: reps (повторення) має бути цілим числом від 1 до 1000.`); ok = false; }
+            if (!hasReps && !hasDur) { add(`${nm}: вкажи reps (повторення) або durationSec (тривалість підходу, с), напр. "reps": 12 чи "durationSec": 30.`); ok = false; }
+            else if (hasReps && hasDur) { add(`${nm}: вкажи щось одне — reps (повторення) або durationSec (тривалість підходу, с), а не обидва.`); ok = false; }
+            if (hasReps && !isInt(m.reps, 1, 1000)) { add(`${nm}: reps (повторення) має бути цілим числом від 1 до 1000.`); ok = false; }
+            if (hasDur && !isInt(m.durationSec, 1, 36000)) { add(`${nm}: durationSec (тривалість підходу, с) має бути цілим числом від 1 до 36000.`); ok = false; }
+            [['holdSec', 'утримання', 1], ['relaxSec', 'розслаблення', 0]].forEach(([k, label, min]) => {
+              if (m[k] === undefined) return;
+              if (!hasReps) { add(`${nm}: ${k} (${label} в кожному повторі, с) буває лише разом з reps (повтореннями).`); ok = false; }
+              else if (!isInt(m[k], min, 600)) { add(`${nm}: ${k} (${label} в кожному повторі, с) має бути цілим числом від ${min} до 600.`); ok = false; }
+            });
             if (m.restSec !== undefined && !isInt(m.restSec, 0, 3600)) { add(`${nm}: restSec (відпочинок, с) має бути цілим числом від 0 до 3600.`); ok = false; }
-            x.sets = m.sets; x.reps = m.reps;
-            if (m.restSec !== undefined) x.restSec = m.restSec;
+            x.sets = m.sets;
+            ['reps', 'durationSec', 'holdSec', 'relaxSec', 'restSec'].forEach((k) => { if (m[k] !== undefined) x[k] = m[k]; });
           } else if (obj.kind === 'running') {
             const dist = m.distanceM !== undefined;
             const intervals = m.runSec !== undefined || m.walkSec !== undefined || m.rounds !== undefined;
@@ -242,7 +309,11 @@ window.CRM = window.CRM || {};
           }
           main.push(x);
         });
-        if (ok) sessions.push({ week: s.week, day: s.day, date: s.date, phase: s.phase.trim(), rest: s.rest, main });
+        if (ok) {
+          const ses = { week: s.week, day: s.day, date: s.date, phase: s.phase.trim(), rest: s.rest, main };
+          if (s.phaseLabel !== undefined) ses.phaseLabel = s.phaseLabel.trim();
+          sessions.push(ses);
+        }
       });
       if (weeksOk && errors.length < 200) {
         const need = obj.durationWeeks * 7;
@@ -423,8 +494,23 @@ window.CRM = window.CRM || {};
   function partDose(it) {
     return [it.reps ? `${it.reps} повт.` : null, it.durationSec ? secLabel(it.durationSec) : null].filter(Boolean).join(' · ');
   }
-  function mainDose(m) {
-    if (m.sets) return `${m.sets}×${m.reps}`;
+  /** «утримання 3 с, розслаблення 6 с» (кожен повтор). */
+  function holdText(m) {
+    return [m.holdSec ? `утримання ${secLabel(m.holdSec)}` : null, m.relaxSec ? `розслаблення ${secLabel(m.relaxSec)}` : null].filter(Boolean).join(', ');
+  }
+  /**
+   * Доза вправи основної частини: «4×12», «3×30 с», «1×10 хв», «2×8 · утримання 3 с, розслаблення 6 с»;
+   * short — коротко для списків: «2×8 по 3 с».
+   */
+  function mainDose(m, short) {
+    if (m.sets) {
+      const base = m.reps ? `${m.sets}×${m.reps}` : m.durationSec ? `${m.sets}×${secLabel(m.durationSec)}` : String(m.sets);
+      if (m.reps && (m.holdSec || m.relaxSec)) {
+        if (short) return m.holdSec ? `${base} по ${secLabel(m.holdSec)}` : base;
+        return `${base} · ${holdText(m)}`;
+      }
+      return base;
+    }
     if (m.rounds) return `${m.rounds} × (${mmss(m.runSec)} біг + ${mmss(m.walkSec)} ходьба)`;
     if (m.distanceM) return kmText(m.distanceM);
     return '';
@@ -434,7 +520,13 @@ window.CRM = window.CRM || {};
     if (!s) return 'Перерва в графіку';
     if (s.rest) return 'Відпочинок';
     const ex = exMap(p);
-    return s.main.map((m) => `${(ex.get(m.exerciseId) || { name: 'Вправа' }).name} ${mainDose(m)}`.trim()).join(' · ');
+    return s.main.map((m) => `${(ex.get(m.exerciseId) || { name: 'Вправа' }).name} ${mainDose(m, true)}`.trim()).join(' · ');
+  }
+  /** Секунди одного підходу сили: час (durationSec) або повтори × (утримання + розслаблення; без них — ≈3 с). */
+  function setSeconds(m) {
+    if (m.durationSec && !m.reps) return m.durationSec;
+    const perRep = m.holdSec != null || m.relaxSec != null ? (m.holdSec || 1) + (m.relaxSec || 0) : 3;
+    return (m.reps || 0) * perRep;
   }
   /** Орієнтовна тривалість дня, хв (null — для бігу на дистанцію темп невідомий). */
   function estimateMinutes(p, s) {
@@ -442,7 +534,7 @@ window.CRM = window.CRM || {};
     const part = (items) => items.reduce((t, it) => t + (it.durationSec || 0) + (it.reps ? it.reps * 3 : 0), 0);
     let sec = part(p.plan.warmup) + part(p.plan.cooldown);
     for (const m of s.main) {
-      if (m.sets) sec += m.sets * ((m.reps || 0) * 3 + (m.restSec || 0));
+      if (m.sets) sec += m.sets * (setSeconds(m) + (m.restSec || 0));
       else if (m.rounds) sec += m.rounds * ((m.runSec || 0) + (m.walkSec || 0));
       else return null;
     }
@@ -456,20 +548,44 @@ window.CRM = window.CRM || {};
     if (!s) return '·';
     if (s.rest) return '—';
     const m = s.main[0];
-    if (m.sets) return `${m.sets}×${m.reps}`;
+    if (m.sets && m.reps) return `${m.sets}×${m.reps}`;
+    if (m.sets && m.durationSec) {
+      const d = m.durationSec;
+      return `${m.sets}×${d < 60 || d % 60 ? d + 'с' : d / 60 + 'хв'}`;
+    }
     if (m.rounds) return 'Б/Х';
     if (m.distanceM) return kmShort(m.distanceM);
     return '•';
   }
 
   // ---------- «Виконано» → запис у журналі ----------
+  /** План дня для запису в журналі (знімок): назва + числа; для тестів — test і result (що записується). */
   function plannedSnapshot(p, s) {
     const ex = exMap(p);
     return s.main.map((m) => {
-      const x = Object.assign({ name: (ex.get(m.exerciseId) || { name: 'Вправа' }).name }, m);
+      const e = ex.get(m.exerciseId) || { name: 'Вправа' };
+      const x = Object.assign({ name: e.name }, m);
       delete x.exerciseId;
+      if (p.kind !== 'running' && m.sets) {
+        if (isTestEx(e)) { x.test = true; x.result = resultUnit(e, m); }
+      }
       return x;
     });
+  }
+  /** Вправа для форми журналу за планом: повтори або секунди; у тестах — порожньо (число з плану — сірим). */
+  function presetExercise(x) {
+    const unit = x.result || (x.durationSec && !x.reps ? 'sec' : 'reps');
+    const planVal = x.reps || (unit === 'sec' ? x.durationSec : null);
+    const n = x.sets || 1;
+    const sets = Array.from({ length: n }, () => {
+      const st = unit === 'sec' ? { sec: x.test ? null : planVal } : { reps: x.test ? null : (x.reps != null ? x.reps : null) };
+      st.weight = null;
+      if (x.test && planVal) st.ph = planVal;
+      return st;
+    });
+    const out = { name: x.name, sets };
+    if (unit === 'sec') out.unit = 'sec';
+    return out;
   }
   /** Заготовка для форми журналу з планом дня (факт користувач править перед збереженням). */
   function presetFor(p, slot) {
@@ -491,8 +607,12 @@ window.CRM = window.CRM || {};
       preset.hint = `${where}. План: ${planned.map((x) => mainDose(x)).join(' + ')}. Впиши фактичну дистанцію й час — темп порахується сам.`;
     } else {
       preset.title = shortTitle(p).slice(0, 60);
-      preset.exercises = planned.map((x) => ({ name: x.name, sets: Array.from({ length: x.sets || 1 }, () => ({ reps: x.reps != null ? x.reps : null, weight: null })) }));
-      preset.hint = `${where}. Повторення вже вписано за планом — виправ на фактичні в кожному підході.`;
+      preset.exercises = planned.map(presetExercise);
+      const timed = planned.some((x) => !x.test && x.durationSec && !x.reps);
+      const tests = planned.filter((x) => x.test);
+      preset.hint = `${where}. Повторення вже вписано за планом — виправ на фактичні в кожному підході.` +
+        (timed ? ' Вправи на час — у секундах.' : '') +
+        (tests.length ? ` ${tests.length > 1 ? 'Тести' : 'Тест'}: впиши фактичний результат${tests.some((x) => x.result === 'reps' && x.durationSec) ? ' (у тесті на кількість за час — скільки вийшло)' : ''}; сірим — число з плану.` : '');
     }
     return preset;
   }
@@ -509,10 +629,17 @@ window.CRM = window.CRM || {};
     if (!Array.isArray(pl) || !pl.length) return null;
     let judged = false;
     for (const x of pl) {
-      if (x.sets && x.reps) {
+      if (x.sets && (x.reps || x.durationSec)) {
         const e = (w.exercises || []).find((ex) => ex.name === x.name);
         if (!e) return false;
-        const good = (e.sets || []).filter((st) => Number(st.reps) >= x.reps).length;
+        const sec = e.unit === 'sec';
+        const vals = (e.sets || []).map((st) => Number(sec ? st.sec : st.reps) || 0);
+        // Тест: план — орієнтир; досить записаного результату
+        if (x.test) { if (!vals.some((v) => v > 0)) return false; judged = true; continue; }
+        const wantSec = !!(x.durationSec && !x.reps);
+        if (wantSec !== sec) continue; // записано в інших одиницях — порівняти не можна
+        const need = wantSec ? x.durationSec : x.reps;
+        const good = vals.filter((v) => v >= need).length;
         if (good < x.sets) return false;
         judged = true;
       } else if (x.distanceM) {
@@ -527,7 +654,15 @@ window.CRM = window.CRM || {};
     if (w.type === 'cardio') {
       return [w.distanceKm ? kmText(Math.round(w.distanceKm * 1000)) : null, w.durationMin ? durText(w.durationMin) : null, CRM.training.pace(w)].filter(Boolean).join(' · ');
     }
-    return (w.exercises || []).map((e) => `${e.name}: ${(e.sets || []).map((s) => s.reps).join('·') || '—'}`).join(' · ');
+    return (w.exercises || []).map((e) => `${e.name}: ${setsFact(e) || '—'}`).join(' · ');
+  }
+  /** Підходи вправи з журналу: «12·12·10» або «30·30·25 с», «10 хв». */
+  function setsFact(e) {
+    const sets = e.sets || [];
+    if (e.unit !== 'sec') return sets.map((s) => s.reps).join('·');
+    const v = sets.map((s) => Number(s.sec) || 0);
+    if (!v.length) return '';
+    return v.every((x) => x < 60) ? `${v.join('·')} с` : v.map(secLabel).join('·');
   }
   function badgeText(w) {
     const l = w.program || {};
@@ -580,8 +715,9 @@ window.CRM = window.CRM || {};
     const ss = data.plan.sessions;
     const trainings = ss.filter((s) => !s.rest).length;
     const exs = data.plan.exercises;
-    const verified = exs.filter((e) => e.videoUrl && e.videoVerified).length;
-    const unverified = exs.filter((e) => e.videoUrl && !e.videoVerified).length;
+    const verified = exs.filter((e) => e.videoUrl && e.videoVerified && isVideoUrl(e.videoUrl)).length;
+    const unverified = exs.filter((e) => e.videoUrl && !e.videoVerified && isVideoUrl(e.videoUrl)).length;
+    const articles = exs.filter((e) => e.videoUrl && !isVideoUrl(e.videoUrl)).length;
     const dateIn = ui.dateInput({ value: existing ? existing.startDate : data.startDate, clearable: false, ariaLabel: 'Дата старту' });
     const kind = KINDS[data.kind];
     const body = h('div', { class: 'stack', style: { gap: '14px' } },
@@ -595,6 +731,7 @@ window.CRM = window.CRM || {};
         h('span', null, fmt.count(ss.length - trainings, ['день відпочинку', 'дні відпочинку', 'днів відпочинку'])),
         h('span', null, fmt.count(exs.length, ['вправа', 'вправи', 'вправ'])),
         verified || unverified ? h('span', null, `відео: ${verified} перевір.${unverified ? `, ${unverified} — пошук` : ''}`) : null,
+        articles ? h('span', null, fmt.count(articles, ['стаття', 'статті', 'статей'])) : null,
         data.plan.rules.length ? h('span', null, fmt.count(data.plan.rules.length, ['правило', 'правила', 'правил'])) : null),
       ui.field({ label: 'Дата старту', input: dateIn, hint: `У файлі: ${fmt.date(data.startDate)}. Інша дата зсуне весь розклад.` }),
       existing ? h('div', { class: 'callout callout-warning' }, CRM.icon('alert'),
@@ -869,11 +1006,22 @@ window.CRM = window.CRM || {};
     return (p.shifts || []).map((s) => `+${fmt.count(s.days, ['день', 'дні', 'днів'])} з ${fmt.dateShort(shiftStart(p, s))}${s.fill === 'pause' ? ' (перерва)' : ''}`).join(', ');
   }
 
+  /** Посилання з YouTube (youtube.com, youtu.be) — відео; решта (NHS, Cleveland Clinic…) — стаття. */
+  function isVideoUrl(url) {
+    let host = '';
+    try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return false; }
+    return /(^|\.)youtube\.com$|(^|\.)youtube-nocookie\.com$|^youtu\.be$/.test(host);
+  }
+  function linkLabel(ex) {
+    const video = isVideoUrl(ex.videoUrl);
+    if (video && /youtube\.com\/results/i.test(ex.videoUrl)) return 'Пошук відео на YouTube';
+    if (video) return ex.videoVerified ? 'Відео техніки' : 'Відео (не перевірене)';
+    return ex.videoVerified ? 'Стаття' : 'Стаття (не перевірена)';
+  }
   function videoLink(ex) {
-    const search = /youtube\.com\/results/i.test(ex.videoUrl);
-    const label = ex.videoVerified ? 'Відео техніки' : search ? 'Пошук відео на YouTube' : 'Відео (не перевірене)';
-    return h('a', { href: ex.videoUrl, target: '_blank', rel: 'noopener noreferrer', class: 'prog-video' + (ex.videoVerified ? '' : ' unverified'), title: ex.videoVerified ? null : 'Посилання не перевірене — може відкритися пошук' },
-      CRM.icon('external', { size: 'sm' }), label);
+    const video = isVideoUrl(ex.videoUrl);
+    return h('a', { href: ex.videoUrl, target: '_blank', rel: 'noopener noreferrer', class: 'prog-video' + (video ? '' : ' prog-article') + (ex.videoVerified ? '' : ' unverified'), title: ex.videoVerified ? null : 'Посилання не перевірене — може відкритися пошук' },
+      CRM.icon('external', { size: 'sm' }), linkLabel(ex));
   }
 
   function exBlock(ex, dose, meta) {
@@ -884,6 +1032,19 @@ window.CRM = window.CRM || {};
       (e.focus && e.focus.length) || e.videoUrl ? h('div', { class: 'ip-ex-extra' },
         e.focus && e.focus.length ? h('details', { class: 'prog-tips' }, h('summary', null, 'На чому зосередитись'), h('ul', null, e.focus.map((f) => h('li', null, f)))) : null,
         e.videoUrl ? videoLink(e) : null) : null);
+  }
+
+  /** Підпис під вправою основної частини: відпочинок і, для тестів, що записати. */
+  function mainMeta(p, e, m) {
+    const out = [];
+    if (m.restSec) out.push(m.sets > 1 ? `Відпочинок між підходами ${secLabel(m.restSec)}.` : `Відпочинок після вправи ${secLabel(m.restSec)}.`);
+    if (p.kind !== 'running' && m.sets && isTestEx(e)) {
+      const unit = resultUnit(e, m);
+      out.push(unit === 'reps' && m.durationSec
+        ? `Тест: число в плані — час; у журнал запиши кількість за ${secLabel(m.durationSec)}.`
+        : `Тест: число в плані — орієнтир (див. правила); у журнал запиши фактичний результат${unit === 'sec' ? ' в секундах' : ''}.`);
+    }
+    return out.length ? out.join(' ') : null;
   }
 
   function partBlock(p, key, title) {
@@ -923,7 +1084,7 @@ window.CRM = window.CRM || {};
     // Перерва, але цього дня тренування виконано ще до зсуву — показуємо його
     const hist = slot.pause ? historyOn(p, date, done) : null;
     const shown = hist ? hist.s : s;
-    const ph = shown ? phaseOf(shown.phase) : null;
+    const ph = shown ? phaseOfSession(p, shown) : null;
     const titleText = hist ? `Тиждень ${hist.s.week} · день ${hist.s.day} · до перерви`
       : !s ? 'Перерва' : s.rest ? 'Відпочинок' + (slot.repeat ? ' (повтор)' : '') : `Тиждень ${s.week} · день ${s.day}${slot.repeat ? ' · повтор' : ''}`;
     parts.push(h('h3', { class: 'prog-title' }, h('span', { class: 'prog-dot', style: { '--ph': ph ? CRM.dict.categoryColor(ph.color) : null }, hidden: !shown || shown.rest }), titleText));
@@ -958,7 +1119,7 @@ window.CRM = window.CRM || {};
       parts.push(partBlock(p, 'warmup', 'Розминка'));
       parts.push(h('section', { class: 'ip-part ip-main', dataset: { part: 'main' } },
         h('h4', { class: 'ip-part-title' }, 'Основна частина'),
-        h('div', { class: 'prog-ex-list' }, s.main.map((m) => exBlock(ex.get(m.exerciseId), mainDose(m), m.restSec ? `Відпочинок між підходами ${secLabel(m.restSec)}.` : null)))));
+        h('div', { class: 'prog-ex-list' }, s.main.map((m) => exBlock(ex.get(m.exerciseId), mainDose(m), mainMeta(p, ex.get(m.exerciseId), m))))));
       parts.push(partBlock(p, 'cooldown', 'Заминка'));
     } else {
       if (hist) parts.push(doneView(hist.w));
@@ -1017,8 +1178,8 @@ window.CRM = window.CRM || {};
         if (date === T) cls.push('today');
         if (date === sel) cls.push('sel');
         if (!rest && date < T && !isDone) cls.push('missed');
-        const ph = s ? phaseOf(s.phase) : null;
-        if (s && !s.rest) phases.set(s.phase, ph);
+        const ph = s ? phaseOfSession(p, s) : null;
+        if (s && !s.rest) phases.set(phaseKey(s), ph);
         const pd = D.parse(date);
         cells.push(h('button', {
           type: 'button', class: cls.join(' '),
@@ -1037,7 +1198,10 @@ window.CRM = window.CRM || {};
       h('span', null, h('i', { class: 'rest' }), 'Відпочинок'),
       gaps ? h('span', null, '↻ повтор (зсув графіка)') : null,
       pauses ? h('span', null, h('i', { class: 'pause' }), 'Перерва (зсув графіка)') : null,
-      p.kind === 'running' ? h('span', null, 'Б/Х — біг-ходьба; числа — км') : h('span', null, 'Числа — підходи × повторення першої вправи'));
+      p.kind === 'running' ? h('span', null, 'Б/Х — біг-ходьба; числа — км')
+        : h('span', null, p.plan.sessions.some((s) => s.main[0] && s.main[0].durationSec && !s.main[0].reps)
+          ? 'Числа — підходи × повторення (с, хв — час підходу) першої вправи'
+          : 'Числа — підходи × повторення першої вправи'));
     return h('div', { class: 'prog-cal' }, h('div', { class: 'prog-grid', role: 'group', 'aria-label': `Календар програми, ${fmt.count(rows, ['тиждень', 'тижні', 'тижнів'])}` }, cells), legend);
   }
 
@@ -1214,6 +1378,7 @@ window.CRM = window.CRM || {};
     SCHEMA_VERSION, validate, jsonErrorText, importProgram, importFile, importButton,
     list, get, timeline, slotAt, dateOfSession, endOf, doneMap, historyOn, progress, statusText, currentWeek,
     headline, presetFor, markDone, planMet, addShift, removeShift, entriesOn, openDay, badgeText, shortTitle,
+    mainDose, estimateMinutes, isTestEx, resultUnit, phaseOfSession, linkLabel, isVideoUrl, factText, setsFact,
     listView, pageView, homeCard
   };
 })(window.CRM);

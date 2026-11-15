@@ -304,6 +304,8 @@ window.CRM = window.CRM || {};
     const st = existing ? CRM.utils.deepClone(existing)
       : Object.assign({ type: 'strength', date: D.today(), title: '', durationMin: null, distanceKm: null, exercises: [], note: '' }, preset ? CRM.utils.deepClone(preset) : {});
     if (!st.exercises) st.exercises = [];
+    // Вправа без жодного підходу (напр., тест, де результат ще не вписано) — порожній рядок, щоб було куди вписати
+    st.exercises.forEach((ex) => { if (!ex.sets || !ex.sets.length) ex.sets = [ex.unit === 'sec' ? { sec: null, weight: null } : { reps: null, weight: null }]; });
 
     const typeSeg = h('div', { class: 'segmented wo-types', role: 'radiogroup', 'aria-label': 'Тип тренування' });
     function renderType() {
@@ -352,30 +354,58 @@ window.CRM = window.CRM || {};
     const listId = 'ex-names-' + CRM.utils.uid().slice(0, 6);
     const datalist = h('datalist', { id: listId }, exerciseNames().map((n) => h('option', { value: n })));
     const exBox = h('div', { class: 'ex-list' });
+    /** Повтори ↔ секунди: числа в підходах лишаються, змінюється лише що вони означають. */
+    function setUnit(ex, unit) {
+      if ((ex.unit === 'sec' ? 'sec' : 'reps') === unit) return;
+      (ex.sets || []).forEach((s) => {
+        if (unit === 'sec') { s.sec = s.reps != null ? s.reps : null; delete s.reps; } else { s.reps = s.sec != null ? s.sec : null; delete s.sec; }
+      });
+      if (unit === 'sec') ex.unit = 'sec'; else delete ex.unit;
+      renderExercises();
+    }
     function renderExercises() {
       const withWeight = st.type === 'strength' || st.type === 'home';
       ui.mount(exBox, st.exercises.map((ex, ei) => {
         const nameIn = h('input', { class: 'input ex-name', value: ex.name || '', placeholder: 'Вправа, напр., Присідання', list: listId, maxlength: 60, 'aria-label': 'Назва вправи' });
         nameIn.addEventListener('input', () => { ex.name = nameIn.value; });
-        return h('div', { class: 'ex-card' },
+        // Вправа на час (планка, утримання) — підходи в секундах
+        const sec = ex.unit === 'sec';
+        const key = sec ? 'sec' : 'reps';
+        const unitSeg = h('div', { class: 'segmented ex-unit', role: 'radiogroup', 'aria-label': 'Що записувати в підходах' },
+          [['reps', 'Повт.', 'Повтори'], ['sec', 'Сек.', 'Секунди (вправа на час)']].map(([id, label, full]) => h('button', {
+            type: 'button', role: 'radio', class: key === id ? 'active' : '', 'aria-checked': key === id ? 'true' : 'false',
+            'aria-label': full, title: full, dataset: { unit: id }, onClick: () => setUnit(ex, id)
+          }, label)));
+        return h('div', { class: 'ex-card' + (sec ? ' ex-sec' : '') },
           h('div', { class: 'ex-head' },
             h('span', { class: 'ex-num' }, String(ei + 1)),
             nameIn,
+            unitSeg,
             h('button', { type: 'button', class: 'btn btn-ghost btn-icon btn-sm', title: 'Видалити вправу', 'aria-label': 'Видалити вправу', onClick: () => { st.exercises.splice(ei, 1); renderExercises(); } }, CRM.icon('trash', { size: 'sm' }))),
           h('div', { class: 'sets' },
-            h('div', { class: 'set-row set-head' }, h('span', null, 'Підхід'), h('span', null, 'Повтори'), withWeight ? h('span', null, 'Вага, кг') : null, h('span')),
+            h('div', { class: 'set-row set-head' }, h('span', null, 'Підхід'), h('span', null, sec ? 'Секунди' : 'Повтори'), withWeight ? h('span', null, 'Вага, кг') : null, h('span')),
             (ex.sets || []).map((s, si) => {
-              const reps = h('input', { class: 'input input-sm', type: 'number', min: 0, step: 1, value: s.reps != null ? s.reps : '', 'aria-label': `Повтори, підхід ${si + 1}` });
-              reps.addEventListener('input', () => { s.reps = reps.value === '' ? null : Number(reps.value); });
+              const val = h('input', {
+                class: 'input input-sm', type: 'number', min: 0, step: 1, value: s[key] != null ? s[key] : '',
+                placeholder: s.ph != null ? String(s.ph) : '', 'aria-label': `${sec ? 'Секунди' : 'Повтори'}, підхід ${si + 1}`
+              });
+              val.addEventListener('input', () => { s[key] = val.value === '' ? null : Number(val.value); });
               const weight = h('input', { class: 'input input-sm', type: 'text', inputmode: 'decimal', placeholder: st.type === 'home' ? 'за потреби' : '', value: s.weight != null ? String(s.weight).replace('.', ',') : '', 'aria-label': `Вага, підхід ${si + 1}` });
               weight.addEventListener('input', () => { const v = CRM.utils.parseAmount(weight.value); s.weight = weight.value.trim() === '' || isNaN(v) ? null : v; });
               return h('div', { class: 'set-row' },
-                h('span', { class: 'subtle num' }, String(si + 1)), reps, withWeight ? weight : null,
+                h('span', { class: 'subtle num' }, String(si + 1)), val, withWeight ? weight : null,
                 h('button', { type: 'button', class: 'btn btn-ghost btn-icon btn-sm', title: 'Видалити підхід', 'aria-label': 'Видалити підхід', onClick: () => { ex.sets.splice(si, 1); renderExercises(); } }, CRM.icon('x', { size: 'sm' })));
             }),
             h('button', {
               type: 'button', class: 'btn btn-ghost btn-sm add-set',
-              onClick: () => { const last = (ex.sets || [])[ex.sets.length - 1]; ex.sets = (ex.sets || []).concat([last ? { reps: last.reps, weight: last.weight } : { reps: null, weight: null }]); renderExercises(); }
+              onClick: () => {
+                const last = (ex.sets || [])[ex.sets.length - 1];
+                const next = sec ? { sec: last ? last.sec : null } : { reps: last ? last.reps : null };
+                next.weight = last ? last.weight : null;
+                if (last && last.ph != null) next.ph = last.ph;
+                ex.sets = (ex.sets || []).concat([next]);
+                renderExercises();
+              }
             }, CRM.icon('plus', { size: 'sm' }), 'Підхід')));
       }),
       h('button', {
@@ -415,7 +445,16 @@ window.CRM = window.CRM || {};
       let exercises = [];
       if (st.type === 'strength' || st.type === 'home') {
         exercises = st.exercises
-          .map((ex) => ({ name: (ex.name || '').trim(), sets: (ex.sets || []).filter((s) => s.reps != null && s.reps !== '').map((s) => ({ reps: Math.max(0, Math.round(Number(s.reps) || 0)), weight: s.weight != null ? CRM.utils.round2(s.weight) : null })) }))
+          .map((ex) => {
+            const sec = ex.unit === 'sec';
+            const k = sec ? 'sec' : 'reps';
+            const sets = (ex.sets || []).filter((s) => s[k] != null && s[k] !== '').map((s) => {
+              const v = Math.max(0, Math.round(Number(s[k]) || 0));
+              const w = s.weight != null ? CRM.utils.round2(s.weight) : null;
+              return sec ? { sec: v, weight: w } : { reps: v, weight: w };
+            });
+            return sec ? { name: (ex.name || '').trim(), unit: 'sec', sets } : { name: (ex.name || '').trim(), sets };
+          })
           .filter((ex) => ex.name || ex.sets.length);
         if (exercises.some((ex) => !ex.name)) { ui.toast('Вкажи назву для кожної вправи', { type: 'error' }); ok = false; }
       }

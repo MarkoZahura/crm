@@ -1359,8 +1359,9 @@ window.CRM = window.CRM || {};
     const groups = [];
     sets.forEach((st) => {
       const g = groups[groups.length - 1];
-      if (g && g.reps === st.reps && g.weight === st.weight) g.n++;
-      else groups.push({ n: 1, reps: st.reps, weight: st.weight });
+      const reps = st.sec != null && st.reps == null ? `${st.sec} с` : st.reps; // вправа на час — секунди
+      if (g && g.reps === reps && g.weight === st.weight) g.n++;
+      else groups.push({ n: 1, reps, weight: st.weight });
     });
     return groups.map((g) => `${g.n}×${g.reps}` + (g.weight != null ? `×${fmt.number(g.weight, 2).replace(/,00$/, '')} кг` : '')).join(', ');
   }
@@ -1645,7 +1646,9 @@ window.CRM = window.CRM || {};
         merged.exercises = merged.exercises || [];
         rec.exercises.forEach((ex) => {
           const same = merged.exercises.find((e) => U.normalize(e.name) === U.normalize(ex.name));
-          if (same) same.sets = (same.sets || []).concat(ex.sets); else merged.exercises.push(ex);
+          // Вправа на час (unit: 'sec') — числа з рядка йдуть як секунди
+          const add = same && same.unit === 'sec' ? ex.sets.map((st) => ({ sec: st.reps, weight: st.weight })) : ex.sets;
+          if (same) same.sets = (same.sets || []).concat(add); else merged.exercises.push(ex);
         });
         if (rec.durationMin) merged.durationMin = roundSec((Number(merged.durationMin) || 0) + rec.durationMin);
         const saved = await CRM.store.save('workouts', merged);
