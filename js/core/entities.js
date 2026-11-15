@@ -58,10 +58,27 @@ window.CRM = window.CRM || {};
         if (r.done) return 'Архів' + (r.completedAt ? ' · виконано ' + fmt().dateShort(CRM.date.toKyivDate(r.completedAt)) : '');
         const parts = [CRM.dict.label('taskStatuses', r.status)];
         if (r.deadline) parts.push('дедлайн ' + fmt().relDay(r.deadline).toLowerCase());
+        const pj = r.projectId && CRM.projects ? CRM.projects.projectOfTask(r) : null;
+        if (pj) parts.push('проєкт «' + pj.name + '»');
         return parts.filter(Boolean).join(' · ');
       },
       text: (r) => [r.title, r.description, (r.checklist || []).map((c) => c.text).join(' '), (Array.isArray(r.labels) ? r.labels : []).map((l) => l + ' #' + l).join(' ')],
       route: (r) => ['tasks', { tab: r.done ? 'archive' : null, open: r.id }]
+    },
+    projects: {
+      label: 'Проєкт', group: 'Проєкти', icon: 'projects', iconClass: 'ico-task', section: 'projects',
+      title: (r) => r.name || 'Проєкт',
+      sub: (r) => (CRM.projects ? CRM.projects.subText(r) : ''),
+      text: (r) => [r.name, r.notes, linkText(r), (Array.isArray(r.stages) ? r.stages : []).map(stageText).join(' ')],
+      // Слова знайшлися в етапі (назва, нотатки, посилання), а не в самому проєкті — відкрити проєкт з цим етапом
+      hit: (r, terms) => {
+        const N = CRM.utils.normalize;
+        const base = N([r.name, r.notes, linkText(r)].filter(Boolean).join(' '));
+        if (terms.every((x) => base.includes(x))) return null;
+        const st = (Array.isArray(r.stages) ? r.stages : []).find((s) => s && terms.every((x) => N([r.name, stageText(s)].join(' ')).includes(x)));
+        return st ? { stage: st.id, sub: `Етап «${st.name}»` } : null;
+      },
+      route: (r, hit) => ['projects/' + r.id, hit && hit.stage ? { stage: hit.stage } : null]
     },
     events: {
       label: 'Подія', group: 'Події календаря', icon: 'calendar', iconClass: 'ico-event', section: 'calendar',
@@ -239,6 +256,13 @@ window.CRM = window.CRM || {};
     }
   };
 
+  /** Назви й адреси посилань (проєкт, етап). */
+  function linkText(x) {
+    return (Array.isArray(x && x.links) ? x.links : []).map((l) => [l && l.title, l && l.url].filter(Boolean).join(' ')).join(' ');
+  }
+  /** Текст етапу проєкту для пошуку: назва, нотатки, посилання. */
+  function stageText(s) { return [s && s.name, s && s.notes, linkText(s)].filter(Boolean).join(' '); }
+
   /** Текст теми курсу для пошуку: назва, нотатки, назви й адреси посилань. */
   function topicText(t) {
     return [t.title, t.notes, (Array.isArray(t.links) ? t.links : []).map((l) => [l && l.title, l && l.url].filter(Boolean).join(' ')).join(' ')]
@@ -264,7 +288,7 @@ window.CRM = window.CRM || {};
 
   CRM.entities = {
     types,
-    order: ['tasks', 'events', 'people', 'students', 'habits', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'books', 'foods'],
+    order: ['tasks', 'projects', 'events', 'people', 'students', 'habits', 'transactions', 'accounts', 'categories', 'recurring', 'goals', 'workouts', 'programs', 'courses', 'books', 'foods'],
     open, freqLabel, catName, accName, accCurrency, txSignedAmount
   };
 })(window.CRM);

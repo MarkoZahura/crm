@@ -9,7 +9,7 @@ window.CRM = window.CRM || {};
   'use strict';
 
   const DB_NAME = 'personal-crm';
-  const DB_VERSION = 8; // 2 — харчування (foods, meals); 3 — програми тренувань (programs); 4 — календар (events); 5 — люди (people); 6 — звички (habits); 7 — книги (books); 8 — учні (students)
+  const DB_VERSION = 9; // 2 — харчування (foods, meals); 3 — програми тренувань (programs); 4 — календар (events); 5 — люди (people); 6 — звички (habits); 7 — книги (books); 8 — учні (students); 9 — проєкти (projects)
 
   /** Схема сховищ. Змінюючи схему, збільш DB_VERSION і додай міграцію в onupgradeneeded. */
   const SCHEMA = {
@@ -28,6 +28,7 @@ window.CRM = window.CRM || {};
     habits: { keyPath: 'id' },
     books: { keyPath: 'id' },
     students: { keyPath: 'id' },
+    projects: { keyPath: 'id' },
     courses: { keyPath: 'id' },
     foods: { keyPath: 'id' },
     meals: { keyPath: 'id', indexes: [['date', 'date']] },

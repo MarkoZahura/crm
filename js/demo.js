@@ -438,7 +438,29 @@ window.CRM = window.CRM || {};
         log: bookLog([[-90, 30], [-85, 30]]) }, 92)
     ];
 
-    return { categories, accounts, transactions, recurring, goals, tasks, workouts, courses, foods, meals, events, people, habits, books, students, notifications };
+    // ---------- Проєкт (вигаданий): етапи з датами й задачі в них ----------
+    const pjId = uid();
+    const stg = (name, start, end, o) => Object.assign({ id: uid(), name, start, end, done: false, doneAt: null, notes: '', links: [] }, o || {});
+    const pjStages = [
+      stg('Заміри й кошторис', D.addDays(T, -20), D.addDays(T, -10)),
+      stg('Купити матеріали', null, D.addDays(T, 5), { notes: 'Плитка — 12 м², фарба — 2 відра по 10 л.' }),
+      stg('Демонтаж', null, D.addDays(T, 12)),
+      stg('Оздоблення', null, D.addDays(T, 35))
+    ];
+    const projects = [
+      base({ id: pjId, name: 'Ремонт кухні', color: 'orange', status: 'active', deadline: null, doneAt: null, stages: pjStages, links: [],
+        notes: 'Бюджет — до 60 000 ₴. Почати демонтаж після того, як усе купимо.' }, D.addDays(T, -21))
+    ];
+    const pjTask = (o, stageIdx) => task(Object.assign({ projectId: pjId, stageId: pjStages[stageIdx].id }, o));
+    tasks.push(
+      pjTask({ title: 'Заміряти кухню', priority: 'medium', done: true, completedAt: iso(D.addDays(T, -18), '18:30') }, 0),
+      pjTask({ title: 'Скласти кошторис', priority: 'high', done: true, completedAt: iso(D.addDays(T, -12), '21:10') }, 0),
+      pjTask({ title: 'Вибрати плитку', priority: 'medium', done: true, completedAt: iso(D.addDays(T, -3), '12:40') }, 1),
+      pjTask({ title: 'Замовити фарбу й шпаклівку', priority: 'medium' }, 1),
+      pjTask({ title: 'Домовитися з майстром про демонтаж', priority: 'low' }, 2)
+    );
+
+    return { categories, accounts, transactions, recurring, goals, tasks, projects, workouts, courses, foods, meals, events, people, habits, books, students, notifications };
   }
 
   CRM.demo = { generate };

@@ -330,20 +330,20 @@
   }
   .more-sheet:focus { outline: none; }
   .more-grab { width: 38px; height: 5px; margin: 2px auto 6px; border-radius: 3px; background: var(--border-strong); }
-  .more-title { margin: 12px 4px 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+  .more-title { margin: 10px 4px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
   .more-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .more-tile {
     position: relative; min-width: 0;
-    display: flex; flex-direction: column; align-items: center; gap: 7px;
-    padding: 14px 6px 11px; border-radius: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 10px 6px 8px; border-radius: 16px;
     background: var(--surface-2); color: var(--text);
     font-size: 13px; font-weight: 500; text-align: center; text-decoration: none;
     -webkit-tap-highlight-color: transparent;
   }
   .more-tile:hover { text-decoration: none; background: var(--surface-3); }
   .more-tile.active { background: var(--accent-soft); color: var(--accent-text); }
-  .more-ico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--surface); color: var(--accent); box-shadow: var(--shadow-card); }
-  .more-ico .icon { width: 21px; height: 21px; }
+  .more-ico { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--surface); color: var(--accent); box-shadow: var(--shadow-card); }
+  .more-ico .icon { width: 20px; height: 20px; }
   .more-label { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .more-count {
     position: absolute; top: 8px; right: 8px;

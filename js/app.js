@@ -101,6 +101,7 @@ window.CRM = window.CRM || {};
     { id: 'home', label: 'Головна', icon: 'home' },
     { id: 'calendar', label: 'Календар', icon: 'calendar' },
     { id: 'tasks', label: 'Задачі', icon: 'tasks', count: tasksCount },
+    { id: 'projects', label: 'Проєкти', icon: 'projects' },
     { group: 'Гроші' },
     { id: 'budget', label: 'Бюджет', icon: 'wallet' },
     { group: 'Здоровʼя' },
@@ -490,6 +491,7 @@ window.CRM = window.CRM || {};
     if (!CRM.people) missing.push('js/people.js');
     if (!CRM.habits) missing.push('js/habits.js');
     if (!CRM.books) missing.push('js/books.js');
+    if (!CRM.projects) missing.push('js/projects.js');
     else if (CRM.tasks && !CRM.tasks.create) missing.push('js/tasks.js (нова версія)');
     if (!CRM.bankImport) missing.push('js/budget/import.js');
     if (!CRM.limits) missing.push('js/budget/limits.js');

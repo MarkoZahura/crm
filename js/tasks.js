@@ -60,8 +60,13 @@ window.CRM = window.CRM || {};
   const view = {
     filter: loadPref('crm.tasks.filter', 'all'),
     sort: loadPref('crm.tasks.sort', 'deadline'),
-    label: loadPref('crm.tasks.label', '')
+    label: loadPref('crm.tasks.label', ''),
+    project: loadPref('crm.tasks.project', '')
   };
+  /** Позначка проєкту задачі (якщо розділ «Проєкти» завантажено і задача в проєкті). */
+  function projectChip(t) {
+    return t && t.projectId && CRM.projects ? CRM.projects.chip(t) : null;
+  }
 
   // ---------- Мітки ----------
   const LABEL_MAX = 40;
@@ -216,6 +221,8 @@ window.CRM = window.CRM || {};
     const files = CRM.store.listAttachments(t.id).length;
     const meta = [];
     const labels = labelsOf(t);
+    const pj = o.noProject ? null : projectChip(t);
+    if (pj) meta.push(pj);
     if (labels.length) meta.push(h('span', { class: 'task-labels' }, labels.map(labelChip)));
     if (checklist.length) meta.push(h('span', { class: 'task-meta-item', title: 'Чекліст' }, CRM.icon('listChecks', { size: 'sm' }), `${doneCount}/${checklist.length}`));
     if (files) meta.push(h('span', { class: 'task-meta-item', title: 'Вкладення' }, CRM.icon('paperclip', { size: 'sm' }), String(files)));
@@ -396,6 +403,7 @@ window.CRM = window.CRM || {};
     const rec = await create({
       title: `${t.title || 'Без назви'} (копія)`, description: t.description || '', priority: t.priority || 'medium', status: 'todo',
       labels: labelsOf(t).slice(),
+      projectId: t.projectId || null, stageId: t.projectId ? t.stageId || null : null,
       checklist: (t.checklist || []).map((c) => ({ id: CRM.utils.uid(), text: c.text, done: false }))
     });
     ui.toast('Створено копію задачі', {
@@ -762,6 +770,12 @@ window.CRM = window.CRM || {};
     labelIn.addEventListener('blur', () => setTimeout(() => { if (labelIn.value.trim()) addLabel(labelIn.value); else renderSugg(); }, 150));
     renderLabels();
 
+    // --- Проєкт (якщо є проєкти або задача вже в проєкті) ---
+    const projField = CRM.projects && (CRM.projects.all().length || task.projectId)
+      ? CRM.projects.taskField(task, (ch) => commit(ch))
+      : null;
+    if (projField) projField.openBtn.addEventListener('click', () => { if (dlg && dlg.isOpen) dlg.close('force'); });
+
     // --- Нагадування (до часу в плані або дедлайну) ---
     const remindOpts = remindList().slice();
     if (task.remind != null && !remindOpts.some((r) => r.v === task.remind)) remindOpts.push({ v: task.remind, label: `За ${task.remind} хв` });
@@ -991,6 +1005,8 @@ window.CRM = window.CRM || {};
         h('div', { class: 'editor-value' }, remindSel, remindHint),
         h('div', { class: 'editor-label' }, CRM.icon('tag', { size: 'sm' }), 'Мітки'),
         h('div', { class: 'editor-value' }, labelsBox, labelSugg),
+        projField ? h('div', { class: 'editor-label' }, CRM.icon('projects', { size: 'sm' }), 'Проєкт') : null,
+        projField ? h('div', { class: 'editor-value' }, projField.el) : null,
         h('div', { class: 'editor-label' }, CRM.icon('flag', { size: 'sm' }), 'Пріоритет'),
         h('div', { class: 'editor-value' }, prioSeg),
         h('div', { class: 'editor-label' }, CRM.icon('clock', { size: 'sm' }), 'Статус'),
@@ -1069,13 +1085,27 @@ window.CRM = window.CRM || {};
       const labels = allLabels();
       if (view.label && !labels.some((x) => x.key === view.label)) { view.label = ''; savePref('crm.tasks.label', ''); }
       const byStatus = view.filter === 'all' ? active : active.filter((t) => t.status === view.filter);
-      const filtered = view.label ? byStatus.filter((t) => hasLabel(t, view.label)) : byStatus;
+      const pjOpts = CRM.projects ? CRM.projects.filterOptions(active) : { list: [], none: 0 };
+      if (view.project && view.project !== 'none' && !pjOpts.list.some((x) => x.id === view.project)) { view.project = ''; savePref('crm.tasks.project', ''); }
+      if (view.project && !pjOpts.list.length) { view.project = ''; savePref('crm.tasks.project', ''); }
+      const byLabel = view.label ? byStatus.filter((t) => hasLabel(t, view.label)) : byStatus;
+      const filtered = view.project && CRM.projects ? byLabel.filter((t) => CRM.projects.matchFilter(t, view.project)) : byLabel;
       const sorted = sortTasks(filtered, view.sort);
       const sortSel = ui.select([
         { value: 'deadline', label: 'За дедлайном' },
         { value: 'priority', label: 'За пріоритетом' }
       ], { value: view.sort, 'aria-label': 'Сортування', class: 'select select-sm' });
       sortSel.addEventListener('change', () => { view.sort = sortSel.value; savePref('crm.tasks.sort', view.sort); CRM.router.rerender(); });
+      // Фільтр за проєктом — лише коли проєкти є
+      let pjSel = null;
+      if (pjOpts.list.length) {
+        pjSel = h('select', { class: 'select select-sm task-project-filter', 'aria-label': 'Проєкт' },
+          h('option', { value: '' }, 'Усі проєкти'),
+          pjOpts.list.map((x) => h('option', { value: x.id }, `${x.name} · ${x.n}`)),
+          h('option', { value: 'none' }, `Без проєкту · ${pjOpts.none}`));
+        pjSel.value = view.project || '';
+        pjSel.addEventListener('change', () => { view.project = pjSel.value; savePref('crm.tasks.project', view.project); CRM.router.rerender(); });
+      }
       toolbar = h('div', { class: 'toolbar' },
         h('div', { class: 'chips', role: 'group', 'aria-label': 'Фільтр за статусом' }, FILTERS.map((f) => {
           const n = f.id === 'all' ? active.length : active.filter((t) => t.status === f.id).length;
@@ -1084,6 +1114,7 @@ window.CRM = window.CRM || {};
             onClick: () => { view.filter = f.id; savePref('crm.tasks.filter', f.id); CRM.router.rerender(); }
           }, `${f.label} · ${n}`);
         })),
+        pjSel ? h('label', { class: 'toolbar-sort toolbar-project' }, CRM.icon('projects', { size: 'sm' }), h('span', { class: 'sr-only' }, 'Проєкт'), pjSel) : null,
         h('label', { class: 'toolbar-sort' }, CRM.icon('sort', { size: 'sm' }), h('span', { class: 'sr-only' }, 'Сортування'), sortSel));
       const shown = labels.filter((x) => x.active > 0 || x.key === view.label);
       const labelBar = labels.length ? h('div', { class: 'toolbar task-label-bar' },
@@ -1104,6 +1135,14 @@ window.CRM = window.CRM || {};
           icon: 'tasks', title: 'Ще немає задач — додай першу',
           text: 'Задачі з дедлайном потраплять у розклад на Головній і в нагадування.',
           action: { label: 'Додати задачу', icon: 'plus', onClick: () => openNew() }
+        }));
+      } else if (!sorted.length && view.project) {
+        const px = view.project === 'none' ? null : pjOpts.list.find((x) => x.id === view.project);
+        content = h('div', { class: 'card' }, ui.empty({
+          icon: 'projects', small: true,
+          title: view.project === 'none' ? 'Немає активних задач без проєкту' : `Немає активних задач у проєкті «${px ? px.name : ''}»`,
+          text: view.label || view.filter !== 'all' ? 'З урахуванням вибраних мітки й статусу.' : null,
+          action: { label: 'Показати всі', variant: 'secondary', onClick: () => { view.project = ''; view.label = ''; view.filter = 'all'; savePref('crm.tasks.project', ''); savePref('crm.tasks.label', ''); savePref('crm.tasks.filter', 'all'); CRM.router.rerender(); } }
         }));
       } else if (!sorted.length && view.label) {
         const lb = labels.find((x) => x.key === view.label);
@@ -1140,7 +1179,7 @@ window.CRM = window.CRM || {};
     }
   }
 
-  CRM.router.register('tasks', { title: 'Задачі', stores: ['tasks', 'attachments', 'settings'], render });
+  CRM.router.register('tasks', { title: 'Задачі', stores: ['tasks', 'projects', 'attachments', 'settings'], render });
 
   // ---------- Нагадування ----------
   CRM.notify.addRule(() => {
@@ -1190,7 +1229,7 @@ window.CRM = window.CRM || {};
   });
 
   CRM.tasks = {
-    openNew, openTask, create, complete, reopen, remove, sortTasks, deadlineInfo, priorityTag, checkbox, taskRow,
+    openNew, openTask, create, complete, reopen, remove, sortTasks, deadlineInfo, priorityTag, checkbox, taskRow, projectChip,
     labelsOf, labelChip, labelKey, labelColorId, allLabels, mergeLabels, openLabels, renameLabel, deleteLabel, setLabelColor,
     snooze, snoozeTargets, snoozeMenu, duplicate,
     activeTasks, archivedTasks, nextPlanOrder, planLabel

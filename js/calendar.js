@@ -2549,6 +2549,8 @@ window.CRM = window.CRM || {};
     const dl = deadlineNote(t, date);
     const checklist = t.checklist || [];
     const meta = [];
+    const pj = CRM.tasks.projectChip ? CRM.tasks.projectChip(t) : null;
+    if (pj) meta.push(pj);
     if (CRM.tasks.labelsOf && CRM.tasks.labelsOf(t).length) meta.push(h('span', { class: 'task-labels' }, CRM.tasks.labelsOf(t).map(CRM.tasks.labelChip)));
     if (t.priority === 'high' && !t.done) meta.push(h('span', { class: 'kal-dmeta kal-dmeta-prio' }, h('span', { class: 'prio-dot prio-high' }), 'високий пріоритет'));
     if (dl) meta.push(h('span', { class: 'kal-dmeta' + (t.done ? '' : ' kal-dmeta-dl') }, CRM.icon('flag', { size: 'sm' }), dl));
@@ -3010,7 +3012,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('calendar', {
     title: 'Календар',
-    stores: ['events', 'tasks', 'people', 'recurring', 'transactions', 'programs', 'workouts', 'courses'],
+    stores: ['events', 'tasks', 'projects', 'people', 'recurring', 'transactions', 'programs', 'workouts', 'courses'],
     render
   });
 

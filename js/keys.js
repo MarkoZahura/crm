@@ -32,6 +32,7 @@ window.CRM = window.CRM || {};
     { code: 'KeyH', key: 'H', route: 'home', label: 'Головна' },
     { code: 'KeyC', key: 'C', route: 'calendar', label: 'Календар' },
     { code: 'KeyT', key: 'T', route: 'tasks', label: 'Задачі' },
+    { code: 'KeyO', key: 'O', route: 'projects', label: 'Проєкти' },
     { code: 'KeyB', key: 'B', route: 'budget', label: 'Бюджет' },
     { code: 'KeyW', key: 'W', route: 'training', label: 'Тренування' },
     { code: 'KeyF', key: 'F', route: 'nutrition', label: 'Харчування' },

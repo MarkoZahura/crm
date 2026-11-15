@@ -13,6 +13,7 @@ window.CRM = window.CRM || {};
   const FILTERS = [
     { id: 'all', label: 'Усі', match: () => true },
     { id: 'tasks', label: 'Задачі', match: (s) => s === 'tasks' },
+    { id: 'projects', label: 'Проєкти', match: (s) => s === 'projects' },
     { id: 'calendar', label: 'Календар', match: (s) => s === 'events' },
     { id: 'people', label: 'Люди', match: (s) => s === 'people' },
     { id: 'habits', label: 'Звички', match: (s) => s === 'habits' },

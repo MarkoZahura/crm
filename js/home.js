@@ -544,7 +544,7 @@ window.CRM = window.CRM || {};
 
   CRM.router.register('home', {
     title: 'Головна',
-    stores: ['tasks', 'events', 'people', 'habits', 'books', 'students', 'attachments', 'transactions', 'accounts', 'categories', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
+    stores: ['tasks', 'projects', 'events', 'people', 'habits', 'books', 'students', 'attachments', 'transactions', 'accounts', 'categories', 'recurring', 'rates', 'courses', 'workouts', 'programs', 'meals', 'foods'],
     render
   });
 

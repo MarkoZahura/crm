@@ -84,6 +84,7 @@ window.CRM = window.CRM || {};
     gauge: '<path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/><path d="m12 14 3.6-4.2"/><circle cx="12" cy="14" r="1.3"/>',
     board: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v3.5M8.5 20h7"/><path d="m7.5 12.5 3-3 2 2 4-4"/>',
     send: '<path d="M21 3 10.5 13.5"/><path d="M21 3 14.5 21l-4-7.5L3 9.5z"/>',
+    projects: '<path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4.8l2 2.5H19a1.5 1.5 0 0 1 1.5 1.5v9.5A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M8 11.5v4.5M12 11.5v2.5M16 11.5v3.5"/>',
     keyboard: '<rect x="2.5" y="6" width="19" height="12.5" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M6.5 13.5h.01M17.5 13.5h.01M9.5 15h5"/>'
   };
 
