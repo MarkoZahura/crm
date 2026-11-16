@@ -18,13 +18,13 @@
 'use strict';
 
 // ---- АВТОМАТИЧНИЙ БЛОК (tests/make-sw.js) ----
-const VERSION = '2026.11.15-6';
-const BUILD = '545158394d67';
+const VERSION = '2026.11.16-1';
+const BUILD = '4aa2c88f46b0';
 const FILES = {
   'css/base.css': '188bcc6c14604a80',
   'css/components.css': '6f13608de3ce397b',
   'css/layout.css': 'cce213a27c8ece0d',
-  'css/sections.css': '7ab2680f0ce43cbe',
+  'css/sections.css': 'e8d6bde3e1d9c7cb',
   'icons/apple-touch-icon.png': 'f47bedd3e5d0ffb1',
   'icons/icon-192.png': 'f7cb5b0b096a8c5b',
   'icons/icon-512.png': '829fcd6660b3adcc',
@@ -37,8 +37,8 @@ const FILES = {
   'icons/tiles-512.png': 'e9bb21ac87c5e125',
   'icons/tiles-apple-touch-icon.png': '9454b72f51288974',
   'icons/tiles-maskable-512.png': '28ae91bcaf8a45f5',
-  'index.html': 'c9e8ddcae04eaabb',
-  'js/app.js': '6ce216e681dcc020',
+  'index.html': '7c44fe5ef711bb81',
+  'js/app.js': 'b0a540fcb03d3c92',
   'js/backup.js': 'd63f11891c0a78e0',
   'js/books.js': '1b2780e22241e102',
   'js/budget/accounts.js': 'be75e3d139369d4d',
@@ -53,7 +53,7 @@ const FILES = {
   'js/budget/limits.js': 'ee970a06ba603b02',
   'js/budget/recurring.js': '361c58170593ba28',
   'js/budget/transactions.js': '93d566432f0f1496',
-  'js/calendar.js': 'f75c66e1837920c9',
+  'js/calendar.js': '73a4fc7008e52612',
   'js/core/charts.js': 'b18bc9cd948e68cb',
   'js/core/db.js': 'e483f61d057b0236',
   'js/core/defaults.js': '32223999b81941f4',
@@ -66,7 +66,7 @@ const FILES = {
   'js/core/ui.js': 'a84ebbce88f72c13',
   'js/core/utils.js': '92718eb6f9b9d30e',
   'js/demo.js': '2ce705c354d51265',
-  'js/gcal.js': 'f2dda04c7d704e4d',
+  'js/gcal.js': 'b853d3bed0ad37aa',
   'js/gmirror.js': 'c9fe745caaeee806',
   'js/habits.js': 'e21f72a841eef3de',
   'js/home.js': '85e99e7b7cba391b',
@@ -79,7 +79,7 @@ const FILES = {
   'js/program.js': 'e494a90a106525b7',
   'js/programs.js': '4238a00f6fb4f30e',
   'js/projects.js': 'e6ce383a29d98548',
-  'js/pwa.js': '6ed3ba34ca61fca2',
+  'js/pwa.js': 'b9775206f51d3b7d',
   'js/quick.js': '73ef3cf522a0b8d8',
   'js/quotes.js': '14bb729fc22a8264',
   'js/search.js': 'b6d692ed7659fc8a',
@@ -88,8 +88,9 @@ const FILES = {
   'js/tasks.js': 'd746a0e03efd71cb',
   'js/training.js': 'ccb77fb2a95debd2',
   'js/trash.js': '83a14e5233575f67',
+  'js/tutor-google.js': 'b4da38bce743b19b',
   'js/tutor-money.js': '14159a5148c04ab4',
-  'js/tutor.js': '56c73c58ae1ba3e3',
+  'js/tutor.js': '2bac939ad87b43e8',
   'js/year-share.js': '5d41757f46beb0e7',
   'js/year.js': '2173a815ed02ba28',
   'manifest-c.json': '6bec32309f09144a',

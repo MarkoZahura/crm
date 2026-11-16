@@ -830,12 +830,14 @@ window.CRM = window.CRM || {};
   /**
    * Виконати зміну в Google. fn — async-функція з запитами (patchEvent, insertEvent…).
    * Повертає { ok, value } або { ok: false, cancelled } — тоді Календар повертає подію на місце.
+   * opts.quiet — без тосту про помилку (його покаже той, хто викликав; уроки «Репетиторства», 2026.11.16-1).
    */
-  async function run(fn) {
+  async function run(fn, opts) {
+    const quiet = !!(opts && opts.quiet);
     const attempt = async () => { try { return { ok: true, value: await fn() }; } catch (e) { return { ok: false, e }; } };
     const fail = (r) => {
       if (r.e && r.e.code === 'gone') refreshSoon();
-      ui.toast(failText(r.e || {}), { type: 'error', duration: 8000 });
+      if (!quiet) ui.toast(failText(r.e || {}), { type: 'error', duration: 8000 });
       changed();
       return r;
     };

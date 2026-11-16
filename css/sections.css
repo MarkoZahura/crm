@@ -3370,3 +3370,15 @@ div.tu-card-next { background: none; padding: 0 0 0 4px; cursor: default; }
 .kcat-gcolors .kal-pick-head { overflow-wrap: anywhere; }
 .kcat-ghint { font-size: 12px; line-height: 1.35; }
 .gm-colors .link-like { font-size: inherit; }
+
+/* ---------- Репетиторство: уроки разом із Google Календарем (2026.11.16-1, js/tutor-google.js) ---------- */
+/* Вікно уроку: «У Google — 17:00–18:00 («Заняття Макс») · Перенести урок так само» */
+.tu-gdiff {
+  display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-top: 8px;
+  padding: 8px 10px; border: 1px dashed var(--soon); border-radius: var(--radius); font-size: 13px; line-height: 1.35;
+}
+.tu-gdiff .icon { color: var(--soon); flex-shrink: 0; }
+.tu-gdiff-text { min-width: 0; overflow-wrap: anywhere; }
+.tu-gdiff-align { font-size: inherit; white-space: nowrap; }
+/* Календар: урок, заняття якого в Google стоїть в інший час */
+.kal-ev.k-gdiff, .kal-chip.k-gdiff { outline: 1.5px dashed var(--soon); outline-offset: -2px; }

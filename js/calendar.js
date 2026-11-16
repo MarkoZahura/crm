@@ -533,6 +533,9 @@ window.CRM = window.CRM || {};
 
     if (L.own) {
       const hidden = hiddenCats();
+      // Уроки: заняття в Google того дня в інший час — позначка «у Google 17:00» (js/tutor-google.js)
+      const tg = TGO();
+      const gIdx = tg ? tg.index(from, to) : null;
       occurrences(from, to).forEach(({ ev, date, series, span }) => {
         if (hidden.size && hidden.has(categoryOf(ev.cat).id)) return;
         const it = {
@@ -552,6 +555,10 @@ window.CRM = window.CRM || {};
           it.endMin = evEnd(ev);
           it.sub = whenText(ev);
           it.past = date < T || (date === T && it.endMin <= nm);
+          if (it.lesson && gIdx && gIdx.size) {
+            const gd = tg.diffOf({ sid: ev.studentId, date, startMin: it.startMin, endMin: it.endMin, dur: Number(ev.dur) > 0 ? Number(ev.dur) : 60 }, gIdx);
+            if (gd) { it.gdiff = gd; it.sub += ` · у Google ${gd.start}`; }
+          }
           put(date, 'timed', it);
         }
       });
@@ -766,10 +773,30 @@ window.CRM = window.CRM || {};
       ? `«${saved.title}»: ${whenText(saved)} (${durText(saved.dur)})`
       : end ? `«${saved.title}» перенесено: ${spanText(saved.date, end)}`
         : `«${saved.title}» перенесено: ${dayShort(saved.date)}${saved.allDay ? '' : ', ' + whenText(saved)}`;
-    ui.toast(text, {
-      type: 'success',
-      action: { label: 'Скасувати', onClick: () => CRM.store.patch('events', ev.id, before) }
-    });
+    lessonToast(cur, before, saved, text, { type: 'success', undo: () => CRM.store.patch('events', ev.id, before) });
+  }
+
+  // ---------- Уроки «Репетиторства» → заняття в Google (js/tutor-google.js; пункт 12, етап 2) ----------
+  const TGO = () => (CRM.tutorGoogle && CRM.tutorGoogle.ready() ? CRM.tutorGoogle : null);
+  const isLesson = (ev) => !!(ev && ev.studentId && CRM.tutor && CRM.tutor.get(ev.studentId));
+  const when3 = (x) => ({ date: x.date, start: x.start, dur: x.dur });
+  /**
+   * Повідомлення після зміни уроку: заняття «Заняття <Імʼя>» у Google того дня (якщо є) переноситься /
+   * скасовується так само (after = null — урок скасовано). Не урок — звичайний тост.
+   */
+  function lessonToast(ev, before, after, text, opts) {
+    const o = opts || {};
+    const tg = TGO();
+    if (tg && isLesson(ev) && before && !before.allDay && !(after && after.allDay)) {
+      tg.follow({ sid: ev.studentId, before: when3(before), after: after ? when3(after) : null, text, undo: o.undo || null, type: o.type });
+      return;
+    }
+    ui.toast(text, { type: o.type, action: o.undo ? { label: 'Скасувати', onClick: o.undo } : undefined });
+  }
+  /** Серія-урок: серії «Заняття <Імʼя>» у Google, що відповідають їй (шукати ДО зміни в CRM). */
+  function lessonSeriesG(ev) {
+    const tg = TGO();
+    return tg && isLesson(ev) && isSeries(ev) && !ev.allDay ? tg.seriesFor(ev.studentId, tg.slotOf(ev)) : [];
   }
 
   // ---------- Копії ----------
@@ -832,10 +859,14 @@ window.CRM = window.CRM || {};
   }
 
   async function removeEvent(ev) {
+    const gT = lessonSeriesG(ev);
     const batch = await CRM.store.softDelete('events', ev.id);
-    ui.toast(`${isSeries(ev) ? 'Серію подій' : 'Подію'} «${ev.title}» видалено`, {
-      action: { label: 'Скасувати', onClick: () => CRM.store.restoreBatch(batch) }
-    });
+    const text = `${isSeries(ev) ? 'Серію подій' : 'Подію'} «${ev.title}» видалено`;
+    const undo = () => CRM.store.restoreBatch(batch);
+    // Урок: окремий — заняття в Google того дня скасовується; серія — питаємо про серію в Google
+    if (gT.length) { TGO().followSeries({ sid: ev.studentId, targets: gT, oldDays: TGO().slotOf(ev).days, from: ev.date, after: null, text, undo, type: 'info' }); return; }
+    if (!isSeries(ev)) { lessonToast(ev, ev, null, text, { type: 'info', undo }); return; }
+    ui.toast(text, { action: { label: 'Скасувати', onClick: undo } });
   }
 
   // ---------- Повтори: зміни ----------
@@ -890,10 +921,7 @@ window.CRM = window.CRM || {};
     const text = kind === 'resize'
       ? `«${shown.title}» (лише цього разу): ${whenText(shown)} (${durText(shown.dur)})`
       : `«${shown.title}» перенесено лише цього разу: ${dayShort(shown.date)}${shown.allDay ? '' : ', ' + whenText(shown)}`;
-    ui.toast(text, {
-      type: 'success',
-      action: { label: 'Скасувати', onClick: () => CRM.store.patch('events', cur.id, snap) }
-    });
+    lessonToast(cur, inst, shown, text, { type: 'success', undo: () => CRM.store.patch('events', cur.id, snap) });
   }
 
   /** Що людина змінила у формі порівняно з показаним повтором. */
@@ -1015,15 +1043,19 @@ window.CRM = window.CRM || {};
       const ov = Object.assign({}, series.overrides || {});
       delete ov[occ];
       await CRM.store.patch('events', series.id, { skip: (series.skip || []).filter((d) => d !== occ).concat(occ).sort(), overrides: ov });
-      ui.toast(`«${title}»: ${dayShort(inst.date)} — скасовано`, { action: undo });
+      // Урок: заняття в Google того дня скасовується теж
+      lessonToast(series, inst, null, `«${title}»: ${dayShort(inst.date)} — скасовано`, { type: 'info', undo: undo.onClick });
       return;
     }
+    const gT = lessonSeriesG(series);
     await CRM.store.patch('events', series.id, {
       repeat: Object.assign({}, ruleOf(series), { until: D.addDays(occ, -1), count: null }),
       skip: (series.skip || []).filter((d) => d < occ),
       overrides: pickKeys(series.overrides, (k) => k < occ)
     });
-    ui.toast(`«${title}»: повтори з ${dayShort(inst.date)} видалено`, { action: undo });
+    const text = `«${title}»: повтори з ${dayShort(inst.date)} видалено`;
+    if (gT.length) { TGO().followSeries({ sid: series.studentId, targets: gT, oldDays: TGO().slotOf(series).days, from: occ, after: null, text, undo: undo.onClick, type: 'info' }); return; }
+    ui.toast(text, { action: undo });
   }
 
   /** Вікно «Лише цю / Цю й наступні / Усі події серії». Повертає Promise<scope | null>. */
@@ -2724,12 +2756,29 @@ window.CRM = window.CRM || {};
         const scope = await chooseScope({ mode: 'edit', allowOne: !ruleChanged, inst, reset: ruleChanged || !!ch.date });
         if (!scope) return;
         dlg.close('saved');
+        // Урок «Репетиторства»: змінено час чи дні — те саме із заняттям / серією «Заняття» в Google
+        const timeCh = 'date' in ch || TIME_F.some((f) => f in ch);
+        const gT = scope !== 'one' && rule && !V.allDay && (ruleChanged || timeCh) ? lessonSeriesG(series0) : [];
+        const allFrom = scope === 'all' || !hasEarlier(series0, inst.occ);
         const undo = await saveScoped(series0, inst, V, rule, scope);
         const day = dayShort(inst.date);
         const text = !rule
           ? (scope === 'all' || !hasEarlier(series0, inst.occ) ? `«${title}» більше не повторюється` : `«${title}»: повтори з ${day} прибрано`)
           : scope === 'one' ? `«${title}» — змінено лише ${dayShort(V.date)}`
             : scope === 'following' && hasEarlier(series0, inst.occ) ? `«${title}» — змінено з ${day} і далі` : `«${title}» — змінено всі події серії`;
+        if (scope === 'one' && timeCh) { lessonToast(series0, inst, V, text, { type: 'success', undo }); return; }
+        if (gT.length) {
+          const old = ruleOf(series0);
+          const same = sameRule(rule, old);
+          const shift = ch.date ? D.diffDays(inst.occ, ch.date) : 0;
+          const r = same ? old : rule;
+          const days = r.freq === 'week' ? (same && shift ? shiftDays(old.days, shift) : r.days) : [D.weekday(V.date)];
+          TGO().followSeries({
+            sid: series0.studentId, targets: gT, oldDays: TGO().slotOf(series0).days, from: allFrom ? series0.date : inst.occ,
+            after: { days, start: V.start, dur: V.dur, until: r.until || null }, text, undo, type: 'success'
+          });
+          return;
+        }
         ui.toast(text, { type: 'success', action: { label: 'Скасувати', onClick: undo } });
         return;
       }
@@ -2738,8 +2787,18 @@ window.CRM = window.CRM || {};
       if (rule) rec.repeat = rule;
       else if (cur && cur.repeat) { rec.repeat = null; rec.skip = []; rec.overrides = {}; }
       dlg.close('saved');
+      const prev = cur ? CRM.utils.deepClone(cur) : null;
       const saved = await CRM.store.save('events', rec);
-      if (cur) { ui.toast(rule && !rule0 ? `Подію збережено: ${ruleText(rule, saved.date)}` : 'Подію збережено', { type: 'success' }); return; }
+      if (cur) {
+        const text = rule && !rule0 ? `Подію збережено: ${ruleText(rule, saved.date)}` : 'Подію збережено';
+        // Окремий урок перенесли у формі — заняття в Google того дня теж
+        if (!rule && !rule0 && isLesson(cur) && (cur.date !== saved.date || (cur.start || null) !== (saved.start || null) || Number(cur.dur) !== Number(saved.dur))) {
+          lessonToast(cur, prev, saved, `«${saved.title}» збережено: ${dayShort(saved.date)}${saved.allDay ? '' : ', ' + whenText(saved)}`, { type: 'success', undo: () => CRM.store.save('events', prev) });
+          return;
+        }
+        ui.toast(text, { type: 'success' });
+        return;
+      }
       const se = spanEnd(saved);
       ui.toast(`Подію додано: ${se ? whenText(saved) : dayShort(saved.date) + (allDay ? '' : ', ' + whenText(saved))}${rule ? ' · ' + ruleText(rule, saved.date) : ''}`, { type: 'success' });
     }
@@ -3049,6 +3108,7 @@ window.CRM = window.CRM || {};
     const o = opts || {};
     const cls = ['kal-chip', 'k-' + it.kind];
     if (it.lesson) cls.push('k-lesson');
+    if (it.gdiff) cls.push('k-gdiff');
     if (it.done) cls.push('done');
     if (it.overdue) cls.push('overdue');
     if (it.tentative) cls.push('tentative');
@@ -3223,6 +3283,7 @@ window.CRM = window.CRM || {};
     const short = height < 38;
     const cls = ['kal-ev', 'k-' + it.kind];
     if (it.lesson) cls.push('k-lesson');
+    if (it.gdiff) cls.push('k-gdiff');
     if (short) cls.push('short');
     if (it.past) cls.push('past');
     if (it.tentative) cls.push('tentative');
@@ -3779,6 +3840,8 @@ window.CRM = window.CRM || {};
     FREQS, isSeries, repeatText, nextOccurrence, seriesDates, instanceOf, occOn, ruleOf, seriesFirst, isOccurrence,
     spanEnd, spanText, isoWeek, copyEvent, copyFields, openCategories, openSearch, renameCategory, deleteCategory, setCategoryColor, setCategoryGColor, categoryGColor, hiddenCats,
     // Події Google (пункт 12)
-    openGoogle, createGoogle, copyGoogle, deleteGoogle, googleTarget, gFind, gTargets
+    openGoogle, createGoogle, copyGoogle, deleteGoogle, googleTarget, gFind, gTargets,
+    // Уроки «Репетиторства» з Google (js/tutor-google.js; 2026.11.16-1)
+    moveEvent, gx: { gCopy, askGuests, masterDay, masterAllDay, cleanTimes }
   };
 })(window.CRM);
